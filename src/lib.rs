@@ -1,5 +1,3 @@
-mod runtime;
-pub use runtime::Runtime;
 
-mod task;
-pub use task::InstrumentedTask;
+pub mod task;
+pub use task::{InstrumentedTask, TaskMetrics};
