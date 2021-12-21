@@ -35,12 +35,24 @@ pub struct Sample {
     /// Number of times a task was scheduled.
     pub num_scheduled: u64,
 
+    /// Number of times a task was polled fast
+    pub num_fast_polls: u64,
+
+    /// Number of times a task was polled slow
+    pub num_slow_polls: u64,
+
     /// Total amount of time all tasks spent until being polled for the first
     /// time.
     pub total_time_to_first_poll: Duration,
 
     /// Total amount of time all tasks spent in the scheduled state.
     pub total_time_scheduled: Duration,
+
+    /// Total amount of time tasks were polled fast
+    pub total_time_fast_poll: Duration,
+
+    /// Total amount of time tasks were polled slow
+    pub total_time_slow_poll: Duration,
 }
 
 /// Tracks the metrics, shared across the various types.
@@ -49,17 +61,32 @@ struct Metrics {
     /// as the reference point for duration measurements.
     created_at: Instant,
 
+    /// A task poll takes longer than this, it is considered a slow poll.
+    slow_poll_cut_off: Duration,
+
     /// Total number of instrumented tasks
     num_tasks: AtomicU64,
 
-    /// Total number of times the task was scheduled.
+    /// Total number of times a task was scheduled.
     num_scheduled: AtomicU64,
+
+    /// Total number of times a task was polled fast
+    num_fast_polls: AtomicU64,
+
+    /// Total number of times a task was polled slow
+    num_slow_polls: AtomicU64,
 
     /// Total amount of time until the first poll
     total_time_to_first_poll: AtomicU64,
 
-    /// Total amount of time the task has spent in the waking state.
+    /// Total amount of time a task has spent in the waking state.
     total_time_scheduled: AtomicU64,
+
+    /// Total amount of time a task has spent being polled below the slow cut off.
+    total_time_fast_poll: AtomicU64,
+
+    /// Total amount of time a task has spent being polled above the slow cut off.
+    total_time_slow_poll: AtomicU64,
 }
 
 struct State {
@@ -79,13 +106,22 @@ struct State {
 
 impl TaskMetrics {
     pub fn new() -> TaskMetrics {
+        TaskMetrics::with_slow_poll_cut_off(Duration::from_micros(10))
+    }
+
+    pub fn with_slow_poll_cut_off(slow_poll_cut_off: Duration) -> TaskMetrics {
         TaskMetrics {
             metrics: Arc::new(Metrics {
                 created_at: Instant::now(),
+                slow_poll_cut_off,
                 num_tasks: AtomicU64::new(0),
                 num_scheduled: AtomicU64::new(0),
+                num_fast_polls: AtomicU64::new(0),
+                num_slow_polls: AtomicU64::new(0),
                 total_time_to_first_poll: AtomicU64::new(0),
                 total_time_scheduled: AtomicU64::new(0),
+                total_time_fast_poll: AtomicU64::new(0),
+                total_time_slow_poll: AtomicU64::new(0),
             }),
         }
     }
@@ -113,6 +149,16 @@ impl TaskMetrics {
         self.metrics.num_scheduled.load(SeqCst)
     }
 
+    /// Total number of task polls that were below the "slow task" cut off.
+    pub fn num_fast_polls(&self) -> u64 {
+        self.metrics.num_fast_polls.load(SeqCst)
+    }
+
+    /// Total number of task polls that were above the "slow task" cut off.
+    pub fn num_slow_polls(&self) -> u64 {
+        self.metrics.num_slow_polls.load(SeqCst)
+    }
+
     pub fn total_time_to_first_poll(&self) -> Duration {
         let nanos = self.metrics.total_time_to_first_poll.load(SeqCst);
         Duration::from_nanos(nanos)
@@ -136,11 +182,19 @@ impl TaskMetrics {
                 let latest = Sample {
                     num_tasks: self.0.num_tasks.load(SeqCst),
                     num_scheduled: self.0.num_scheduled.load(SeqCst),
+                    num_fast_polls: self.0.num_fast_polls.load(SeqCst),
+                    num_slow_polls: self.0.num_slow_polls.load(SeqCst),
                     total_time_to_first_poll: Duration::from_nanos(
                         self.0.total_time_to_first_poll.load(SeqCst),
                     ),
                     total_time_scheduled: Duration::from_nanos(
                         self.0.total_time_scheduled.load(SeqCst),
+                    ),
+                    total_time_fast_poll: Duration::from_nanos(
+                        self.0.total_time_fast_poll.load(SeqCst),
+                    ),
+                    total_time_slow_poll: Duration::from_nanos(
+                        self.0.total_time_slow_poll.load(SeqCst),
                     ),
                 };
 
@@ -148,10 +202,16 @@ impl TaskMetrics {
                     Sample {
                         num_tasks: latest.num_tasks - prev.num_tasks,
                         num_scheduled: latest.num_scheduled - prev.num_scheduled,
+                        num_fast_polls: latest.num_fast_polls - prev.num_fast_polls,
+                        num_slow_polls: latest.num_slow_polls - prev.num_slow_polls,
                         total_time_to_first_poll: latest.total_time_to_first_poll
                             - prev.total_time_to_first_poll,
                         total_time_scheduled: latest.total_time_scheduled
                             - prev.total_time_scheduled,
+                        total_time_fast_poll: latest.total_time_fast_poll
+                            - prev.total_time_fast_poll,
+                        total_time_slow_poll: latest.total_time_slow_poll
+                            - prev.total_time_slow_poll,
                     }
                 } else {
                     latest
@@ -185,6 +245,26 @@ impl Sample {
             self.total_time_scheduled / self.num_scheduled as _
         }
     }
+
+    pub fn fast_poll_ratio(&self) -> f64 {
+        self.num_fast_polls as f64 / (self.num_fast_polls + self.num_slow_polls) as f64
+    }
+
+    pub fn mean_fast_polls(&self) -> Duration {
+        if self.num_fast_polls == 0 {
+            Duration::from_micros(0)
+        } else {
+            self.total_time_fast_poll / self.num_fast_polls as _
+        }
+    }
+
+    pub fn mean_slow_polls(&self) -> Duration {
+        if self.num_slow_polls == 0 {
+            Duration::from_micros(0)
+        } else {
+            self.total_time_slow_poll / self.num_slow_polls as _
+        }
+    }
 }
 
 impl<T: Future> Future for InstrumentedTask<T> {
@@ -198,7 +278,10 @@ impl<T: Future> Future for InstrumentedTask<T> {
 
             if let Ok(nanos) = this.state.instrumented_at.elapsed().as_nanos().try_into() {
                 let nanos: u64 = nanos; // Make inference happy
-                this.state.metrics.total_time_to_first_poll.fetch_add(nanos, SeqCst);
+                this.state
+                    .metrics
+                    .total_time_to_first_poll
+                    .fetch_add(nanos, SeqCst);
                 this.state.metrics.num_tasks.fetch_add(1, SeqCst);
             }
         }
@@ -212,8 +295,11 @@ impl<T: Future> Future for InstrumentedTask<T> {
         let waker_ref = futures_util::task::waker_ref(&this.state);
         let mut cx = Context::from_waker(&*waker_ref);
 
-        // Store the waker
-        Future::poll(this.task, &mut cx)
+        // Poll the task
+        let now = Instant::now();
+        let ret = Future::poll(this.task, &mut cx);
+        this.state.measure_poll_time(now.elapsed());
+        ret
     }
 }
 
@@ -242,13 +328,31 @@ impl State {
         }
 
         let scheduled_dur = (metrics.created_at + Duration::from_nanos(woke_at)).elapsed();
-        let scheduled_dur: u64 = match scheduled_dur.as_nanos().try_into() {
-            Ok(scheduled_dur) => scheduled_dur,
+        let scheduled_nanos: u64 = match scheduled_dur.as_nanos().try_into() {
+            Ok(scheduled_nanos) => scheduled_nanos,
             Err(_) => return,
         };
 
-        metrics.total_time_scheduled.fetch_add(scheduled_dur, SeqCst);
+        metrics
+            .total_time_scheduled
+            .fetch_add(scheduled_nanos, SeqCst);
         metrics.num_scheduled.fetch_add(1, SeqCst);
+    }
+
+    fn measure_poll_time(&self, duration: Duration) {
+        let metrics = &self.metrics;
+        let polled_nanos: u64 = match duration.as_nanos().try_into() {
+            Ok(polled_nanos) => polled_nanos,
+            Err(_) => return,
+        };
+
+        if duration >= self.metrics.slow_poll_cut_off {
+            metrics.total_time_slow_poll.fetch_add(polled_nanos, SeqCst);
+        } else {
+            metrics.total_time_fast_poll.fetch_add(polled_nanos, SeqCst);
+        }
+
+        metrics.num_fast_polls.fetch_add(1, SeqCst);
     }
 }
 
