@@ -21,7 +21,7 @@ struct State {
     created_at: Instant,
 
     /// The instant, tracked as duration since `created_at`, at which the future
-    /// was last woken. Tracked as microseconds.
+    /// was last woken. Tracked as nanoseconds.
     woke_at: AtomicU64,
 
     /// Total number of times the task was scheduled.
@@ -49,12 +49,20 @@ impl<T: Future> InstrumentedTask<T> {
             let mut last_num_scheduled = 0;
             let mut last_total_scheduled = 0;
             loop {
-                std::thread::sleep(Duration::from_secs(1));
+                std::thread::sleep(Duration::from_millis(100));
 
                 let num_scheduled = s.num_scheduled.load(Relaxed);
                 let total_scheduled = s.total_scheduled.load(Relaxed);
 
-                println!("num_scheduled = {}; total_scheduled = {:?}", num_scheduled - last_num_scheduled, Duration::from_micros(total_scheduled - last_total_scheduled));
+                let delta_num = num_scheduled - last_num_scheduled;
+                let delta_dur = Duration::from_nanos(total_scheduled - last_total_scheduled);
+
+                if delta_num > 0 {
+                    let mean = delta_dur / delta_num as _;
+
+                    println!("num_scheduled = {}; total_scheduled = {:?}", delta_num, delta_dur);
+                    println!("mean = {:?}", mean);
+                }
 
                 last_num_scheduled = num_scheduled;
                 last_total_scheduled = total_scheduled;
@@ -90,11 +98,11 @@ impl<T: Future> Future for InstrumentedTask<T> {
 
 impl State {
     fn measure_wake(&self) {
-        let woke_at: u64 = match self.created_at.elapsed().as_micros().try_into() {
+        let woke_at: u64 = match self.created_at.elapsed().as_nanos().try_into() {
             Ok(woke_at) => woke_at,
             // This is highly unlikely as it would mean the task ran for over
-            // 500,000 years. If you ran your service for 500,000 years. If you
-            // are reading this 500,000 years in the future, I'm sorry.
+            // 500 years. If you ran your service for 500 years. If you are
+            // reading this 500 years in the future, I'm sorry.
             Err(_) => return,
         };
 
@@ -111,8 +119,8 @@ impl State {
             return;
         }
 
-        let scheduled_dur = (self.created_at + Duration::from_micros(woke_at)).elapsed();
-        let scheduled_dur: u64 = match scheduled_dur.as_micros().try_into() {
+        let scheduled_dur = (self.created_at + Duration::from_nanos(woke_at)).elapsed();
+        let scheduled_dur: u64 = match scheduled_dur.as_nanos().try_into() {
             Ok(scheduled_dur) => scheduled_dur,
             Err(_) => return,
         };
