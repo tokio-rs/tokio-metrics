@@ -57,10 +57,6 @@ pub struct Sample {
 
 /// Tracks the metrics, shared across the various types.
 struct Metrics {
-    /// Instant at which the `InstrumentedTask` is created. This instant is used
-    /// as the reference point for duration measurements.
-    created_at: Instant,
-
     /// A task poll takes longer than this, it is considered a slow poll.
     slow_poll_cut_off: Duration,
 
@@ -112,7 +108,6 @@ impl TaskMetrics {
     pub fn with_slow_poll_cut_off(slow_poll_cut_off: Duration) -> TaskMetrics {
         TaskMetrics {
             metrics: Arc::new(Metrics {
-                created_at: Instant::now(),
                 slow_poll_cut_off,
                 num_tasks: AtomicU64::new(0),
                 num_scheduled: AtomicU64::new(0),
@@ -305,7 +300,7 @@ impl<T: Future> Future for InstrumentedTask<T> {
 
 impl State {
     fn measure_wake(&self) {
-        let woke_at: u64 = match self.metrics.created_at.elapsed().as_nanos().try_into() {
+        let woke_at: u64 = match self.instrumented_at.elapsed().as_nanos().try_into() {
             Ok(woke_at) => woke_at,
             // This is highly unlikely as it would mean the task ran for over
             // 500 years. If you ran your service for 500 years. If you are
@@ -327,7 +322,7 @@ impl State {
             return;
         }
 
-        let scheduled_dur = (metrics.created_at + Duration::from_nanos(woke_at)).elapsed();
+        let scheduled_dur = (self.instrumented_at + Duration::from_nanos(woke_at)).elapsed();
         let scheduled_nanos: u64 = match scheduled_dur.as_nanos().try_into() {
             Ok(scheduled_nanos) => scheduled_nanos,
             Err(_) => return,
