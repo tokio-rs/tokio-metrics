@@ -3,26 +3,76 @@ use tokio::runtime;
 use std::time::{Duration, Instant};
 
 pub struct RuntimeMetrics {
+    /// Handle to the runtime
     runtime: runtime::Handle,
 }
 
 #[non_exhaustive]
-#[derive(Debug, Clone, Copy)]
+#[derive(Default, Debug, Clone, Copy)]
 pub struct Sample {
+    /// Number of worker threads
+    pub num_workers: usize,
+
+    /// Number of parks across all workers
     pub num_parks: u64,
+
+    /// Maximum parks on any given worker
+    pub max_parks: u64,
+
+    /// Number of no-op ticks across all workers
     pub num_noops: u64,
+
+    /// Maximum number of no-op ticks on any given worker
+    pub max_noops: u64,
+
+    /// Number of times a worker stole work
     pub num_steals: u64,
+
+    /// Maximum number of times any given worker stole work
+    pub max_steals: u64,
+
+    /// Number of tasks scheduled locally across all workers
     pub num_local_schedules: u64,
+
+    /// Maximum number of tasks scheduled locally on any given worker.
+    pub max_local_schedules: u64,
+
+    /// Number of times a task was polled across all workers
     pub num_polls: u64,
-    pub total_time: Duration,
+
+    /// Maximum number of tasks polled on any given worker
+    pub max_polls: u64,
+
+    /// Total amount of time all workers have been busy
     pub total_time_busy: Duration,
+
+    /// Maximum amount of time any given worker has been busy
+    pub max_time_busy: Duration,
+
+    /// Total amount of time elapsed since observing runtime metrics.
+    pub total_time: Duration,
+}
+
+/// Snapshot of per-worker metrics
+struct Worker {
+    num_parks: u64,
+    num_noops: u64,
+    num_steals: u64,
+    num_local_schedules: u64,
+    num_polls: u64,
+    total_time_busy: Duration,
 }
 
 impl RuntimeMetrics {
     pub fn new(runtime: &runtime::Handle) -> RuntimeMetrics {
-        RuntimeMetrics { runtime: runtime.clone() }
+        let runtime = runtime.clone();
+
+        RuntimeMetrics {
+            runtime,
+        }
     }
 
+    /*
     // Total number of times a runtime thread parked
     pub fn num_parks(&self) -> u64 {
         self.runtime.stats().workers().map(|w| w.park_count()).sum()
@@ -47,26 +97,37 @@ impl RuntimeMetrics {
     pub fn total_time_busy(&self) -> Duration {
         self.runtime.stats().workers().map(|w| w.total_busy_duration()).sum()
     }
-
-    fn probe(&self, started_at: Instant) -> Sample {
-        Sample {
-            num_parks: self.num_parks(),
-            num_noops: self.num_noops(),
-            num_steals: self.num_steals(),
-            num_local_schedules: self.num_local_schedules(),
-            num_polls: self.num_polls(),
-            total_time: started_at.elapsed(),
-            total_time_busy: self.total_time_busy(),
-        }        
-    }
+    */
 
     pub fn sample(&self) -> impl Iterator<Item = Sample> {
-        struct Iter(RuntimeMetrics, Sample, Instant);
+        struct Iter {
+            runtime: runtime::Handle,
+            started_at: Instant,
+            workers: Vec<Worker>,
+        }
+
+        impl Iter {
+            fn probe(&mut self) -> Sample {
+                let mut sample = Sample {
+                    num_workers: self.workers.len(),
+                    total_time: self.started_at.elapsed(),
+                    .. Default::default()
+                };
+        
+                for (rt, worker) in self.runtime.stats().workers().zip(&mut self.workers) {
+                    worker.probe(rt, &mut sample);
+                }
+        
+                sample
+            }
+        }
 
         impl Iterator for Iter {
             type Item = Sample;
 
             fn next(&mut self) -> Option<Sample> {
+                Some(self.probe())
+                /*
                 let latest = self.0.probe(self.2);
 
                 let ret = Sample {
@@ -80,15 +141,56 @@ impl RuntimeMetrics {
                 };
 
                 self.1 = latest;
-                Some(ret)
+                */
             }
         }
 
-        let now = Instant::now();
+        let started_at = Instant::now();
 
-        Iter(RuntimeMetrics {
-            runtime: self.runtime.clone()
-        }, self.probe(now), now)
+        // TODO: fix Tokio's API to not return an iterator.
+        let workers = self.runtime.stats().workers().map(Worker::new).collect();
+
+        Iter {
+            runtime: self.runtime.clone(),
+            started_at,
+            workers,
+        }
+    }
+}
+
+impl Worker {
+    fn new(rt: &runtime::stats::WorkerStats) -> Worker {
+        Worker {
+            num_parks: rt.park_count(),
+            num_noops: rt.noop_count(),
+            num_steals: rt.steal_count(),
+            num_local_schedules: rt.local_schedule_count(),
+            num_polls: rt.poll_count(),
+            total_time_busy: rt.total_busy_duration(),
+        }
+    }
+
+    fn probe(&mut self, rt: &runtime::stats::WorkerStats, sample: &mut Sample) {
+        macro_rules! metric {
+            ( $sum:ident, $max:ident, $probe:ident ) => {{
+                let val = rt.$probe();
+                let delta = val - self.$sum;
+                self.$sum = val;
+
+                sample.$sum += delta;
+
+                if delta > sample.$max {
+                    sample.$max = delta;
+                }
+            }};
+        }
+
+        metric!(num_parks, max_parks, park_count);
+        metric!(num_noops, max_noops, noop_count);
+        metric!(num_steals, max_steals, steal_count);
+        metric!(num_local_schedules, max_local_schedules, local_schedule_count);
+        metric!(num_polls, max_polls, poll_count);
+        metric!(total_time_busy, max_time_busy, total_busy_duration);
     }
 }
 
