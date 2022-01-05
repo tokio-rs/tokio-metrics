@@ -31,6 +31,9 @@ pub struct Sample {
     /// Maximum number of times any given worker stole work
     pub max_steals: u64,
 
+    /// Number of tasks scheduled from **outside** of the runtime
+    pub num_remote_schedules: u64,
+
     /// Number of tasks scheduled locally across all workers
     pub num_local_schedules: u64,
 
@@ -72,49 +75,34 @@ impl RuntimeMetrics {
         }
     }
 
-    /*
-    // Total number of times a runtime thread parked
-    pub fn num_parks(&self) -> u64 {
-        self.runtime.stats().workers().map(|w| w.park_count()).sum()
-    }
-
-    pub fn num_noops(&self) -> u64 {
-        self.runtime.stats().workers().map(|w| w.noop_count()).sum()
-    }
-
-    pub fn num_steals(&self) -> u64 {
-        self.runtime.stats().workers().map(|w| w.steal_count()).sum()
-    }
-
-    pub fn num_local_schedules(&self) -> u64 {
-        self.runtime.stats().workers().map(|w| w.local_schedule_count()).sum()
-    }
-
-    pub fn num_polls(&self) -> u64 {
-        self.runtime.stats().workers().map(|w| w.poll_count()).sum()
-    }
-
-    pub fn total_time_busy(&self) -> Duration {
-        self.runtime.stats().workers().map(|w| w.total_busy_duration()).sum()
-    }
-    */
-
     pub fn sample(&self) -> impl Iterator<Item = Sample> {
         struct Iter {
             runtime: runtime::Handle,
             started_at: Instant,
             workers: Vec<Worker>,
+
+            // Number of tasks scheduled from *outside* of the runtime
+            num_remote_schedules: u64,
         }
 
         impl Iter {
             fn probe(&mut self) -> Sample {
+                let stats = self.runtime.stats();
+                let now = Instant::now();
+
+                let num_remote_schedules = stats.remote_schedule_count();
+
                 let mut sample = Sample {
                     num_workers: self.workers.len(),
-                    total_time: self.started_at.elapsed(),
+                    total_time: now - self.started_at,
+                    num_remote_schedules: num_remote_schedules - self.num_remote_schedules,
                     .. Default::default()
                 };
+
+                self.num_remote_schedules = num_remote_schedules;
+                self.started_at = now;
         
-                for (rt, worker) in self.runtime.stats().workers().zip(&mut self.workers) {
+                for (rt, worker) in stats.workers().zip(&mut self.workers) {
                     worker.probe(rt, &mut sample);
                 }
         
@@ -127,33 +115,20 @@ impl RuntimeMetrics {
 
             fn next(&mut self) -> Option<Sample> {
                 Some(self.probe())
-                /*
-                let latest = self.0.probe(self.2);
-
-                let ret = Sample {
-                    num_parks: latest.num_parks - self.1.num_parks,
-                    num_noops: latest.num_noops - self.1.num_noops,
-                    num_steals: latest.num_steals - self.1.num_steals,
-                    num_local_schedules: latest.num_local_schedules - self.1.num_local_schedules,
-                    num_polls: latest.num_polls - self.1.num_polls,
-                    total_time: latest.total_time - self.1.total_time,
-                    total_time_busy: latest.total_time_busy - self.1.total_time_busy,
-                };
-
-                self.1 = latest;
-                */
             }
         }
 
         let started_at = Instant::now();
 
         // TODO: fix Tokio's API to not return an iterator.
-        let workers = self.runtime.stats().workers().map(Worker::new).collect();
+        let stats = self.runtime.stats();
+        let workers = stats.workers().map(Worker::new).collect();
 
         Iter {
             runtime: self.runtime.clone(),
             started_at,
             workers,
+            num_remote_schedules: stats.remote_schedule_count(),
         }
     }
 }
