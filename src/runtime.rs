@@ -125,7 +125,7 @@ impl RuntimeMetrics {
                 let mut sample = Sample {
                     num_workers: self.runtime.num_workers(),
                     total_time: now - self.started_at,
-                    remote_queue_depth: self.runtime.remote_queue_depth(),
+                    remote_queue_depth: self.runtime.injection_queue_depth(),
                     num_remote_schedules: num_remote_schedules - self.num_remote_schedules,
                     min_parks: u64::MAX,
                     min_noops: u64::MAX,
