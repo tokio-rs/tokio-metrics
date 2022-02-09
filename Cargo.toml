@@ -6,13 +6,16 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
+default = ["rt"]
 rt = ["tokio"]
 
 [dependencies]
 futures-util = "0.3.19"
 pin-project-lite = "0.2.7"
-
-tokio = { version = "1.15.0", features = ["rt", "stats"], optional = true }
+tokio = { version = "1.15.0", features = ["rt", "stats", "time", "macros"], optional = true }
 
 [patch.crates-io]
 tokio = { path = "../tokio/tokio" }
+
+[dev-dependencies]
+tokio = { version = "1.15.0", features = ["full", "rt", "time", "test-util"] }
