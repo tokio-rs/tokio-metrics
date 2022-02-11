@@ -104,30 +104,29 @@ use tokio::time::{Duration, Instant};
 ///     assert_eq!(monitor.cumulative().total_time_to_first_poll(), max_duration);
 /// }
 /// ```
-/// If the delay between instrumentation and first poll exceeds [`u64::MAX`] nanoseconds,
-/// `total_time_to_first_poll` is reported as [`std::time::Duration::ZERO`]:
+/// If the total delay between instrumentation and first poll exceeds [`u64::MAX`] nanoseconds,
+/// `total_time_to_first_poll` will overflow:
 /// ```
 /// # use tokio::time::Duration;
 /// #
 /// # #[tokio::main(flavor = "current_thread", start_paused = true)]
 /// # async fn main() {
-/// #     let monitor = tokio_metrics::TaskMonitor::new();
-/// #     let mut interval = monitor.intervals();
-/// #     let mut next_interval = || interval.next().unwrap();
+/// #    let monitor = tokio_metrics::TaskMonitor::new();
 /// #
-/// // construct and instrument a task, but do not `await` it
-/// let task = monitor.instrument(async {});
+///  // construct and instrument a task, but do not `await` it
+///  let task_a = monitor.instrument(async {});
+///  let task_b = monitor.instrument(async {});
 ///
-/// // this is the maximum duration representable by tokio_metrics
-/// let max_duration = Duration::from_nanos(u64::MAX);
+///  // this is the maximum duration representable by tokio_metrics
+///  let max_duration = Duration::from_nanos(u64::MAX);
 ///
-/// // let's advance the clock by 2ns beyond `max_duration`, then poll `task`
-/// let _ = tokio::time::advance(max_duration + Duration::from_nanos(2)).await;
-/// task.await;
+///  // let's advance the clock by 1.5x this amount and await `task`
+///  let _ = tokio::time::advance(3 * (max_duration / 2)).await;
+///  task_a.await;
+///  task_b.await;
 ///
-/// // `total_time_to_first_poll` is, incorrectly, reported as 0s.
-/// assert_eq!(next_interval().total_time_to_first_poll(), Duration::ZERO);
-/// assert_eq!(monitor.cumulative().total_time_to_first_poll(), Duration::ZERO);
+///  // the `total_time_to_first_poll` has overflowed
+///  assert!(monitor.cumulative().total_time_to_first_poll() < max_duration);
 /// # }
 /// ```
 /// If *many* tasks are spawned, it will take far less than a [`u64::MAX`]-nanosecond delay bring this metric to the
@@ -140,12 +139,12 @@ use tokio::time::{Duration, Instant};
 /// #     let monitor = tokio_metrics::TaskMonitor::new();
 /// #     let mut interval = monitor.intervals();
 /// #     let mut next_interval = || interval.next().unwrap();
-/// #       
+/// #
 /// // construct and instrument u16::MAX tasks, but do not `await` them
 /// let num_tasks = u16::MAX as u64;
 /// let mut tasks = Vec::with_capacity(num_tasks as usize);
 /// for _ in 0..num_tasks { tasks.push(monitor.instrument(async {})); }
-///     
+///
 /// // this is the maximum duration representable by tokio_metrics
 /// let max_duration = u64::MAX;
 ///
@@ -177,10 +176,10 @@ use tokio::time::{Duration, Instant};
 ///
 ///  let num_tasks = u16::MAX as u64;
 ///  let batch_size = num_tasks / 3;
-///  
+///
 ///  let max_duration_ns = u64::MAX;
 ///  let iffy_delay_ns = max_duration_ns / num_tasks;
-///  
+///
 ///  // Instrument `batch_size` number of tasks, wait for `delay` nanoseconds,
 ///  // then await the instrumented tasks.
 ///  async fn run_batch(monitor: &TaskMonitor, batch_size: usize, delay: u64) {
@@ -189,21 +188,21 @@ use tokio::time::{Duration, Instant};
 ///      let _ = tokio::time::advance(Duration::from_nanos(delay)).await;
 ///      for task in tasks { task.await; }
 ///  }
-///  
+///
 ///  // this is how much `total_time_to_first_poll_ns` will
 ///  // increase with each batch we run
 ///  let batch_delay = iffy_delay_ns * batch_size;
-///  
+///
 ///  // run batches 1, 2, and 3
 ///  for i in 1..=3 {
 ///      run_batch(&monitor, batch_size as usize, iffy_delay_ns).await;
 ///      assert_eq!(1 * batch_delay, next_interval().total_time_to_first_poll_ns);
 ///      assert_eq!(i * batch_delay, monitor.cumulative().total_time_to_first_poll_ns);
 ///  }
-///  
+///
 ///  /* now, the `total_time_to_first_poll_ns` counter is at the precipice of overflow */
 ///  assert_eq!(monitor.cumulative().total_time_to_first_poll_ns, max_duration_ns);
-///  
+///
 ///  // run batch 4
 ///  run_batch(&monitor, batch_size as usize, iffy_delay_ns).await;
 ///  // the interval counter remains accurate
@@ -236,9 +235,7 @@ pin_project! {
 
 /// Key metrics of [instrumented][`TaskMonitor::instrument`] tasks.
 ///
-/// ### Construction
-///
-/// ### TaskMetrics
+/// ### Index of metrics
 /// #### Base metrics
 /// - [`TaskMetrics::num_tasks`]:
 ///     number of new tasks instrumented and polled at least once
@@ -277,6 +274,10 @@ pub struct TaskMetrics {
     /// ### Derived metrics
     /// - [`TaskMetrics::mean_time_to_first_poll`]:
     ///   the mean time elapsed between the instrumentation of tasks and the time they are first polled.
+    ///
+    /// ### Interpretation
+    /// This metric, itself, is not a critical metric to log; it is used to calculate
+    /// the critical metric [`TaskMetrics::mean_time_to_first_poll`].
     ///
     /// ### Example
     /// In the below example, no tasks are instrumented or polled in the first sampling period;
@@ -556,8 +557,8 @@ struct State {
     /// Instant at which the task was instrumented. This is used to track the time to first poll.
     instrumented_at: Instant,
 
-    /// The instant, tracked as duration since `created_at`, at which the future
-    /// was last woken. Tracked as nanoseconds.
+    /// The instant, tracked as nanoseconds since `instrumented_at`, at which the future
+    /// was last woken.
     woke_at: AtomicU64,
 
     /// Waker to forward notifications to.
@@ -1031,6 +1032,37 @@ impl TaskMetrics {
     /// assert_eq!(monitor.cumulative().total_time_to_first_poll(), one_sec);
     /// # }
     /// ```
+    ///
+    /// ### What if time-to-first-poll is very large?
+    /// The time-to-first-poll of *individual* tasks saturates at `u64::MAX` nanoseconds. However, if the *total*
+    /// time-to-first-poll *across* monitored tasks exceeds `u64::MAX` nanoseconds, this metric will wrap-around:
+    /// ```
+    /// use tokio::time::Duration;
+    ///
+    /// #[tokio::main(flavor = "current_thread", start_paused = true)]
+    /// async fn main() {
+    ///     let monitor = tokio_metrics::TaskMonitor::new();
+    ///
+    ///     // construct and instrument a task, but do not `await` it
+    ///     let task = monitor.instrument(async {});
+    ///
+    ///     // this is the maximum duration representable by tokio_metrics
+    ///     let max_duration = Duration::from_nanos(u64::MAX);
+    ///
+    ///     // let's advance the clock by double this amount and await `task`
+    ///     let _ = tokio::time::advance(max_duration * 2).await;
+    ///     task.await;
+    ///
+    ///     // the time-to-first-poll of `task` saturates at `max_duration`
+    ///     assert_eq!(monitor.cumulative().total_time_to_first_poll(), max_duration);
+    ///
+    ///     // ...but note that the metric *will* wrap around if more tasks are involved
+    ///     let task = monitor.instrument(async {});
+    ///     let _ = tokio::time::advance(Duration::from_nanos(1)).await;
+    ///     task.await;
+    ///     assert_eq!(monitor.cumulative().total_time_to_first_poll(), Duration::ZERO);
+    /// }
+    /// ```
     pub fn total_time_to_first_poll(&self) -> Duration {
         Duration::from_nanos(self.total_time_to_first_poll_ns)
     }
@@ -1320,6 +1352,10 @@ impl TaskMetrics {
     /// ##### Definition
     /// This metric is derived from [`TaskMetrics::total_time_to_first_poll`] ÷ [`TaskMetrics::num_tasks`].
     ///
+    /// ### Interpretation
+    /// A high `mean_time_to_first_poll` has two potential culprits:
+    /// 1.
+    ///
     /// ##### Example
     /// In the below example, no tasks are instrumented or polled within the first sample period; in the second
     /// sampling period, 500ms elapse between the instrumentation of a task and its first poll; in the third
@@ -1391,6 +1427,15 @@ impl TaskMetrics {
     /// ##### Definition
     /// This metric is derived from [`TaskMetrics::total_time_scheduled`] ÷ [`TaskMetrics::num_scheduled`].
     ///
+    /// ##### Interpretation
+    /// The normal
+    ///
+    /// A high `mean_time_scheduled` has one culprit: monitored tasks tended to spend a long time in the runtime's task
+    /// queues.
+    ///
+    /// ######
+    ///
+    ///
     /// ##### Example
     /// In the below example, a task that yields endlessly is raced against a task that blocks the
     /// executor for 1 second; the yielding task spends approximately 1 second waiting to
@@ -1406,7 +1451,7 @@ impl TaskMetrics {
     ///     let mut interval = metrics_monitor.intervals();
     ///     let mut next_interval = || interval.next().unwrap();
     ///
-    ///     // construct and instrument and spawn a task that yields endlessly
+    ///     // construct and instrument a task that yields endlessly
     ///     let endless_task = metrics_monitor.instrument(async {
     ///         loop { tokio::task::yield_now().await }
     ///     });
@@ -1416,6 +1461,10 @@ impl TaskMetrics {
     ///         std::thread::sleep(Duration::from_secs(1))
     ///     });
     ///
+    ///     // ensure that at least 2s elapse between the instrumentation of
+    ///     // `endless_task` and its first poll
+    ///     std::thread::sleep(Duration::from_secs(2));
+    ///
     ///     // race `endless_task` against `one_sec_task`
     ///     tokio::select! {
     ///         biased;
@@ -1423,8 +1472,13 @@ impl TaskMetrics {
     ///         _ = one_sec_task => {}
     ///     }
     ///
-    ///     // `endless_task` will have spent approximately one second waiting
-    ///     assert!(next_interval().mean_time_scheduled() >= Duration::from_secs(1));
+    ///     // `endless_task` will have spent approximately one second waiting:
+    ///     let interval = next_interval();
+    ///     assert!(interval.mean_time_scheduled() >= Duration::from_secs(1));
+    ///     // ...but *not* 2s waiting:
+    ///     assert!(interval.mean_time_scheduled() <= Duration::from_secs(2));
+    ///     // i.e., time_to_first_poll is not factored into total_time_scheduled:
+    ///     assert!(interval.mean_time_to_first_poll() >= Duration::from_secs(2));
     ///
     ///     // construct and instrument and spawn a task that yields endlessly
     ///     let endless_task = metrics_monitor.instrument(async {
@@ -1693,40 +1747,96 @@ impl<T: Future> Future for Instrumented<T> {
     type Output = T::Output;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let poll_start = Instant::now();
         let this = self.project();
+        let state = this.state;
+        let instrumented_at = state.instrumented_at;
+        let metrics = &state.metrics;
 
+        /* accounting for time-to-first-poll and tasks-count */
+        // is this the first time this task has been polled?
         if !*this.did_poll_once {
+            // if so, we need to do three things:
+            /* 1. note that this task *has* been polled */
             *this.did_poll_once = true;
 
-            if let Ok(nanos) = this.state.instrumented_at.elapsed().as_nanos().try_into() {
-                let nanos: u64 = nanos; // Make inference happy
-                this.state
-                    .metrics
-                    .time_to_first_poll_ns_total
-                    .fetch_add(nanos, SeqCst);
-                this.state.metrics.tasks_count.fetch_add(1, SeqCst);
-            }
+            /* 2. account for the time-to-first-poll of this task */
+            // if the time-to-first-poll of this task exceeds `u64::MAX` ns,
+            // round down to `u64::MAX` nanoseconds
+            let elapsed = (poll_start - instrumented_at)
+                .as_nanos()
+                .try_into()
+                .unwrap_or(u64::MAX);
+            // add this duration to `time_to_first_poll_ns_total`
+            metrics
+                .time_to_first_poll_ns_total
+                .fetch_add(elapsed, SeqCst);
+
+            /* 3. increment the count of tasks that have been polled at least once */
+            state.metrics.tasks_count.fetch_add(1, SeqCst);
         }
 
-        this.state.measure_poll();
+        /* accounting for time-scheduled */
+        // 1. note (and reset) the instant this task was last awoke
+        let woke_at = state.woke_at.swap(0, SeqCst);
+
+        // if this task spent any time in the scheduled state after instrumentation,
+        // `woke_at` will be greater than 0.
+        if woke_at > 0 {
+            // increment the counter of how many schedules occured
+            metrics.schedule_count.fetch_add(1, SeqCst);
+
+            // recall that the `woke_at` field is internally represented as
+            // nanoseconds-since-instrumentation. here, for accounting purposes,
+            // we need to instead represent it as a proper `Instant`.
+            let woke_instant = instrumented_at + Duration::from_nanos(woke_at);
+
+            // the duration this task spent scheduled is time time elapsed between
+            // when this task was awoke, and when it was polled.
+            let scheduled_ns = (poll_start - woke_instant)
+                .as_nanos()
+                .try_into()
+                .unwrap_or(u64::MAX);
+
+            // add `scheduled_ns` to the Monitor's total
+            metrics.scheduled_ns_total.fetch_add(scheduled_ns, SeqCst);
+        }
 
         // Register the waker
-        this.state.waker.register(cx.waker());
+        state.waker.register(cx.waker());
 
         // Get the instrumented waker
-        let waker_ref = futures_util::task::waker_ref(&this.state);
+        let waker_ref = futures_util::task::waker_ref(&state);
         let mut cx = Context::from_waker(&*waker_ref);
 
         // Poll the task
-        let now = Instant::now();
+        let inner_poll_start = Instant::now();
         let ret = Future::poll(this.task, &mut cx);
-        this.state.measure_poll_time(now.elapsed());
+        let inner_poll_duration = inner_poll_start.elapsed();
+
+        /* accounting for poll time */
+        let inner_poll_ns: u64 = inner_poll_duration
+            .as_nanos()
+            .try_into()
+            .unwrap_or(u64::MAX);
+
+        let (count_bucket, duration_bucket) = // was this a slow or fast poll?
+            if inner_poll_duration >= metrics.slow_poll_threshold {
+                (&metrics.slow_polls_count, &metrics.slow_poll_ns_total)
+            } else {
+                (&metrics.fast_polls_count, &metrics.fast_poll_ns_total)
+            };
+
+        // update the appropriate bucket
+        count_bucket.fetch_add(1, SeqCst);
+        duration_bucket.fetch_add(inner_poll_ns, SeqCst);
+
         ret
     }
 }
 
 impl State {
-    fn measure_wake(&self) {
+    fn on_wake(&self) {
         let woke_at: u64 = match self.instrumented_at.elapsed().as_nanos().try_into() {
             Ok(woke_at) => woke_at,
             // This is highly unlikely as it would mean the task ran for over
@@ -1738,54 +1848,16 @@ impl State {
         // We don't actually care about the result
         let _ = self.woke_at.compare_exchange(0, woke_at, SeqCst, SeqCst);
     }
-
-    fn measure_poll(&self) {
-        let metrics = &self.metrics;
-        let woke_at = self.woke_at.swap(0, SeqCst);
-
-        if woke_at == 0 {
-            // Either this is the first poll or it is a false-positive (polled
-            // without scheduled).
-            return;
-        }
-
-        let scheduled_dur = (self.instrumented_at + Duration::from_nanos(woke_at)).elapsed();
-        let scheduled_nanos: u64 = match scheduled_dur.as_nanos().try_into() {
-            Ok(scheduled_nanos) => scheduled_nanos,
-            Err(_) => return,
-        };
-
-        metrics
-            .scheduled_ns_total
-            .fetch_add(scheduled_nanos, SeqCst);
-        metrics.schedule_count.fetch_add(1, SeqCst);
-    }
-
-    fn measure_poll_time(&self, duration: Duration) {
-        let metrics = &self.metrics;
-        let polled_nanos: u64 = match duration.as_nanos().try_into() {
-            Ok(polled_nanos) => polled_nanos,
-            Err(_) => return,
-        };
-
-        if duration >= self.metrics.slow_poll_threshold {
-            metrics.slow_polls_count.fetch_add(1, SeqCst);
-            metrics.slow_poll_ns_total.fetch_add(polled_nanos, SeqCst);
-        } else {
-            metrics.fast_polls_count.fetch_add(1, SeqCst);
-            metrics.fast_poll_ns_total.fetch_add(polled_nanos, SeqCst);
-        }
-    }
 }
 
 impl ArcWake for State {
     fn wake_by_ref(arc_self: &Arc<State>) {
-        arc_self.measure_wake();
+        arc_self.on_wake();
         arc_self.waker.wake();
     }
 
     fn wake(self: Arc<State>) {
-        self.measure_wake();
+        self.on_wake();
         self.waker.wake();
     }
 }

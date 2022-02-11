@@ -18,4 +18,12 @@ tokio = { version = "1.15.0", features = ["rt", "stats", "time", "macros"], opti
 tokio = { path = "../tokio/tokio" }
 
 [dev-dependencies]
+criterion = "0.3.4"
+futures = "0.3"
+num_cpus = "1.13.1"
 tokio = { version = "1.15.0", features = ["full", "rt", "time", "test-util"] }
+
+
+[[bench]]
+name = "poll_overhead"
+harness = false
