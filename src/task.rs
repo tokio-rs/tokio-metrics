@@ -228,6 +228,10 @@ pin_project! {
         // True when the task is polled for the first time
         did_poll_once: bool,
 
+        // The instant, tracked as nanoseconds since `instrumented_at`, at which the future finished
+        // its last poll.
+        idled_at: u64,
+
         // State shared between the task and its instrumented waker.
         state: Arc<State>,
     }
@@ -312,6 +316,8 @@ pub struct TaskMetrics {
     /// }
     /// ```
     pub num_tasks: u64,
+
+    pub num_idles: u64,
 
     /// The number of times instrumented tasks were scheduled for execution.
     ///
@@ -500,6 +506,8 @@ pub struct TaskMetrics {
     /// - [`TaskMetrics::total_time_to_first_poll`]: `total_time_to_first_poll_ns`, as a [`std::time::Duration`].
     pub total_time_to_first_poll_ns: u64,
 
+    pub total_time_idle_ns: u64,
+
     /// The amount of time elapsed between when tasks were instrumented and when they were first polled, measured in
     /// nanoseconds.
     ///
@@ -528,6 +536,9 @@ struct RawMetrics {
     /// Total number of instrumented tasks
     tasks_count: AtomicU64,
 
+    /// Total number of times tasks entered the `idle` state.
+    idle_count: AtomicU64,
+
     /// Total number of times tasks were scheduled.
     schedule_count: AtomicU64,
 
@@ -539,6 +550,9 @@ struct RawMetrics {
 
     /// Total amount of time until the first poll
     time_to_first_poll_ns_total: AtomicU64,
+
+    /// Total amount of time tasks spent in the `idle` state.
+    idle_ns_total: AtomicU64,
 
     /// Total amount of time tasks spent in the waking state.
     scheduled_ns_total: AtomicU64,
@@ -631,11 +645,13 @@ impl TaskMonitor {
             metrics: Arc::new(RawMetrics {
                 slow_poll_threshold: slow_poll_cut_off,
                 tasks_count: AtomicU64::new(0),
+                idle_count: AtomicU64::new(0),
                 schedule_count: AtomicU64::new(0),
                 fast_polls_count: AtomicU64::new(0),
                 slow_polls_count: AtomicU64::new(0),
                 time_to_first_poll_ns_total: AtomicU64::new(0),
                 scheduled_ns_total: AtomicU64::new(0),
+                idle_ns_total: AtomicU64::new(0),
                 fast_poll_ns_total: AtomicU64::new(0),
                 slow_poll_ns_total: AtomicU64::new(0),
             }),
@@ -734,6 +750,7 @@ impl TaskMonitor {
         Instrumented {
             task,
             did_poll_once: false,
+            idled_at: 0,
             state: Arc::new(State {
                 metrics: self.metrics.clone(),
                 instrumented_at: Instant::now(),
@@ -803,16 +820,7 @@ impl TaskMonitor {
     /// }
     /// ```
     pub fn cumulative(&self) -> TaskMetrics {
-        TaskMetrics {
-            num_tasks: self.metrics.tasks_count.load(SeqCst),
-            num_scheduled: self.metrics.schedule_count.load(SeqCst),
-            num_fast_polls: self.metrics.fast_polls_count.load(SeqCst),
-            num_slow_polls: self.metrics.slow_polls_count.load(SeqCst),
-            total_time_to_first_poll_ns: self.metrics.time_to_first_poll_ns_total.load(SeqCst),
-            total_time_scheduled_ns: self.metrics.scheduled_ns_total.load(SeqCst),
-            total_time_fast_poll_ns: self.metrics.fast_poll_ns_total.load(SeqCst),
-            total_time_slow_poll_ns: self.metrics.slow_poll_ns_total.load(SeqCst),
-        }
+        self.metrics.metrics()
     }
 
     /// Produces an unending iterator of metric sampling periods.
@@ -896,10 +904,12 @@ impl RawMetrics {
     fn metrics(&self) -> TaskMetrics {
         TaskMetrics {
             num_tasks: self.tasks_count.load(SeqCst),
+            num_idles: self.idle_count.load(SeqCst),
             num_scheduled: self.schedule_count.load(SeqCst),
             num_fast_polls: self.fast_polls_count.load(SeqCst),
             num_slow_polls: self.slow_polls_count.load(SeqCst),
             total_time_to_first_poll_ns: self.time_to_first_poll_ns_total.load(SeqCst),
+            total_time_idle_ns: self.idle_ns_total.load(SeqCst),
             total_time_scheduled_ns: self.scheduled_ns_total.load(SeqCst),
             total_time_fast_poll_ns: self.fast_poll_ns_total.load(SeqCst),
             total_time_slow_poll_ns: self.slow_poll_ns_total.load(SeqCst),
@@ -913,12 +923,16 @@ impl std::ops::Sub for TaskMetrics {
     fn sub(self, prev: TaskMetrics) -> TaskMetrics {
         TaskMetrics {
             num_tasks: self.num_tasks.wrapping_sub(prev.num_tasks),
+            num_idles: self.num_idles.wrapping_sub(prev.num_idles),
             num_scheduled: self.num_scheduled.wrapping_sub(prev.num_scheduled),
             num_fast_polls: self.num_fast_polls.wrapping_sub(prev.num_fast_polls),
             num_slow_polls: self.num_slow_polls.wrapping_sub(prev.num_slow_polls),
             total_time_to_first_poll_ns: self
                 .total_time_to_first_poll_ns
                 .wrapping_sub(prev.total_time_to_first_poll_ns),
+            total_time_idle_ns: self
+                .total_time_idle_ns
+                .wrapping_sub(prev.total_time_idle_ns),
             total_time_scheduled_ns: self
                 .total_time_scheduled_ns
                 .wrapping_sub(prev.total_time_scheduled_ns),
@@ -1065,6 +1079,10 @@ impl TaskMetrics {
     /// ```
     pub fn total_time_to_first_poll(&self) -> Duration {
         Duration::from_nanos(self.total_time_to_first_poll_ns)
+    }
+
+    pub fn total_time_idle(&self) -> Duration {
+        Duration::from_nanos(self.total_time_idle_ns)
     }
 
     /// The total amount of time tasks spent waiting to be scheduled.
@@ -1422,19 +1440,41 @@ impl TaskMetrics {
         }
     }
 
+    /// The mean duration that monitored tasks spent in the idle state.
+    /// 
+    /// ##### Definition
+    /// This metric is derived from [`TaskMetrics::total_time_idle`] ÷ [`TaskMetrics::num_idles`].
+    /// 
+    /// ##### Example
+    /// ```
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let monitor = tokio_metrics::TaskMonitor::new();
+    ///     let one_sec = std::time::Duration::from_secs(1);
+    ///
+    ///     monitor.instrument(async move {
+    ///         tokio::time::sleep(one_sec).await;
+    ///     }).await;
+    ///
+    ///     assert!(monitor.cumulative().mean_time_idle() >= one_sec);
+    /// }
+    /// ```
+    pub fn mean_time_idle(&self) -> Duration {
+        if self.num_idles == 0 {
+            Duration::ZERO
+        } else {
+            Duration::from_nanos(self.total_time_idle_ns / self.num_tasks)
+        }
+    }
+
     /// The mean amount of time that monitored tasks spent waiting to be run.
     ///
     /// ##### Definition
     /// This metric is derived from [`TaskMetrics::total_time_scheduled`] ÷ [`TaskMetrics::num_scheduled`].
     ///
     /// ##### Interpretation
-    /// The normal
-    ///
     /// A high `mean_time_scheduled` has one culprit: monitored tasks tended to spend a long time in the runtime's task
     /// queues.
-    ///
-    /// ######
-    ///
     ///
     /// ##### Example
     /// In the below example, a task that yields endlessly is raced against a task that blocks the
@@ -1749,6 +1789,7 @@ impl<T: Future> Future for Instrumented<T> {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let poll_start = Instant::now();
         let this = self.project();
+        let idled_at = this.idled_at;
         let state = this.state;
         let instrumented_at = state.instrumented_at;
         let metrics = &state.metrics;
@@ -1776,12 +1817,25 @@ impl<T: Future> Future for Instrumented<T> {
             state.metrics.tasks_count.fetch_add(1, SeqCst);
         }
 
-        /* accounting for time-scheduled */
+        /* accounting for time-idled and time-scheduled */
         // 1. note (and reset) the instant this task was last awoke
         let woke_at = state.woke_at.swap(0, SeqCst);
 
+        // The state of a future is *idling* in the interim between the instant
+        // it completes a `poll`, and the instant it is next awoken.
+        if *idled_at < woke_at {
+            // increment the counter of how many idles occured
+            metrics.idle_count.fetch_add(1, SeqCst);
+
+            // compute the duration of the idle
+            let idle_ns = woke_at - *idled_at;
+
+            // adjust the total elasped time monitored tasks spent idling
+            metrics.idle_ns_total.fetch_add(idle_ns, SeqCst);
+        }
+
         // if this task spent any time in the scheduled state after instrumentation,
-        // `woke_at` will be greater than 0.
+        // and after first poll, `woke_at` will be greater than 0.
         if woke_at > 0 {
             // increment the counter of how many schedules occured
             metrics.schedule_count.fetch_add(1, SeqCst);
@@ -1812,9 +1866,13 @@ impl<T: Future> Future for Instrumented<T> {
         // Poll the task
         let inner_poll_start = Instant::now();
         let ret = Future::poll(this.task, &mut cx);
-        let inner_poll_duration = inner_poll_start.elapsed();
+        let inner_poll_end = Instant::now();
+
+        /* idle time starts now */
+        *idled_at = (inner_poll_end - instrumented_at).as_nanos().try_into().unwrap_or(u64::MAX);
 
         /* accounting for poll time */
+        let inner_poll_duration = inner_poll_end - inner_poll_start;
         let inner_poll_ns: u64 = inner_poll_duration
             .as_nanos()
             .try_into()
