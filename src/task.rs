@@ -78,7 +78,7 @@ use tokio::time::{Duration, Instant};
 /// exceeds [`u64::MAX`] nanoseconds, the metrics for that interval will overflow and not be accurate.
 ///
 /// ##### Overflow examples
-/// Consier the [`TaskMetrics::total_time_to_first_poll`] metric. This metric accurately reflects delays
+/// Consier the [`TaskMetrics::total_first_poll_delay`] metric. This metric accurately reflects delays
 /// between instrumentation and first-poll ≤ [`u64::MAX`] nanoseconds:
 /// ```
 /// use tokio::time::Duration;
@@ -100,12 +100,12 @@ use tokio::time::{Duration, Instant};
 ///     task.await;
 ///
 ///     // durations ≤ `max_duration` are accurately reflected in this metric
-///     assert_eq!(next_interval().total_time_to_first_poll, max_duration);
-///     assert_eq!(monitor.cumulative().total_time_to_first_poll, max_duration);
+///     assert_eq!(next_interval().total_first_poll_delay, max_duration);
+///     assert_eq!(monitor.cumulative().total_first_poll_delay, max_duration);
 /// }
 /// ```
 /// If the total delay between instrumentation and first poll exceeds [`u64::MAX`] nanoseconds,
-/// `total_time_to_first_poll` will overflow:
+/// `total_first_poll_delay` will overflow:
 /// ```
 /// # use tokio::time::Duration;
 /// #
@@ -125,8 +125,8 @@ use tokio::time::{Duration, Instant};
 ///  task_a.await;
 ///  task_b.await;
 ///
-///  // the `total_time_to_first_poll` has overflowed
-///  assert!(monitor.cumulative().total_time_to_first_poll < max_duration);
+///  // the `total_first_poll_delay` has overflowed
+///  assert!(monitor.cumulative().total_first_poll_delay < max_duration);
 /// # }
 /// ```
 /// If *many* tasks are spawned, it will take far less than a [`u64::MAX`]-nanosecond delay bring this metric to the
@@ -141,25 +141,25 @@ use tokio::time::{Duration, Instant};
 /// #     let mut next_interval = || interval.next().unwrap();
 /// #
 /// // construct and instrument u16::MAX tasks, but do not `await` them
-/// let num_tasks = u16::MAX as u64;
-/// let mut tasks = Vec::with_capacity(num_tasks as usize);
-/// for _ in 0..num_tasks { tasks.push(monitor.instrument(async {})); }
+/// let total_first_polls = u16::MAX as u64;
+/// let mut tasks = Vec::with_capacity(total_first_polls as usize);
+/// for _ in 0..total_first_polls { tasks.push(monitor.instrument(async {})); }
 ///
 /// // this is the maximum duration representable by tokio_metrics
 /// let max_duration = u64::MAX;
 ///
 /// // let's advance the clock justenough such that all of the time-to-first-poll
 /// // delays summed nearly equals `max_duration_nanos`, less some remainder...
-/// let iffy_delay = max_duration / (num_tasks as u64);
-/// let small_remainder = max_duration % num_tasks;
+/// let iffy_delay = max_duration / (total_first_polls as u64);
+/// let small_remainder = max_duration % total_first_polls;
 /// let _ = tokio::time::advance(Duration::from_nanos(iffy_delay)).await;
 ///
 /// // ...then poll all of the instrumented tasks:
 /// for task in tasks { task.await; }
 ///
-/// // `total_time_to_first_poll` is at the precipice of overflowing!
-/// assert_eq!(next_interval().total_time_to_first_poll.as_nanos(), (max_duration - small_remainder) as u128);
-/// assert_eq!(monitor.cumulative().total_time_to_first_poll.as_nanos(), (max_duration - small_remainder) as u128);
+/// // `total_first_poll_delay` is at the precipice of overflowing!
+/// assert_eq!(next_interval().total_first_poll_delay.as_nanos(), (max_duration - small_remainder) as u128);
+/// assert_eq!(monitor.cumulative().total_first_poll_delay.as_nanos(), (max_duration - small_remainder) as u128);
 /// # }
 /// ```
 /// Frequent, interval-sampled metrics will retain their accuracy, even if the cumulative
@@ -174,11 +174,11 @@ use tokio::time::{Duration, Instant};
 /// #     let mut interval = monitor.intervals();
 /// #     let mut next_interval = || interval.next().unwrap();
 ///
-///  let num_tasks = u16::MAX as u64;
-///  let batch_size = num_tasks / 3;
+///  let total_first_polls = u16::MAX as u64;
+///  let batch_size = total_first_polls / 3;
 ///
 ///  let max_duration_ns = u64::MAX;
-///  let iffy_delay_ns = max_duration_ns / num_tasks;
+///  let iffy_delay_ns = max_duration_ns / total_first_polls;
 ///
 ///  // Instrument `batch_size` number of tasks, wait for `delay` nanoseconds,
 ///  // then await the instrumented tasks.
@@ -196,19 +196,19 @@ use tokio::time::{Duration, Instant};
 ///  // run batches 1, 2, and 3
 ///  for i in 1..=3 {
 ///      run_batch(&monitor, batch_size as usize, iffy_delay_ns).await;
-///      assert_eq!(1 * batch_delay as u128, next_interval().total_time_to_first_poll.as_nanos());
-///      assert_eq!(i * batch_delay as u128, monitor.cumulative().total_time_to_first_poll.as_nanos());
+///      assert_eq!(1 * batch_delay as u128, next_interval().total_first_poll_delay.as_nanos());
+///      assert_eq!(i * batch_delay as u128, monitor.cumulative().total_first_poll_delay.as_nanos());
 ///  }
 ///
 ///  /* now, the `total_time_to_first_poll_ns` counter is at the precipice of overflow */
-///  assert_eq!(monitor.cumulative().total_time_to_first_poll.as_nanos(), max_duration_ns as u128);
+///  assert_eq!(monitor.cumulative().total_first_poll_delay.as_nanos(), max_duration_ns as u128);
 ///
 ///  // run batch 4
 ///  run_batch(&monitor, batch_size as usize, iffy_delay_ns).await;
 ///  // the interval counter remains accurate
-///  assert_eq!(1 * batch_delay as u128, next_interval().total_time_to_first_poll.as_nanos());
+///  assert_eq!(1 * batch_delay as u128, next_interval().total_first_poll_delay.as_nanos());
 ///  // but the cumulative counter has overflowed
-///  assert_eq!(batch_delay as u128 - 1, monitor.cumulative().total_time_to_first_poll.as_nanos());
+///  assert_eq!(batch_delay as u128 - 1, monitor.cumulative().total_first_poll_delay.as_nanos());
 /// # }
 /// ```
 /// If a cumulative metric overflows *more than once* in the midst of an interval,
@@ -241,21 +241,21 @@ pin_project! {
 ///
 /// ### Index of metrics
 /// #### Base metrics
-/// - [`TaskMetrics::num_tasks`]:
+/// - [`TaskMetrics::total_first_polls`]:
 ///     number of new tasks instrumented and polled at least once
-/// - [`TaskMetrics::num_scheduled`]:
+/// - [`TaskMetrics::total_scheduled_count`]:
 ///     number of times instrumented tasks were scheduled for execution
-/// - [`TaskMetrics::num_fast_polls`]:
+/// - [`TaskMetrics::total_fast_poll_count`]:
 ///     number of times that polling instrumented tasks completed swiftly
-/// - [`TaskMetrics::num_slow_polls`]:
+/// - [`TaskMetrics::total_slow_poll_count`]:
 ///     number of times that polling instrumented tasks completed slowly
-/// - [`TaskMetrics::total_time_to_first_poll`]
+/// - [`TaskMetrics::total_first_poll_delay`]
 ///     total amount of time elapsed between task instrumentation and first poll
-/// - [`TaskMetrics::total_time_scheduled`]
+/// - [`TaskMetrics::total_scheduled_duration`]
 ///     total amount of time tasks spent waiting to be scheduled
-/// - [`TaskMetrics::total_time_fast_poll`]
+/// - [`TaskMetrics::total_fast_poll_duration`]
 ///     total amount of time that fast polls took to complete
-/// - [`TaskMetrics::total_time_slow_poll`]
+/// - [`TaskMetrics::total_slow_poll_duration`]
 ///     total amount of time that slow polls took to complete
 ///
 /// #### Derived metrics
@@ -296,28 +296,28 @@ pub struct TaskMetrics {
     ///     let mut next_interval = || interval.next().unwrap();
     ///
     ///     // no tasks have been constructed, instrumented, and polled at least once
-    ///     assert_eq!(next_interval().num_tasks, 0);
+    ///     assert_eq!(next_interval().total_first_polls, 0);
     ///
     ///     let task = metrics_monitor.instrument(async {});
     ///
     ///     // `task` has been constructed and instrumented, but has not yet been polled
-    ///     assert_eq!(next_interval().num_tasks, 0);
+    ///     assert_eq!(next_interval().total_first_polls, 0);
     ///
     ///     // poll `task` to completion
     ///     task.await;
     ///
     ///     // `task` has been constructed, instrumented, and polled at least once
-    ///     assert_eq!(next_interval().num_tasks, 1);
+    ///     assert_eq!(next_interval().total_first_polls, 1);
     ///
     ///     // since the last interval was produced, 0 tasks have been constructed, instrumented and polled
-    ///     assert_eq!(next_interval().num_tasks, 0);
+    ///     assert_eq!(next_interval().total_first_polls, 0);
     ///
     ///     Ok(())
     /// }
     /// ```
-    pub num_tasks: u64,
+    pub total_first_polls: u64,
 
-    pub num_idles: u64,
+    pub total_idled_count: u64,
 
     /// The number of times instrumented tasks were scheduled for execution.
     ///
@@ -327,14 +327,14 @@ pub struct TaskMetrics {
     ///
     /// ### Example
     /// In the below example, a task yields to the scheduler a varying number of times between sample periods;
-    /// the number of times the task yields matches [`TaskMetrics::num_scheduled`]:
+    /// the number of times the task yields matches [`TaskMetrics::total_scheduled_count`]:
     /// ```
     /// #[tokio::main]
     /// async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     ///     let metrics_monitor = tokio_metrics::TaskMonitor::new();
     ///
     ///     // [A] no tasks have been created, instrumented, and polled more than once
-    ///     assert_eq!(metrics_monitor.cumulative().num_scheduled, 0);
+    ///     assert_eq!(metrics_monitor.cumulative().total_scheduled_count, 0);
     ///
     ///     // [B] a `task` is created and instrumented
     ///     let task = {
@@ -345,13 +345,13 @@ pub struct TaskMetrics {
     ///
     ///             // [E] `task` has not yet yielded to the scheduler, and
     ///             // thus has not yet been scheduled since its first `poll`
-    ///             assert_eq!(next_interval().num_scheduled, 0);
+    ///             assert_eq!(next_interval().total_scheduled_count, 0);
     ///
     ///             tokio::task::yield_now().await; // yield to the scheduler
     ///
     ///             // [F] `task` has yielded to the scheduler once (and thus been
     ///             // scheduled once) since the last sampling period
-    ///             assert_eq!(next_interval().num_scheduled, 1);
+    ///             assert_eq!(next_interval().total_scheduled_count, 1);
     ///
     ///             tokio::task::yield_now().await; // yield to the scheduler
     ///             tokio::task::yield_now().await; // yield to the scheduler
@@ -359,7 +359,7 @@ pub struct TaskMetrics {
     ///
     ///             // [G] `task` has yielded to the scheduler thrice (and thus been
     ///             // scheduled thrice) since the last sampling period
-    ///             assert_eq!(next_interval().num_scheduled, 3);
+    ///             assert_eq!(next_interval().total_scheduled_count, 3);
     ///
     ///             tokio::task::yield_now().await; // yield to the scheduler
     ///
@@ -368,25 +368,25 @@ pub struct TaskMetrics {
     ///     };
     ///
     ///     // [C] `task` has not yet been polled at all
-    ///     assert_eq!(metrics_monitor.cumulative().num_tasks, 0);
-    ///     assert_eq!(metrics_monitor.cumulative().num_scheduled, 0);
+    ///     assert_eq!(metrics_monitor.cumulative().total_first_polls, 0);
+    ///     assert_eq!(metrics_monitor.cumulative().total_scheduled_count, 0);
     ///
     ///     // [D] poll `task` to completion
     ///     let mut next_interval = task.await;
     ///
     ///     // [H] `task` has been polled 1 times since the last sample
-    ///     assert_eq!(next_interval().num_scheduled, 1);
+    ///     assert_eq!(next_interval().total_scheduled_count, 1);
     ///
     ///     // [I] `task` has been polled 0 times since the last sample
-    ///     assert_eq!(next_interval().num_scheduled, 0);
+    ///     assert_eq!(next_interval().total_scheduled_count, 0);
     ///
     ///     // [J] `task` has yielded to the scheduler a total of five times
-    ///     assert_eq!(metrics_monitor.cumulative().num_scheduled, 5);
+    ///     assert_eq!(metrics_monitor.cumulative().total_scheduled_count, 5);
     ///
     ///     Ok(())
     /// }
     /// ```
-    pub num_scheduled: u64,
+    pub total_scheduled_count: u64,
 
     /// The number of times that polling instrumented tasks completed swiftly.
     ///
@@ -410,7 +410,7 @@ pub struct TaskMetrics {
     ///     let mut next_interval = || interval.next().unwrap();
     ///
     ///     // no tasks have been constructed, instrumented, or polled
-    ///     assert_eq!(next_interval().num_fast_polls, 0);
+    ///     assert_eq!(next_interval().total_fast_poll_count, 0);
     ///
     ///     let fast = Duration::ZERO;
     ///
@@ -421,7 +421,7 @@ pub struct TaskMetrics {
     ///         spin_for(fast)        // fast poll 3
     ///     }).await;
     ///
-    ///     assert_eq!(next_interval().num_fast_polls, 3);
+    ///     assert_eq!(next_interval().total_fast_poll_count, 3);
     ///
     ///     // this task completes in two fast polls
     ///     let _ = metrics_monitor.instrument(async {
@@ -429,7 +429,7 @@ pub struct TaskMetrics {
     ///         spin_for(fast)        // fast poll 2
     ///     }).await;
     ///
-    ///     assert_eq!(next_interval().num_fast_polls, 2);
+    ///     assert_eq!(next_interval().total_fast_poll_count, 2);
     ///
     ///     Ok(())
     /// }
@@ -441,7 +441,7 @@ pub struct TaskMetrics {
     ///     tokio::task::yield_now()
     /// }
     /// ```
-    pub num_fast_polls: u64,
+    pub total_fast_poll_count: u64,
 
     /// The number of times that polling instrumented tasks completed slowly.
     ///
@@ -466,7 +466,7 @@ pub struct TaskMetrics {
     ///     let mut next_interval = || interval.next().unwrap();
     ///
     ///     // no tasks have been constructed, instrumented, or polled
-    ///     assert_eq!(next_interval().num_slow_polls, 0);
+    ///     assert_eq!(next_interval().total_slow_poll_count, 0);
     ///
     ///     let slow = 10 * metrics_monitor.slow_poll_threshold();
     ///
@@ -477,7 +477,7 @@ pub struct TaskMetrics {
     ///         spin_for(slow)        // slow poll 3
     ///     }).await;
     ///
-    ///     assert_eq!(next_interval().num_slow_polls, 3);
+    ///     assert_eq!(next_interval().total_slow_poll_count, 3);
     ///
     ///     // this task completes in two slow polls
     ///     let _ = metrics_monitor.instrument(async {
@@ -485,7 +485,7 @@ pub struct TaskMetrics {
     ///         spin_for(slow)        // slow poll 2
     ///     }).await;
     ///
-    ///     assert_eq!(next_interval().num_slow_polls, 2);
+    ///     assert_eq!(next_interval().total_slow_poll_count, 2);
     ///
     ///     Ok(())
     /// }
@@ -497,7 +497,7 @@ pub struct TaskMetrics {
     ///     tokio::task::yield_now()
     /// }
     /// ```
-    pub num_slow_polls: u64,
+    pub total_slow_poll_count: u64,
 
     /// The amount of time elapsed between when tasks were instrumented and when they were first polled.
     ///
@@ -521,8 +521,8 @@ pub struct TaskMetrics {
     ///     let mut next_interval = || interval.next().unwrap();
     ///
     ///     // no tasks have yet been created, instrumented, or polled
-    ///     assert_eq!(metrics_monitor.cumulative().total_time_to_first_poll, Duration::ZERO);
-    ///     assert_eq!(next_interval().total_time_to_first_poll, Duration::ZERO);
+    ///     assert_eq!(metrics_monitor.cumulative().total_first_poll_delay, Duration::ZERO);
+    ///     assert_eq!(next_interval().total_first_poll_delay, Duration::ZERO);
     ///
     ///     // constructs and instruments a task, pauses a given duration, then awaits the task
     ///     async fn instrument_pause_await(monitor: &tokio_metrics::TaskMonitor, pause: Duration) {
@@ -535,11 +535,11 @@ pub struct TaskMetrics {
     ///     let task_a_pause_time = Duration::from_millis(500);
     ///     let task_a_total_time = time(instrument_pause_await(&metrics_monitor, task_a_pause_time)).await;
     ///
-    ///     // the `total_time_to_first_poll` in this period will be somewhere between the
+    ///     // the `total_first_poll_delay` in this period will be somewhere between the
     ///     // pause time of `task_a`, and the total execution time of `task_a`
-    ///     let total_time_to_first_poll = next_interval().total_time_to_first_poll;
-    ///     assert!(total_time_to_first_poll >= task_a_pause_time);
-    ///     assert!(total_time_to_first_poll <= task_a_total_time);
+    ///     let total_first_poll_delay = next_interval().total_first_poll_delay;
+    ///     assert!(total_first_poll_delay >= task_a_pause_time);
+    ///     assert!(total_first_poll_delay <= task_a_total_time);
     ///
     ///     // construct and await a task that pauses for 250ms between instrumentation and first poll
     ///     let task_b_pause_time = Duration::from_millis(250);
@@ -549,12 +549,12 @@ pub struct TaskMetrics {
     ///     let task_c_pause_time = Duration::from_millis(100);
     ///     let task_c_total_time = time(instrument_pause_await(&metrics_monitor, task_c_pause_time)).await;
     ///
-    ///     // the `total_time_to_first_poll` in this period will be somewhere between the
+    ///     // the `total_first_poll_delay` in this period will be somewhere between the
     ///     // combined pause times of `task_a` and `task_b` (350ms), and the combined total execution times
     ///     // of `task_a` and `task_b`
-    ///     let total_time_to_first_poll = next_interval().total_time_to_first_poll;
-    ///     assert!(total_time_to_first_poll >= task_b_pause_time + task_c_pause_time);
-    ///     assert!(total_time_to_first_poll <= task_b_total_time + task_c_total_time);
+    ///     let total_first_poll_delay = next_interval().total_first_poll_delay;
+    ///     assert!(total_first_poll_delay >= task_b_pause_time + task_c_pause_time);
+    ///     assert!(total_first_poll_delay <= task_b_total_time + task_c_total_time);
     ///
     ///     Ok(())
     /// }
@@ -586,16 +586,16 @@ pub struct TaskMetrics {
     /// let _ = tokio::time::sleep(one_sec).await;
     ///
     /// // although 1s has now elapsed since the instrumentation of `task`,
-    /// // this is not reflected in `total_time_to_first_poll`...
-    /// assert_eq!(next_interval().total_time_to_first_poll, Duration::ZERO);
-    /// assert_eq!(monitor.cumulative().total_time_to_first_poll, Duration::ZERO);
+    /// // this is not reflected in `total_first_poll_delay`...
+    /// assert_eq!(next_interval().total_first_poll_delay, Duration::ZERO);
+    /// assert_eq!(monitor.cumulative().total_first_poll_delay, Duration::ZERO);
     ///
     /// // ...and won't be until `task` is actually polled
     /// task.await;
     ///
-    /// // now, the 1s delay is reflected in `total_time_to_first_poll`:
-    /// assert_eq!(next_interval().total_time_to_first_poll, one_sec);
-    /// assert_eq!(monitor.cumulative().total_time_to_first_poll, one_sec);
+    /// // now, the 1s delay is reflected in `total_first_poll_delay`:
+    /// assert_eq!(next_interval().total_first_poll_delay, one_sec);
+    /// assert_eq!(monitor.cumulative().total_first_poll_delay, one_sec);
     /// # }
     /// ```
     ///
@@ -620,18 +620,18 @@ pub struct TaskMetrics {
     ///     task.await;
     ///
     ///     // the time-to-first-poll of `task` saturates at `max_duration`
-    ///     assert_eq!(monitor.cumulative().total_time_to_first_poll, max_duration);
+    ///     assert_eq!(monitor.cumulative().total_first_poll_delay, max_duration);
     ///
     ///     // ...but note that the metric *will* wrap around if more tasks are involved
     ///     let task = monitor.instrument(async {});
     ///     let _ = tokio::time::advance(Duration::from_nanos(1)).await;
     ///     task.await;
-    ///     assert_eq!(monitor.cumulative().total_time_to_first_poll, Duration::ZERO);
+    ///     assert_eq!(monitor.cumulative().total_first_poll_delay, Duration::ZERO);
     /// }
     /// ```
-    pub total_time_to_first_poll: Duration,
+    pub total_first_poll_delay: Duration,
 
-    pub total_time_idle: Duration,
+    pub total_idle_duration: Duration,
 
     /// The total amount of time tasks spent waiting to be scheduled.
     ///
@@ -672,9 +672,9 @@ pub struct TaskMetrics {
     ///     }
     ///
     ///     // `endless_task` will have spent approximately one second waiting
-    ///     let total_time_scheduled = next_interval().total_time_scheduled;
-    ///     assert!(total_time_scheduled >= Duration::from_millis(1000));
-    ///     assert!(total_time_scheduled <= Duration::from_millis(1100));
+    ///     let total_scheduled_duration = next_interval().total_scheduled_duration;
+    ///     assert!(total_scheduled_duration >= Duration::from_millis(1000));
+    ///     assert!(total_scheduled_duration <= Duration::from_millis(1100));
     ///
     ///     // construct and instrument and spawn a task that yields endlessly
     ///     let endless_task = metrics_monitor.instrument(async {
@@ -694,14 +694,14 @@ pub struct TaskMetrics {
     ///     }
     ///
     ///     // `endless_task` will have spent approximately half a second waiting
-    ///     let total_time_scheduled = next_interval().total_time_scheduled;
-    ///     assert!(total_time_scheduled >= Duration::from_millis(500));
-    ///     assert!(total_time_scheduled <= Duration::from_millis(600));
+    ///     let total_scheduled_duration = next_interval().total_scheduled_duration;
+    ///     assert!(total_scheduled_duration >= Duration::from_millis(500));
+    ///     assert!(total_scheduled_duration <= Duration::from_millis(600));
     ///
     ///     Ok(())
     /// }
     /// ```
-    pub total_time_scheduled: Duration,
+    pub total_scheduled_duration: Duration,
 
     /// The total amount of time that fast polls took to complete.
     ///
@@ -728,7 +728,7 @@ pub struct TaskMetrics {
     ///
     ///     // no tasks have been constructed, instrumented, or polled
     ///     let interval = next_interval();
-    ///     assert_eq!(interval.total_time_fast_poll, Duration::ZERO);
+    ///     assert_eq!(interval.total_fast_poll_duration, Duration::ZERO);
     ///
     ///     let fast = Duration::from_micros(1);
     ///
@@ -740,8 +740,8 @@ pub struct TaskMetrics {
     ///     })).await;
     ///
     ///     let interval = next_interval();
-    ///     assert!(interval.total_time_fast_poll >= fast * 3);
-    ///     assert!(interval.total_time_fast_poll <= task_a_time);
+    ///     assert!(interval.total_fast_poll_duration >= fast * 3);
+    ///     assert!(interval.total_fast_poll_duration <= task_a_time);
     ///
     ///     // this task completes in two fast polls
     ///     let task_b_time = time(metrics_monitor.instrument(async {
@@ -750,8 +750,8 @@ pub struct TaskMetrics {
     ///     })).await;
     ///
     ///     let interval = next_interval();
-    ///     assert!(interval.total_time_fast_poll >= fast * 2);
-    ///     assert!(interval.total_time_fast_poll <= task_b_time);
+    ///     assert!(interval.total_fast_poll_duration >= fast * 2);
+    ///     assert!(interval.total_fast_poll_duration <= task_b_time);
     ///
     ///     Ok(())
     /// }
@@ -770,7 +770,7 @@ pub struct TaskMetrics {
     ///     tokio::task::yield_now()
     /// }
     /// ```
-    pub total_time_fast_poll: Duration,
+    pub total_fast_poll_duration: Duration,
 
     /// The total amount of time that slow polls took to complete.
     ///
@@ -778,7 +778,7 @@ pub struct TaskMetrics {
     ///
     /// ### See also
     /// - [`TaskMetrics::mean_slow_polls`]
-    ///   derived from [`TaskMetrics::total_time_slow_poll`] ÷ [`TaskMetrics::num_slow_polls`]
+    ///   derived from [`TaskMetrics::total_slow_poll_duration`] ÷ [`TaskMetrics::total_slow_poll_count`]
     ///
     /// ### Example
     /// In the below example, no tasks are polled in the first sampling period; three slow polls consume
@@ -797,7 +797,7 @@ pub struct TaskMetrics {
     ///
     ///     // no tasks have been constructed, instrumented, or polled
     ///     let interval = next_interval();
-    ///     assert_eq!(interval.total_time_slow_poll, Duration::ZERO);
+    ///     assert_eq!(interval.total_slow_poll_duration, Duration::ZERO);
     ///
     ///     let slow = 10 * metrics_monitor.slow_poll_threshold();
     ///
@@ -809,8 +809,8 @@ pub struct TaskMetrics {
     ///     })).await;
     ///
     ///     let interval = next_interval();
-    ///     assert!(interval.total_time_slow_poll >= slow * 3);
-    ///     assert!(interval.total_time_slow_poll <= task_a_time);
+    ///     assert!(interval.total_slow_poll_duration >= slow * 3);
+    ///     assert!(interval.total_slow_poll_duration <= task_a_time);
     ///
     ///     // this task completes in two slow polls
     ///     let task_b_time = time(metrics_monitor.instrument(async {
@@ -819,8 +819,8 @@ pub struct TaskMetrics {
     ///     })).await;
     ///
     ///     let interval = next_interval();
-    ///     assert!(interval.total_time_slow_poll >= slow * 2);
-    ///     assert!(interval.total_time_slow_poll <= task_b_time);
+    ///     assert!(interval.total_slow_poll_duration >= slow * 2);
+    ///     assert!(interval.total_slow_poll_duration <= task_b_time);
     ///
     ///     Ok(())
     /// }
@@ -839,7 +839,7 @@ pub struct TaskMetrics {
     ///     tokio::task::yield_now()
     /// }
     /// ```
-    pub total_time_slow_poll: Duration,
+    pub total_slow_poll_duration: Duration,
 }
 
 /// Tracks the metrics, shared across the various types.
@@ -848,34 +848,34 @@ struct RawMetrics {
     slow_poll_threshold: Duration,
 
     /// Total number of instrumented tasks
-    tasks_count: AtomicU64,
+    total_first_polls: AtomicU64,
 
     /// Total number of times tasks entered the `idle` state.
-    idle_count: AtomicU64,
+    total_idled_count: AtomicU64,
 
     /// Total number of times tasks were scheduled.
-    schedule_count: AtomicU64,
+    total_scheduled_count: AtomicU64,
 
     /// Total number of times tasks were polled fast
-    fast_polls_count: AtomicU64,
+    total_fast_poll_count: AtomicU64,
 
     /// Total number of times tasks were polled slow
     slow_polls_count: AtomicU64,
 
     /// Total amount of time until the first poll
-    time_to_first_poll_ns_total: AtomicU64,
+    total_first_poll_delay_ns: AtomicU64,
 
     /// Total amount of time tasks spent in the `idle` state.
-    idle_ns_total: AtomicU64,
+    total_idle_duration_ns: AtomicU64,
 
     /// Total amount of time tasks spent in the waking state.
-    scheduled_ns_total: AtomicU64,
+    total_scheduled_duration_ns: AtomicU64,
 
     /// Total amount of time tasks spent being polled below the slow cut off.
-    fast_poll_ns_total: AtomicU64,
+    total_fast_poll_duration_ns: AtomicU64,
 
     /// Total amount of time tasks spent being polled above the slow cut off.
-    slow_poll_ns_total: AtomicU64,
+    total_slow_poll_duration: AtomicU64,
 }
 
 struct State {
@@ -940,9 +940,9 @@ impl TaskMonitor {
     ///     hi_monitor.instrument(make_task()).await;
     ///
     ///     // the low-threshold monitor reported 4 slow polls:
-    ///     assert_eq!(lo_monitor.cumulative().num_slow_polls, 4);
+    ///     assert_eq!(lo_monitor.cumulative().total_slow_poll_count, 4);
     ///     // the high-threshold monitor reported only 2 slow polls:
-    ///     assert_eq!(hi_monitor.cumulative().num_slow_polls, 2);
+    ///     assert_eq!(hi_monitor.cumulative().total_slow_poll_count, 2);
     ///
     ///     Ok(())
     /// }
@@ -958,16 +958,16 @@ impl TaskMonitor {
         TaskMonitor {
             metrics: Arc::new(RawMetrics {
                 slow_poll_threshold: slow_poll_cut_off,
-                tasks_count: AtomicU64::new(0),
-                idle_count: AtomicU64::new(0),
-                schedule_count: AtomicU64::new(0),
-                fast_polls_count: AtomicU64::new(0),
+                total_first_polls: AtomicU64::new(0),
+                total_idled_count: AtomicU64::new(0),
+                total_scheduled_count: AtomicU64::new(0),
+                total_fast_poll_count: AtomicU64::new(0),
                 slow_polls_count: AtomicU64::new(0),
-                time_to_first_poll_ns_total: AtomicU64::new(0),
-                scheduled_ns_total: AtomicU64::new(0),
-                idle_ns_total: AtomicU64::new(0),
-                fast_poll_ns_total: AtomicU64::new(0),
-                slow_poll_ns_total: AtomicU64::new(0),
+                total_first_poll_delay_ns: AtomicU64::new(0),
+                total_scheduled_duration_ns: AtomicU64::new(0),
+                total_idle_duration_ns: AtomicU64::new(0),
+                total_fast_poll_duration_ns: AtomicU64::new(0),
+                total_slow_poll_duration: AtomicU64::new(0),
             }),
         }
     }
@@ -1003,19 +1003,19 @@ impl TaskMonitor {
     ///     let metrics_monitor = tokio_metrics::TaskMonitor::new();
     ///
     ///     // 0 tasks have been instrumented, much less polled
-    ///     assert_eq!(metrics_monitor.cumulative().num_tasks, 0);
+    ///     assert_eq!(metrics_monitor.cumulative().total_first_polls, 0);
     ///
     ///     // instrument a task and poll it to completion
     ///     metrics_monitor.instrument(async {}).await;
     ///
     ///     // 1 task has been instrumented and polled
-    ///     assert_eq!(metrics_monitor.cumulative().num_tasks, 1);
+    ///     assert_eq!(metrics_monitor.cumulative().total_first_polls, 1);
     ///
     ///     // instrument a task and poll it to completion
     ///     metrics_monitor.instrument(async {}).await;
     ///
     ///     // 2 tasks have been instrumented and polled
-    ///     assert_eq!(metrics_monitor.cumulative().num_tasks, 2);
+    ///     assert_eq!(metrics_monitor.cumulative().total_first_polls, 2);
     ///
     ///     Ok(())
     /// }
@@ -1028,15 +1028,15 @@ impl TaskMonitor {
     ///     let monitor_b = tokio_metrics::TaskMonitor::new();
     ///
     ///     // 0 tasks have been instrumented, much less polled
-    ///     assert_eq!(monitor_a.cumulative().num_tasks, 0);
-    ///     assert_eq!(monitor_b.cumulative().num_tasks, 0);
+    ///     assert_eq!(monitor_a.cumulative().total_first_polls, 0);
+    ///     assert_eq!(monitor_b.cumulative().total_first_polls, 0);
     ///
     ///     // instrument a task and poll it to completion
     ///     monitor_a.instrument(monitor_b.instrument(async {})).await;
     ///
     ///     // 1 task has been instrumented and polled
-    ///     assert_eq!(monitor_a.cumulative().num_tasks, 1);
-    ///     assert_eq!(monitor_b.cumulative().num_tasks, 1);
+    ///     assert_eq!(monitor_a.cumulative().total_first_polls, 1);
+    ///     assert_eq!(monitor_b.cumulative().total_first_polls, 1);
     ///
     ///     Ok(())
     /// }
@@ -1049,13 +1049,13 @@ impl TaskMonitor {
     ///     let monitor = tokio_metrics::TaskMonitor::new();
     ///
     ///     // 0 tasks have been instrumented, much less polled
-    ///     assert_eq!(monitor.cumulative().num_tasks, 0);
+    ///     assert_eq!(monitor.cumulative().total_first_polls, 0);
     ///
     ///     // instrument a task and poll it to completion
     ///     monitor.instrument(monitor.instrument(async {})).await;
     ///
     ///     // 2 tasks have been instrumented and polled, supposedly
-    ///     assert_eq!(monitor.cumulative().num_tasks, 2);
+    ///     assert_eq!(monitor.cumulative().total_first_polls, 2);
     ///
     ///     Ok(())
     /// }
@@ -1108,8 +1108,8 @@ impl TaskMonitor {
     ///     }).await;
     ///
     ///     // in the previous sampling period, there were 3 slow polls
-    ///     assert_eq!(next_sample().num_slow_polls, 3);
-    ///     assert_eq!(metrics_monitor.cumulative().num_slow_polls, 3);
+    ///     assert_eq!(next_sample().total_slow_poll_count, 3);
+    ///     assert_eq!(metrics_monitor.cumulative().total_slow_poll_count, 3);
     ///
     ///     // this task completes in two slow polls
     ///     let _ = metrics_monitor.instrument(async {
@@ -1118,10 +1118,10 @@ impl TaskMonitor {
     ///     }).await;
     ///
     ///     // in the previous sampling period, there were 3 slow polls
-    ///     assert_eq!(next_sample().num_slow_polls, 2);
+    ///     assert_eq!(next_sample().total_slow_poll_count, 2);
     ///
     ///     // across all sampling periods, there were a total of 5 slow polls
-    ///     assert_eq!(metrics_monitor.cumulative().num_slow_polls, 5);
+    ///     assert_eq!(metrics_monitor.cumulative().total_slow_poll_count, 5);
     ///
     ///     Ok(())
     /// }
@@ -1170,7 +1170,7 @@ impl TaskMonitor {
     ///     }).await;
     ///
     ///     // in the previous sampling period, there were 3 slow polls
-    ///     assert_eq!(next_sample().num_slow_polls, 3);
+    ///     assert_eq!(next_sample().total_slow_poll_count, 3);
     ///
     ///     // this task completes in two slow polls
     ///     let _ = metrics_monitor.instrument(async {
@@ -1179,10 +1179,10 @@ impl TaskMonitor {
     ///     }).await;
     ///
     ///     // in the previous sampling period, there were 3 slow polls
-    ///     assert_eq!(next_sample().num_slow_polls, 2);
+    ///     assert_eq!(next_sample().total_slow_poll_count, 2);
     ///
     ///     // across all sampling periods, there were a total of 5 slow polls
-    ///     assert_eq!(metrics_monitor.cumulative().num_slow_polls, 5);
+    ///     assert_eq!(metrics_monitor.cumulative().total_slow_poll_count, 5);
     ///
     ///     Ok(())
     /// }
@@ -1217,21 +1217,21 @@ impl TaskMonitor {
 impl RawMetrics {
     fn metrics(&self) -> TaskMetrics {
         TaskMetrics {
-            num_tasks: self.tasks_count.load(SeqCst),
-            num_idles: self.idle_count.load(SeqCst),
-            num_scheduled: self.schedule_count.load(SeqCst),
-            num_fast_polls: self.fast_polls_count.load(SeqCst),
-            num_slow_polls: self.slow_polls_count.load(SeqCst),
-            total_time_to_first_poll:
-                Duration::from_nanos(self.time_to_first_poll_ns_total.load(SeqCst)),
-            total_time_idle: 
-                Duration::from_nanos(self.idle_ns_total.load(SeqCst)),
-            total_time_scheduled: 
-                Duration::from_nanos(self.scheduled_ns_total.load(SeqCst)),
-            total_time_fast_poll:
-                Duration::from_nanos(self.fast_poll_ns_total.load(SeqCst)),
-            total_time_slow_poll:
-                Duration::from_nanos(self.slow_poll_ns_total.load(SeqCst)),
+            total_first_polls: self.total_first_polls.load(SeqCst),
+            total_idled_count: self.total_idled_count.load(SeqCst),
+            total_scheduled_count: self.total_scheduled_count.load(SeqCst),
+            total_fast_poll_count: self.total_fast_poll_count.load(SeqCst),
+            total_slow_poll_count: self.slow_polls_count.load(SeqCst),
+            total_first_poll_delay:
+                Duration::from_nanos(self.total_first_poll_delay_ns.load(SeqCst)),
+            total_idle_duration: 
+                Duration::from_nanos(self.total_idle_duration_ns.load(SeqCst)),
+            total_scheduled_duration: 
+                Duration::from_nanos(self.total_scheduled_duration_ns.load(SeqCst)),
+            total_fast_poll_duration:
+                Duration::from_nanos(self.total_fast_poll_duration_ns.load(SeqCst)),
+            total_slow_poll_duration:
+                Duration::from_nanos(self.total_slow_poll_duration.load(SeqCst)),
         }
     }
 }
@@ -1241,26 +1241,26 @@ impl std::ops::Sub for TaskMetrics {
 
     fn sub(self, prev: TaskMetrics) -> TaskMetrics {
         TaskMetrics {
-            num_tasks: self.num_tasks.wrapping_sub(prev.num_tasks),
-            num_idles: self.num_idles.wrapping_sub(prev.num_idles),
-            num_scheduled: self.num_scheduled.wrapping_sub(prev.num_scheduled),
-            num_fast_polls: self.num_fast_polls.wrapping_sub(prev.num_fast_polls),
-            num_slow_polls: self.num_slow_polls.wrapping_sub(prev.num_slow_polls),
-            total_time_to_first_poll: 
-                sub(self.total_time_to_first_poll,
-                    prev.total_time_to_first_poll),
-            total_time_idle:
-                sub(self.total_time_idle,
-                    prev.total_time_idle),
-            total_time_scheduled: 
-                sub(self.total_time_scheduled,
-                    prev.total_time_scheduled),
-            total_time_fast_poll:
-                sub(self.total_time_fast_poll,
-                    prev.total_time_fast_poll),
-            total_time_slow_poll:
-                sub(self.total_time_slow_poll,
-                    prev.total_time_slow_poll),
+            total_first_polls: self.total_first_polls.wrapping_sub(prev.total_first_polls),
+            total_idled_count: self.total_idled_count.wrapping_sub(prev.total_idled_count),
+            total_scheduled_count: self.total_scheduled_count.wrapping_sub(prev.total_scheduled_count),
+            total_fast_poll_count: self.total_fast_poll_count.wrapping_sub(prev.total_fast_poll_count),
+            total_slow_poll_count: self.total_slow_poll_count.wrapping_sub(prev.total_slow_poll_count),
+            total_first_poll_delay: 
+                sub(self.total_first_poll_delay,
+                    prev.total_first_poll_delay),
+            total_idle_duration:
+                sub(self.total_idle_duration,
+                    prev.total_idle_duration),
+            total_scheduled_duration: 
+                sub(self.total_scheduled_duration,
+                    prev.total_scheduled_duration),
+            total_fast_poll_duration:
+                sub(self.total_fast_poll_duration,
+                    prev.total_fast_poll_duration),
+            total_slow_poll_duration:
+                sub(self.total_slow_poll_duration,
+                    prev.total_slow_poll_duration),
         }
     }
 }
@@ -1269,7 +1269,7 @@ impl TaskMetrics {
     /// The total number of polls.
     ///
     /// ##### Definition
-    /// This metric is derived from [`TaskMetrics::num_fast_polls`] + [`TaskMetrics::num_slow_polls`].
+    /// This metric is derived from [`TaskMetrics::total_fast_poll_count`] + [`TaskMetrics::total_slow_poll_count`].
     ///
     /// ##### Example
     /// In the below example, a task with multiple yield points is await'ed to completion; the
@@ -1280,7 +1280,7 @@ impl TaskMetrics {
     ///     let metrics_monitor = tokio_metrics::TaskMonitor::new();
     ///
     ///     // [A] no tasks have been created, instrumented, and polled more than once
-    ///     assert_eq!(metrics_monitor.cumulative().num_tasks, 0);
+    ///     assert_eq!(metrics_monitor.cumulative().total_first_polls, 0);
     ///
     ///     // [B] a `task` is created and instrumented
     ///     let task = {
@@ -1329,13 +1329,13 @@ impl TaskMetrics {
     /// }
     /// ```
     pub fn num_polls(&self) -> u64 {
-        self.num_fast_polls + self.num_slow_polls
+        self.total_fast_poll_count + self.total_slow_poll_count
     }
 
     /// The mean time elapsed between the instrumentation of tasks and the time they are first polled.
     ///
     /// ##### Definition
-    /// This metric is derived from [`TaskMetrics::total_time_to_first_poll`] ÷ [`TaskMetrics::num_tasks`].
+    /// This metric is derived from [`TaskMetrics::total_first_poll_delay`] ÷ [`TaskMetrics::total_first_polls`].
     ///
     /// ### Interpretation
     /// A high `mean_time_to_first_poll` has two potential culprits:
@@ -1400,17 +1400,17 @@ impl TaskMetrics {
     /// }
     /// ```
     pub fn mean_time_to_first_poll(&self) -> Duration {
-        if self.num_tasks == 0 {
+        if self.total_first_polls == 0 {
             Duration::ZERO
         } else {
-            self.total_time_to_first_poll / self.num_tasks as _
+            self.total_first_poll_delay / self.total_first_polls as _
         }
     }
 
     /// The mean duration that monitored tasks spent in the idle state.
     /// 
     /// ##### Definition
-    /// This metric is derived from [`TaskMetrics::total_time_idle`] ÷ [`TaskMetrics::num_idles`].
+    /// This metric is derived from [`TaskMetrics::total_idle_duration`] ÷ [`TaskMetrics::total_idled_count`].
     /// 
     /// ##### Example
     /// ```
@@ -1427,13 +1427,13 @@ impl TaskMetrics {
     /// }
     /// ```
     pub fn mean_time_idle(&self) -> Duration {
-        mean(self.total_time_idle, self.num_tasks)
+        mean(self.total_idle_duration, self.total_first_polls)
     }
 
     /// The mean amount of time that monitored tasks spent waiting to be run.
     ///
     /// ##### Definition
-    /// This metric is derived from [`TaskMetrics::total_time_scheduled`] ÷ [`TaskMetrics::num_scheduled`].
+    /// This metric is derived from [`TaskMetrics::total_scheduled_duration`] ÷ [`TaskMetrics::total_scheduled_count`].
     ///
     /// ##### Interpretation
     /// A high `mean_time_scheduled` has one culprit: monitored tasks tended to spend a long time in the runtime's task
@@ -1480,7 +1480,7 @@ impl TaskMetrics {
     ///     assert!(interval.mean_time_scheduled() >= Duration::from_secs(1));
     ///     // ...but *not* 2s waiting:
     ///     assert!(interval.mean_time_scheduled() <= Duration::from_secs(2));
-    ///     // i.e., time_to_first_poll is not factored into total_time_scheduled:
+    ///     // i.e., time_to_first_poll is not factored into total_scheduled_duration:
     ///     assert!(interval.mean_time_to_first_poll() >= Duration::from_secs(2));
     ///
     ///     // construct and instrument and spawn a task that yields endlessly
@@ -1507,12 +1507,12 @@ impl TaskMetrics {
     /// }
     /// ```
     pub fn mean_time_scheduled(&self) -> Duration {
-        mean(self.total_time_scheduled, self.num_scheduled)
+        mean(self.total_scheduled_duration, self.total_scheduled_count)
     }
 
     /// The ratio between the number polls categorized as fast and slow.
     ///
-    /// This metric is derived from [`TaskMetrics::num_fast_polls`] ÷ [`TaskMetrics::num_polls`].
+    /// This metric is derived from [`TaskMetrics::total_fast_poll_count`] ÷ [`TaskMetrics::num_polls`].
     ///
     /// ##### Example
     /// Changes in this metric may be observed by varying the ratio of fast and slow polls within sampling periods;
@@ -1529,8 +1529,8 @@ impl TaskMetrics {
     ///
     ///     // no tasks have been constructed, instrumented, or polled
     ///     let interval = next_interval();
-    ///     assert_eq!(interval.num_fast_polls, 0);
-    ///     assert_eq!(interval.num_slow_polls, 0);
+    ///     assert_eq!(interval.total_fast_poll_count, 0);
+    ///     assert_eq!(interval.total_slow_poll_count, 0);
     ///     assert!(interval.fast_poll_ratio().is_nan());
     ///
     ///     let fast = Duration::ZERO;
@@ -1550,8 +1550,8 @@ impl TaskMetrics {
     ///     }).await;
     ///
     ///     let interval = next_interval();
-    ///     assert_eq!(interval.num_fast_polls, 3);
-    ///     assert_eq!(interval.num_slow_polls, 2);
+    ///     assert_eq!(interval.total_fast_poll_count, 3);
+    ///     assert_eq!(interval.total_slow_poll_count, 2);
     ///     assert_eq!(interval.fast_poll_ratio(), ratio(3., 2.));
     ///
     ///     // this task completes in three slow polls
@@ -1568,8 +1568,8 @@ impl TaskMetrics {
     ///     }).await;
     ///
     ///     let interval = next_interval();
-    ///     assert_eq!(interval.num_fast_polls, 2);
-    ///     assert_eq!(interval.num_slow_polls, 3);
+    ///     assert_eq!(interval.total_fast_poll_count, 2);
+    ///     assert_eq!(interval.total_slow_poll_count, 3);
     ///     assert_eq!(interval.fast_poll_ratio(), ratio(2., 3.));
     ///
     ///     Ok(())
@@ -1587,13 +1587,13 @@ impl TaskMetrics {
     /// }
     /// ```
     pub fn fast_poll_ratio(&self) -> f64 {
-        self.num_fast_polls as f64 / (self.num_fast_polls + self.num_slow_polls) as f64
+        self.total_fast_poll_count as f64 / (self.total_fast_poll_count + self.total_slow_poll_count) as f64
     }
 
     /// The mean time consumed by fast polls of monitored tasks.
     ///
     /// ##### Definition
-    /// This metric is derived from [`TaskMetrics::num_fast_polls`] ÷ [`TaskMetrics::num_polls`].
+    /// This metric is derived from [`TaskMetrics::total_fast_poll_count`] ÷ [`TaskMetrics::num_polls`].
     ///
     /// ##### Example
     /// In the below example, no tasks are polled in the first sampling period; three fast polls consume
@@ -1659,12 +1659,12 @@ impl TaskMetrics {
     /// }
     /// ```
     pub fn mean_fast_polls(&self) -> Duration {
-        mean(self.total_time_fast_poll, self.num_fast_polls)
+        mean(self.total_fast_poll_duration, self.total_fast_poll_count)
     }
 
     /// The mean time consumed by slow polls of monitored tasks.
     ///
-    /// This metric is derived from [`TaskMetrics::total_time_slow_poll`] ÷ [`TaskMetrics::num_slow_polls`].
+    /// This metric is derived from [`TaskMetrics::total_slow_poll_duration`] ÷ [`TaskMetrics::total_slow_poll_count`].
     ///
     /// ##### Example
     /// In the below example, no tasks are polled in the first sampling period; three slow polls consume
@@ -1730,7 +1730,7 @@ impl TaskMetrics {
     /// }
     /// ```
     pub fn mean_slow_polls(&self) -> Duration {
-        mean(self.total_time_slow_poll, self.num_slow_polls)
+        mean(self.total_slow_poll_duration, self.total_slow_poll_count)
     }
 }
 
@@ -1761,11 +1761,11 @@ impl<T: Future> Future for Instrumented<T> {
                 .unwrap_or(u64::MAX);
             // add this duration to `time_to_first_poll_ns_total`
             metrics
-                .time_to_first_poll_ns_total
+                .total_first_poll_delay_ns
                 .fetch_add(elapsed, SeqCst);
 
             /* 3. increment the count of tasks that have been polled at least once */
-            state.metrics.tasks_count.fetch_add(1, SeqCst);
+            state.metrics.total_first_polls.fetch_add(1, SeqCst);
         }
 
         /* accounting for time-idled and time-scheduled */
@@ -1776,20 +1776,20 @@ impl<T: Future> Future for Instrumented<T> {
         // it completes a `poll`, and the instant it is next awoken.
         if *idled_at < woke_at {
             // increment the counter of how many idles occured
-            metrics.idle_count.fetch_add(1, SeqCst);
+            metrics.total_idled_count.fetch_add(1, SeqCst);
 
             // compute the duration of the idle
             let idle_ns = woke_at - *idled_at;
 
             // adjust the total elasped time monitored tasks spent idling
-            metrics.idle_ns_total.fetch_add(idle_ns, SeqCst);
+            metrics.total_idle_duration_ns.fetch_add(idle_ns, SeqCst);
         }
 
         // if this task spent any time in the scheduled state after instrumentation,
         // and after first poll, `woke_at` will be greater than 0.
         if woke_at > 0 {
             // increment the counter of how many schedules occured
-            metrics.schedule_count.fetch_add(1, SeqCst);
+            metrics.total_scheduled_count.fetch_add(1, SeqCst);
 
             // recall that the `woke_at` field is internally represented as
             // nanoseconds-since-instrumentation. here, for accounting purposes,
@@ -1804,7 +1804,7 @@ impl<T: Future> Future for Instrumented<T> {
                 .unwrap_or(u64::MAX);
 
             // add `scheduled_ns` to the Monitor's total
-            metrics.scheduled_ns_total.fetch_add(scheduled_ns, SeqCst);
+            metrics.total_scheduled_duration_ns.fetch_add(scheduled_ns, SeqCst);
         }
 
         // Register the waker
@@ -1831,9 +1831,9 @@ impl<T: Future> Future for Instrumented<T> {
 
         let (count_bucket, duration_bucket) = // was this a slow or fast poll?
             if inner_poll_duration >= metrics.slow_poll_threshold {
-                (&metrics.slow_polls_count, &metrics.slow_poll_ns_total)
+                (&metrics.slow_polls_count, &metrics.total_slow_poll_duration)
             } else {
-                (&metrics.fast_polls_count, &metrics.fast_poll_ns_total)
+                (&metrics.total_fast_poll_count, &metrics.total_fast_poll_duration_ns)
             };
 
         // update the appropriate bucket
