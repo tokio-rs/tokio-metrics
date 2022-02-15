@@ -141,17 +141,17 @@ use tokio::time::{Duration, Instant};
 /// #     let mut next_interval = || interval.next().unwrap();
 /// #
 /// // construct and instrument u16::MAX tasks, but do not `await` them
-/// let total_first_polls = u16::MAX as u64;
-/// let mut tasks = Vec::with_capacity(total_first_polls as usize);
-/// for _ in 0..total_first_polls { tasks.push(monitor.instrument(async {})); }
+/// let total_first_poll_count = u16::MAX as u64;
+/// let mut tasks = Vec::with_capacity(total_first_poll_count as usize);
+/// for _ in 0..total_first_poll_count { tasks.push(monitor.instrument(async {})); }
 ///
 /// // this is the maximum duration representable by tokio_metrics
 /// let max_duration = u64::MAX;
 ///
 /// // let's advance the clock justenough such that all of the time-to-first-poll
 /// // delays summed nearly equals `max_duration_nanos`, less some remainder...
-/// let iffy_delay = max_duration / (total_first_polls as u64);
-/// let small_remainder = max_duration % total_first_polls;
+/// let iffy_delay = max_duration / (total_first_poll_count as u64);
+/// let small_remainder = max_duration % total_first_poll_count;
 /// let _ = tokio::time::advance(Duration::from_nanos(iffy_delay)).await;
 ///
 /// // ...then poll all of the instrumented tasks:
@@ -174,11 +174,11 @@ use tokio::time::{Duration, Instant};
 /// #     let mut interval = monitor.intervals();
 /// #     let mut next_interval = || interval.next().unwrap();
 ///
-///  let total_first_polls = u16::MAX as u64;
-///  let batch_size = total_first_polls / 3;
+///  let total_first_poll_count = u16::MAX as u64;
+///  let batch_size = total_first_poll_count / 3;
 ///
 ///  let max_duration_ns = u64::MAX;
-///  let iffy_delay_ns = max_duration_ns / total_first_polls;
+///  let iffy_delay_ns = max_duration_ns / total_first_poll_count;
 ///
 ///  // Instrument `batch_size` number of tasks, wait for `delay` nanoseconds,
 ///  // then await the instrumented tasks.
@@ -241,7 +241,7 @@ pin_project! {
 ///
 /// ### Index of metrics
 /// #### Base metrics
-/// - [`TaskMetrics::total_first_polls`]:
+/// - [`TaskMetrics::total_first_poll_count`]:
 ///     number of new tasks instrumented and polled at least once
 /// - [`TaskMetrics::total_scheduled_count`]:
 ///     number of times instrumented tasks were scheduled for execution
@@ -296,208 +296,26 @@ pub struct TaskMetrics {
     ///     let mut next_interval = || interval.next().unwrap();
     ///
     ///     // no tasks have been constructed, instrumented, and polled at least once
-    ///     assert_eq!(next_interval().total_first_polls, 0);
+    ///     assert_eq!(next_interval().total_first_poll_count, 0);
     ///
     ///     let task = metrics_monitor.instrument(async {});
     ///
     ///     // `task` has been constructed and instrumented, but has not yet been polled
-    ///     assert_eq!(next_interval().total_first_polls, 0);
+    ///     assert_eq!(next_interval().total_first_poll_count, 0);
     ///
     ///     // poll `task` to completion
     ///     task.await;
     ///
     ///     // `task` has been constructed, instrumented, and polled at least once
-    ///     assert_eq!(next_interval().total_first_polls, 1);
+    ///     assert_eq!(next_interval().total_first_poll_count, 1);
     ///
     ///     // since the last interval was produced, 0 tasks have been constructed, instrumented and polled
-    ///     assert_eq!(next_interval().total_first_polls, 0);
+    ///     assert_eq!(next_interval().total_first_poll_count, 0);
     ///
     ///     Ok(())
     /// }
     /// ```
-    pub total_first_polls: u64,
-
-    pub total_idled_count: u64,
-
-    /// The number of times instrumented tasks were scheduled for execution.
-    ///
-    /// ### Derived metrics
-    /// - [`TaskMetrics::mean_time_scheduled`]:
-    ///   the mean amount of time that monitored tasks spent waiting to be run.
-    ///
-    /// ### Example
-    /// In the below example, a task yields to the scheduler a varying number of times between sample periods;
-    /// the number of times the task yields matches [`TaskMetrics::total_scheduled_count`]:
-    /// ```
-    /// #[tokio::main]
-    /// async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    ///     let metrics_monitor = tokio_metrics::TaskMonitor::new();
-    ///
-    ///     // [A] no tasks have been created, instrumented, and polled more than once
-    ///     assert_eq!(metrics_monitor.cumulative().total_scheduled_count, 0);
-    ///
-    ///     // [B] a `task` is created and instrumented
-    ///     let task = {
-    ///         let monitor = metrics_monitor.clone();
-    ///         metrics_monitor.instrument(async move {
-    ///             let mut interval = monitor.intervals();
-    ///             let mut next_interval = move || interval.next().unwrap();
-    ///
-    ///             // [E] `task` has not yet yielded to the scheduler, and
-    ///             // thus has not yet been scheduled since its first `poll`
-    ///             assert_eq!(next_interval().total_scheduled_count, 0);
-    ///
-    ///             tokio::task::yield_now().await; // yield to the scheduler
-    ///
-    ///             // [F] `task` has yielded to the scheduler once (and thus been
-    ///             // scheduled once) since the last sampling period
-    ///             assert_eq!(next_interval().total_scheduled_count, 1);
-    ///
-    ///             tokio::task::yield_now().await; // yield to the scheduler
-    ///             tokio::task::yield_now().await; // yield to the scheduler
-    ///             tokio::task::yield_now().await; // yield to the scheduler
-    ///
-    ///             // [G] `task` has yielded to the scheduler thrice (and thus been
-    ///             // scheduled thrice) since the last sampling period
-    ///             assert_eq!(next_interval().total_scheduled_count, 3);
-    ///
-    ///             tokio::task::yield_now().await; // yield to the scheduler
-    ///
-    ///             next_interval
-    ///         })
-    ///     };
-    ///
-    ///     // [C] `task` has not yet been polled at all
-    ///     assert_eq!(metrics_monitor.cumulative().total_first_polls, 0);
-    ///     assert_eq!(metrics_monitor.cumulative().total_scheduled_count, 0);
-    ///
-    ///     // [D] poll `task` to completion
-    ///     let mut next_interval = task.await;
-    ///
-    ///     // [H] `task` has been polled 1 times since the last sample
-    ///     assert_eq!(next_interval().total_scheduled_count, 1);
-    ///
-    ///     // [I] `task` has been polled 0 times since the last sample
-    ///     assert_eq!(next_interval().total_scheduled_count, 0);
-    ///
-    ///     // [J] `task` has yielded to the scheduler a total of five times
-    ///     assert_eq!(metrics_monitor.cumulative().total_scheduled_count, 5);
-    ///
-    ///     Ok(())
-    /// }
-    /// ```
-    pub total_scheduled_count: u64,
-
-    /// The number of times that polling instrumented tasks completed swiftly.
-    ///
-    /// Here, 'swiftly' is defined as completing in strictly less time than [`TaskMonitor::slow_poll_threshold`].
-    ///
-    /// ### Derived metrics
-    /// - [`TaskMetrics::mean_fast_polls`]:
-    ///   the mean time consumed by fast polls of monitored tasks.
-    ///
-    /// ### Example
-    /// In the below example, 0 polls occur within the first sampling period, 3 fast polls occur within the second
-    /// sampling period, and 2 fast polls occur within the third sampling period:
-    /// ```
-    /// use std::future::Future;
-    /// use std::time::Duration;
-    ///
-    /// #[tokio::main]
-    /// async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    ///     let metrics_monitor = tokio_metrics::TaskMonitor::new();
-    ///     let mut interval = metrics_monitor.intervals();
-    ///     let mut next_interval = || interval.next().unwrap();
-    ///
-    ///     // no tasks have been constructed, instrumented, or polled
-    ///     assert_eq!(next_interval().total_fast_poll_count, 0);
-    ///
-    ///     let fast = Duration::ZERO;
-    ///
-    ///     // this task completes in three fast polls
-    ///     let _ = metrics_monitor.instrument(async {
-    ///         spin_for(fast).await; // fast poll 1
-    ///         spin_for(fast).await; // fast poll 2
-    ///         spin_for(fast)        // fast poll 3
-    ///     }).await;
-    ///
-    ///     assert_eq!(next_interval().total_fast_poll_count, 3);
-    ///
-    ///     // this task completes in two fast polls
-    ///     let _ = metrics_monitor.instrument(async {
-    ///         spin_for(fast).await; // fast poll 1
-    ///         spin_for(fast)        // fast poll 2
-    ///     }).await;
-    ///
-    ///     assert_eq!(next_interval().total_fast_poll_count, 2);
-    ///
-    ///     Ok(())
-    /// }
-    ///
-    /// /// Block the current thread for a given `duration`, then (optionally) yield to the scheduler.
-    /// fn spin_for(duration: Duration) -> impl Future<Output=()> {
-    ///     let start = tokio::time::Instant::now();
-    ///     while start.elapsed() <= duration {}
-    ///     tokio::task::yield_now()
-    /// }
-    /// ```
-    pub total_fast_poll_count: u64,
-
-    /// The number of times that polling instrumented tasks completed slowly.
-    ///
-    /// Here, 'slowly' is defined as completing in at least as much time as [`TaskMonitor::slow_poll_threshold`].
-    ///
-    /// ### Derived metrics
-    /// - [`TaskMetrics::mean_slow_polls`]:
-    ///   the mean time consumed by slow polls of monitored tasks.
-    ///
-    /// ### Example
-    /// In the below example, 0 polls occur within the first sampling period, 3 slow polls occur within the second
-    /// sampling period, and 2 slow polls occur within the third sampling period:
-    ///
-    /// ```
-    /// use std::future::Future;
-    /// use std::time::Duration;
-    ///
-    /// #[tokio::main]
-    /// async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    ///     let metrics_monitor = tokio_metrics::TaskMonitor::new();
-    ///     let mut interval = metrics_monitor.intervals();
-    ///     let mut next_interval = || interval.next().unwrap();
-    ///
-    ///     // no tasks have been constructed, instrumented, or polled
-    ///     assert_eq!(next_interval().total_slow_poll_count, 0);
-    ///
-    ///     let slow = 10 * metrics_monitor.slow_poll_threshold();
-    ///
-    ///     // this task completes in three slow polls
-    ///     let _ = metrics_monitor.instrument(async {
-    ///         spin_for(slow).await; // slow poll 1
-    ///         spin_for(slow).await; // slow poll 2
-    ///         spin_for(slow)        // slow poll 3
-    ///     }).await;
-    ///
-    ///     assert_eq!(next_interval().total_slow_poll_count, 3);
-    ///
-    ///     // this task completes in two slow polls
-    ///     let _ = metrics_monitor.instrument(async {
-    ///         spin_for(slow).await; // slow poll 1
-    ///         spin_for(slow)        // slow poll 2
-    ///     }).await;
-    ///
-    ///     assert_eq!(next_interval().total_slow_poll_count, 2);
-    ///
-    ///     Ok(())
-    /// }
-    ///
-    /// /// Block the current thread for a given `duration`, then (optionally) yield to the scheduler.
-    /// fn spin_for(duration: Duration) -> impl Future<Output=()> {
-    ///     let start = tokio::time::Instant::now();
-    ///     while start.elapsed() <= duration {}
-    ///     tokio::task::yield_now()
-    /// }
-    /// ```
-    pub total_slow_poll_count: u64,
+    pub total_first_poll_count: u64,
 
     /// The amount of time elapsed between when tasks were instrumented and when they were first polled.
     ///
@@ -631,7 +449,78 @@ pub struct TaskMetrics {
     /// ```
     pub total_first_poll_delay: Duration,
 
+    pub total_idled_count: u64,
+
     pub total_idle_duration: Duration,
+
+    /// The number of times instrumented tasks were scheduled for execution.
+    ///
+    /// ### Derived metrics
+    /// - [`TaskMetrics::mean_time_scheduled`]:
+    ///   the mean amount of time that monitored tasks spent waiting to be run.
+    ///
+    /// ### Example
+    /// In the below example, a task yields to the scheduler a varying number of times between sample periods;
+    /// the number of times the task yields matches [`TaskMetrics::total_scheduled_count`]:
+    /// ```
+    /// #[tokio::main]
+    /// async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    ///     let metrics_monitor = tokio_metrics::TaskMonitor::new();
+    ///
+    ///     // [A] no tasks have been created, instrumented, and polled more than once
+    ///     assert_eq!(metrics_monitor.cumulative().total_scheduled_count, 0);
+    ///
+    ///     // [B] a `task` is created and instrumented
+    ///     let task = {
+    ///         let monitor = metrics_monitor.clone();
+    ///         metrics_monitor.instrument(async move {
+    ///             let mut interval = monitor.intervals();
+    ///             let mut next_interval = move || interval.next().unwrap();
+    ///
+    ///             // [E] `task` has not yet yielded to the scheduler, and
+    ///             // thus has not yet been scheduled since its first `poll`
+    ///             assert_eq!(next_interval().total_scheduled_count, 0);
+    ///
+    ///             tokio::task::yield_now().await; // yield to the scheduler
+    ///
+    ///             // [F] `task` has yielded to the scheduler once (and thus been
+    ///             // scheduled once) since the last sampling period
+    ///             assert_eq!(next_interval().total_scheduled_count, 1);
+    ///
+    ///             tokio::task::yield_now().await; // yield to the scheduler
+    ///             tokio::task::yield_now().await; // yield to the scheduler
+    ///             tokio::task::yield_now().await; // yield to the scheduler
+    ///
+    ///             // [G] `task` has yielded to the scheduler thrice (and thus been
+    ///             // scheduled thrice) since the last sampling period
+    ///             assert_eq!(next_interval().total_scheduled_count, 3);
+    ///
+    ///             tokio::task::yield_now().await; // yield to the scheduler
+    ///
+    ///             next_interval
+    ///         })
+    ///     };
+    ///
+    ///     // [C] `task` has not yet been polled at all
+    ///     assert_eq!(metrics_monitor.cumulative().total_first_poll_count, 0);
+    ///     assert_eq!(metrics_monitor.cumulative().total_scheduled_count, 0);
+    ///
+    ///     // [D] poll `task` to completion
+    ///     let mut next_interval = task.await;
+    ///
+    ///     // [H] `task` has been polled 1 times since the last sample
+    ///     assert_eq!(next_interval().total_scheduled_count, 1);
+    ///
+    ///     // [I] `task` has been polled 0 times since the last sample
+    ///     assert_eq!(next_interval().total_scheduled_count, 0);
+    ///
+    ///     // [J] `task` has yielded to the scheduler a total of five times
+    ///     assert_eq!(metrics_monitor.cumulative().total_scheduled_count, 5);
+    ///
+    ///     Ok(())
+    /// }
+    /// ```
+    pub total_scheduled_count: u64,
 
     /// The total amount of time tasks spent waiting to be scheduled.
     ///
@@ -703,6 +592,61 @@ pub struct TaskMetrics {
     /// ```
     pub total_scheduled_duration: Duration,
 
+    /// The number of times that polling instrumented tasks completed swiftly.
+    ///
+    /// Here, 'swiftly' is defined as completing in strictly less time than [`TaskMonitor::slow_poll_threshold`].
+    ///
+    /// ### Derived metrics
+    /// - [`TaskMetrics::mean_fast_polls`]:
+    ///   the mean time consumed by fast polls of monitored tasks.
+    ///
+    /// ### Example
+    /// In the below example, 0 polls occur within the first sampling period, 3 fast polls occur within the second
+    /// sampling period, and 2 fast polls occur within the third sampling period:
+    /// ```
+    /// use std::future::Future;
+    /// use std::time::Duration;
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    ///     let metrics_monitor = tokio_metrics::TaskMonitor::new();
+    ///     let mut interval = metrics_monitor.intervals();
+    ///     let mut next_interval = || interval.next().unwrap();
+    ///
+    ///     // no tasks have been constructed, instrumented, or polled
+    ///     assert_eq!(next_interval().total_fast_poll_count, 0);
+    ///
+    ///     let fast = Duration::ZERO;
+    ///
+    ///     // this task completes in three fast polls
+    ///     let _ = metrics_monitor.instrument(async {
+    ///         spin_for(fast).await; // fast poll 1
+    ///         spin_for(fast).await; // fast poll 2
+    ///         spin_for(fast)        // fast poll 3
+    ///     }).await;
+    ///
+    ///     assert_eq!(next_interval().total_fast_poll_count, 3);
+    ///
+    ///     // this task completes in two fast polls
+    ///     let _ = metrics_monitor.instrument(async {
+    ///         spin_for(fast).await; // fast poll 1
+    ///         spin_for(fast)        // fast poll 2
+    ///     }).await;
+    ///
+    ///     assert_eq!(next_interval().total_fast_poll_count, 2);
+    ///
+    ///     Ok(())
+    /// }
+    ///
+    /// /// Block the current thread for a given `duration`, then (optionally) yield to the scheduler.
+    /// fn spin_for(duration: Duration) -> impl Future<Output=()> {
+    ///     let start = tokio::time::Instant::now();
+    ///     while start.elapsed() <= duration {}
+    ///     tokio::task::yield_now()
+    /// }
+    /// ```
+    pub total_fast_poll_count: u64,
+
     /// The total amount of time that fast polls took to complete.
     ///
     /// Here, 'fast' is defined as completing in strictly less time than [`TaskMonitor::slow_poll_threshold`].
@@ -771,6 +715,62 @@ pub struct TaskMetrics {
     /// }
     /// ```
     pub total_fast_poll_duration: Duration,
+
+    /// The number of times that polling instrumented tasks completed slowly.
+    ///
+    /// Here, 'slowly' is defined as completing in at least as much time as [`TaskMonitor::slow_poll_threshold`].
+    ///
+    /// ### Derived metrics
+    /// - [`TaskMetrics::mean_slow_polls`]:
+    ///   the mean time consumed by slow polls of monitored tasks.
+    ///
+    /// ### Example
+    /// In the below example, 0 polls occur within the first sampling period, 3 slow polls occur within the second
+    /// sampling period, and 2 slow polls occur within the third sampling period:
+    ///
+    /// ```
+    /// use std::future::Future;
+    /// use std::time::Duration;
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    ///     let metrics_monitor = tokio_metrics::TaskMonitor::new();
+    ///     let mut interval = metrics_monitor.intervals();
+    ///     let mut next_interval = || interval.next().unwrap();
+    ///
+    ///     // no tasks have been constructed, instrumented, or polled
+    ///     assert_eq!(next_interval().total_slow_poll_count, 0);
+    ///
+    ///     let slow = 10 * metrics_monitor.slow_poll_threshold();
+    ///
+    ///     // this task completes in three slow polls
+    ///     let _ = metrics_monitor.instrument(async {
+    ///         spin_for(slow).await; // slow poll 1
+    ///         spin_for(slow).await; // slow poll 2
+    ///         spin_for(slow)        // slow poll 3
+    ///     }).await;
+    ///
+    ///     assert_eq!(next_interval().total_slow_poll_count, 3);
+    ///
+    ///     // this task completes in two slow polls
+    ///     let _ = metrics_monitor.instrument(async {
+    ///         spin_for(slow).await; // slow poll 1
+    ///         spin_for(slow)        // slow poll 2
+    ///     }).await;
+    ///
+    ///     assert_eq!(next_interval().total_slow_poll_count, 2);
+    ///
+    ///     Ok(())
+    /// }
+    ///
+    /// /// Block the current thread for a given `duration`, then (optionally) yield to the scheduler.
+    /// fn spin_for(duration: Duration) -> impl Future<Output=()> {
+    ///     let start = tokio::time::Instant::now();
+    ///     while start.elapsed() <= duration {}
+    ///     tokio::task::yield_now()
+    /// }
+    /// ```
+    pub total_slow_poll_count: u64,
 
     /// The total amount of time that slow polls took to complete.
     ///
@@ -848,7 +848,7 @@ struct RawMetrics {
     slow_poll_threshold: Duration,
 
     /// Total number of instrumented tasks
-    total_first_polls: AtomicU64,
+    total_first_poll_count: AtomicU64,
 
     /// Total number of times tasks entered the `idle` state.
     total_idled_count: AtomicU64,
@@ -958,7 +958,7 @@ impl TaskMonitor {
         TaskMonitor {
             metrics: Arc::new(RawMetrics {
                 slow_poll_threshold: slow_poll_cut_off,
-                total_first_polls: AtomicU64::new(0),
+                total_first_poll_count: AtomicU64::new(0),
                 total_idled_count: AtomicU64::new(0),
                 total_scheduled_count: AtomicU64::new(0),
                 total_fast_poll_count: AtomicU64::new(0),
@@ -1003,19 +1003,19 @@ impl TaskMonitor {
     ///     let metrics_monitor = tokio_metrics::TaskMonitor::new();
     ///
     ///     // 0 tasks have been instrumented, much less polled
-    ///     assert_eq!(metrics_monitor.cumulative().total_first_polls, 0);
+    ///     assert_eq!(metrics_monitor.cumulative().total_first_poll_count, 0);
     ///
     ///     // instrument a task and poll it to completion
     ///     metrics_monitor.instrument(async {}).await;
     ///
     ///     // 1 task has been instrumented and polled
-    ///     assert_eq!(metrics_monitor.cumulative().total_first_polls, 1);
+    ///     assert_eq!(metrics_monitor.cumulative().total_first_poll_count, 1);
     ///
     ///     // instrument a task and poll it to completion
     ///     metrics_monitor.instrument(async {}).await;
     ///
     ///     // 2 tasks have been instrumented and polled
-    ///     assert_eq!(metrics_monitor.cumulative().total_first_polls, 2);
+    ///     assert_eq!(metrics_monitor.cumulative().total_first_poll_count, 2);
     ///
     ///     Ok(())
     /// }
@@ -1028,15 +1028,15 @@ impl TaskMonitor {
     ///     let monitor_b = tokio_metrics::TaskMonitor::new();
     ///
     ///     // 0 tasks have been instrumented, much less polled
-    ///     assert_eq!(monitor_a.cumulative().total_first_polls, 0);
-    ///     assert_eq!(monitor_b.cumulative().total_first_polls, 0);
+    ///     assert_eq!(monitor_a.cumulative().total_first_poll_count, 0);
+    ///     assert_eq!(monitor_b.cumulative().total_first_poll_count, 0);
     ///
     ///     // instrument a task and poll it to completion
     ///     monitor_a.instrument(monitor_b.instrument(async {})).await;
     ///
     ///     // 1 task has been instrumented and polled
-    ///     assert_eq!(monitor_a.cumulative().total_first_polls, 1);
-    ///     assert_eq!(monitor_b.cumulative().total_first_polls, 1);
+    ///     assert_eq!(monitor_a.cumulative().total_first_poll_count, 1);
+    ///     assert_eq!(monitor_b.cumulative().total_first_poll_count, 1);
     ///
     ///     Ok(())
     /// }
@@ -1049,13 +1049,13 @@ impl TaskMonitor {
     ///     let monitor = tokio_metrics::TaskMonitor::new();
     ///
     ///     // 0 tasks have been instrumented, much less polled
-    ///     assert_eq!(monitor.cumulative().total_first_polls, 0);
+    ///     assert_eq!(monitor.cumulative().total_first_poll_count, 0);
     ///
     ///     // instrument a task and poll it to completion
     ///     monitor.instrument(monitor.instrument(async {})).await;
     ///
     ///     // 2 tasks have been instrumented and polled, supposedly
-    ///     assert_eq!(monitor.cumulative().total_first_polls, 2);
+    ///     assert_eq!(monitor.cumulative().total_first_poll_count, 2);
     ///
     ///     Ok(())
     /// }
@@ -1217,7 +1217,7 @@ impl TaskMonitor {
 impl RawMetrics {
     fn metrics(&self) -> TaskMetrics {
         TaskMetrics {
-            total_first_polls: self.total_first_polls.load(SeqCst),
+            total_first_poll_count: self.total_first_poll_count.load(SeqCst),
             total_idled_count: self.total_idled_count.load(SeqCst),
             total_scheduled_count: self.total_scheduled_count.load(SeqCst),
             total_fast_poll_count: self.total_fast_poll_count.load(SeqCst),
@@ -1241,7 +1241,7 @@ impl std::ops::Sub for TaskMetrics {
 
     fn sub(self, prev: TaskMetrics) -> TaskMetrics {
         TaskMetrics {
-            total_first_polls: self.total_first_polls.wrapping_sub(prev.total_first_polls),
+            total_first_poll_count: self.total_first_poll_count.wrapping_sub(prev.total_first_poll_count),
             total_idled_count: self.total_idled_count.wrapping_sub(prev.total_idled_count),
             total_scheduled_count: self.total_scheduled_count.wrapping_sub(prev.total_scheduled_count),
             total_fast_poll_count: self.total_fast_poll_count.wrapping_sub(prev.total_fast_poll_count),
@@ -1280,7 +1280,7 @@ impl TaskMetrics {
     ///     let metrics_monitor = tokio_metrics::TaskMonitor::new();
     ///
     ///     // [A] no tasks have been created, instrumented, and polled more than once
-    ///     assert_eq!(metrics_monitor.cumulative().total_first_polls, 0);
+    ///     assert_eq!(metrics_monitor.cumulative().total_first_poll_count, 0);
     ///
     ///     // [B] a `task` is created and instrumented
     ///     let task = {
@@ -1335,7 +1335,7 @@ impl TaskMetrics {
     /// The mean time elapsed between the instrumentation of tasks and the time they are first polled.
     ///
     /// ##### Definition
-    /// This metric is derived from [`TaskMetrics::total_first_poll_delay`] ÷ [`TaskMetrics::total_first_polls`].
+    /// This metric is derived from [`TaskMetrics::total_first_poll_delay`] ÷ [`TaskMetrics::total_first_poll_count`].
     ///
     /// ### Interpretation
     /// A high `mean_time_to_first_poll` has two potential culprits:
@@ -1400,10 +1400,10 @@ impl TaskMetrics {
     /// }
     /// ```
     pub fn mean_time_to_first_poll(&self) -> Duration {
-        if self.total_first_polls == 0 {
+        if self.total_first_poll_count == 0 {
             Duration::ZERO
         } else {
-            self.total_first_poll_delay / self.total_first_polls as _
+            self.total_first_poll_delay / self.total_first_poll_count as _
         }
     }
 
@@ -1427,7 +1427,7 @@ impl TaskMetrics {
     /// }
     /// ```
     pub fn mean_time_idle(&self) -> Duration {
-        mean(self.total_idle_duration, self.total_first_polls)
+        mean(self.total_idle_duration, self.total_first_poll_count)
     }
 
     /// The mean amount of time that monitored tasks spent waiting to be run.
@@ -1765,7 +1765,7 @@ impl<T: Future> Future for Instrumented<T> {
                 .fetch_add(elapsed, SeqCst);
 
             /* 3. increment the count of tasks that have been polled at least once */
-            state.metrics.total_first_polls.fetch_add(1, SeqCst);
+            state.metrics.total_first_poll_count.fetch_add(1, SeqCst);
         }
 
         /* accounting for time-idled and time-scheduled */
