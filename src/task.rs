@@ -100,8 +100,8 @@ use tokio::time::{Duration, Instant};
 ///     task.await;
 ///
 ///     // durations ≤ `max_duration` are accurately reflected in this metric
-///     assert_eq!(next_interval().total_time_to_first_poll(), max_duration);
-///     assert_eq!(monitor.cumulative().total_time_to_first_poll(), max_duration);
+///     assert_eq!(next_interval().total_time_to_first_poll, max_duration);
+///     assert_eq!(monitor.cumulative().total_time_to_first_poll, max_duration);
 /// }
 /// ```
 /// If the total delay between instrumentation and first poll exceeds [`u64::MAX`] nanoseconds,
@@ -126,7 +126,7 @@ use tokio::time::{Duration, Instant};
 ///  task_b.await;
 ///
 ///  // the `total_time_to_first_poll` has overflowed
-///  assert!(monitor.cumulative().total_time_to_first_poll() < max_duration);
+///  assert!(monitor.cumulative().total_time_to_first_poll < max_duration);
 /// # }
 /// ```
 /// If *many* tasks are spawned, it will take far less than a [`u64::MAX`]-nanosecond delay bring this metric to the
@@ -158,8 +158,8 @@ use tokio::time::{Duration, Instant};
 /// for task in tasks { task.await; }
 ///
 /// // `total_time_to_first_poll` is at the precipice of overflowing!
-/// assert_eq!(next_interval().total_time_to_first_poll_ns, max_duration - small_remainder);
-/// assert_eq!(monitor.cumulative().total_time_to_first_poll_ns, max_duration - small_remainder);
+/// assert_eq!(next_interval().total_time_to_first_poll.as_nanos(), (max_duration - small_remainder) as u128);
+/// assert_eq!(monitor.cumulative().total_time_to_first_poll.as_nanos(), (max_duration - small_remainder) as u128);
 /// # }
 /// ```
 /// Frequent, interval-sampled metrics will retain their accuracy, even if the cumulative
@@ -196,19 +196,19 @@ use tokio::time::{Duration, Instant};
 ///  // run batches 1, 2, and 3
 ///  for i in 1..=3 {
 ///      run_batch(&monitor, batch_size as usize, iffy_delay_ns).await;
-///      assert_eq!(1 * batch_delay, next_interval().total_time_to_first_poll_ns);
-///      assert_eq!(i * batch_delay, monitor.cumulative().total_time_to_first_poll_ns);
+///      assert_eq!(1 * batch_delay as u128, next_interval().total_time_to_first_poll.as_nanos());
+///      assert_eq!(i * batch_delay as u128, monitor.cumulative().total_time_to_first_poll.as_nanos());
 ///  }
 ///
 ///  /* now, the `total_time_to_first_poll_ns` counter is at the precipice of overflow */
-///  assert_eq!(monitor.cumulative().total_time_to_first_poll_ns, max_duration_ns);
+///  assert_eq!(monitor.cumulative().total_time_to_first_poll.as_nanos(), max_duration_ns as u128);
 ///
 ///  // run batch 4
 ///  run_batch(&monitor, batch_size as usize, iffy_delay_ns).await;
 ///  // the interval counter remains accurate
-///  assert_eq!(1 * batch_delay, next_interval().total_time_to_first_poll_ns);
+///  assert_eq!(1 * batch_delay as u128, next_interval().total_time_to_first_poll.as_nanos());
 ///  // but the cumulative counter has overflowed
-///  assert_eq!(batch_delay - 1, monitor.cumulative().total_time_to_first_poll_ns);
+///  assert_eq!(batch_delay as u128 - 1, monitor.cumulative().total_time_to_first_poll.as_nanos());
 /// # }
 /// ```
 /// If a cumulative metric overflows *more than once* in the midst of an interval,
@@ -499,33 +499,347 @@ pub struct TaskMetrics {
     /// ```
     pub num_slow_polls: u64,
 
-    /// The amount of time elapsed between when tasks were instrumented and when they were first polled, measured in
-    /// nanoseconds.
+    /// The amount of time elapsed between when tasks were instrumented and when they were first polled.
     ///
-    /// ### See also
-    /// - [`TaskMetrics::total_time_to_first_poll`]: `total_time_to_first_poll_ns`, as a [`std::time::Duration`].
-    pub total_time_to_first_poll_ns: u64,
-
-    pub total_time_idle_ns: u64,
-
-    /// The amount of time elapsed between when tasks were instrumented and when they were first polled, measured in
-    /// nanoseconds.
+    /// ### Derived metrics
+    /// - [`TaskMetrics::mean_time_to_first_poll`]:
+    ///   the mean time elapsed between the instrumentation of tasks and the time they are first polled.
     ///
-    /// ### See also
-    /// - [`TaskMetrics::total_time_scheduled`]: `total_time_scheduled_ns`, as a [`std::time::Duration`].
-    pub total_time_scheduled_ns: u64,
-
-    /// The total amount of time that fast polls took to complete, measured in nanoseconds.
+    /// ### Example
+    /// In the below example, 0 tasks have been instrumented or polled within the first sampling period,
+    /// a total of 500ms elapse between the instrumentation and polling of tasks within the second
+    /// sampling period, and a total of 350ms elapse between the instrumentation and polling of tasks
+    /// within the third sampling period:
+    /// ```
+    /// use core::future::Future;
+    /// use std::time::Duration;
     ///
-    /// ### See also
-    /// - [`TaskMetrics::total_time_fast_poll`]: `total_time_fast_poll_ns`, as a [`std::time::Duration`].
-    pub total_time_fast_poll_ns: u64,
+    /// #[tokio::main]
+    /// async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    ///     let metrics_monitor = tokio_metrics::TaskMonitor::new();
+    ///     let mut interval = metrics_monitor.intervals();
+    ///     let mut next_interval = || interval.next().unwrap();
+    ///
+    ///     // no tasks have yet been created, instrumented, or polled
+    ///     assert_eq!(metrics_monitor.cumulative().total_time_to_first_poll, Duration::ZERO);
+    ///     assert_eq!(next_interval().total_time_to_first_poll, Duration::ZERO);
+    ///
+    ///     // constructs and instruments a task, pauses a given duration, then awaits the task
+    ///     async fn instrument_pause_await(monitor: &tokio_metrics::TaskMonitor, pause: Duration) {
+    ///         let task = monitor.instrument(async move {});
+    ///         tokio::time::sleep(pause).await;
+    ///         task.await;
+    ///     }
+    ///
+    ///     // construct and await a task that pauses for 500ms between instrumentation and first poll
+    ///     let task_a_pause_time = Duration::from_millis(500);
+    ///     let task_a_total_time = time(instrument_pause_await(&metrics_monitor, task_a_pause_time)).await;
+    ///
+    ///     // the `total_time_to_first_poll` in this period will be somewhere between the
+    ///     // pause time of `task_a`, and the total execution time of `task_a`
+    ///     let total_time_to_first_poll = next_interval().total_time_to_first_poll;
+    ///     assert!(total_time_to_first_poll >= task_a_pause_time);
+    ///     assert!(total_time_to_first_poll <= task_a_total_time);
+    ///
+    ///     // construct and await a task that pauses for 250ms between instrumentation and first poll
+    ///     let task_b_pause_time = Duration::from_millis(250);
+    ///     let task_b_total_time = time(instrument_pause_await(&metrics_monitor, task_b_pause_time)).await;
+    ///
+    ///     // construct and await a task that pauses for 100ms between instrumentation and first poll
+    ///     let task_c_pause_time = Duration::from_millis(100);
+    ///     let task_c_total_time = time(instrument_pause_await(&metrics_monitor, task_c_pause_time)).await;
+    ///
+    ///     // the `total_time_to_first_poll` in this period will be somewhere between the
+    ///     // combined pause times of `task_a` and `task_b` (350ms), and the combined total execution times
+    ///     // of `task_a` and `task_b`
+    ///     let total_time_to_first_poll = next_interval().total_time_to_first_poll;
+    ///     assert!(total_time_to_first_poll >= task_b_pause_time + task_c_pause_time);
+    ///     assert!(total_time_to_first_poll <= task_b_total_time + task_c_total_time);
+    ///
+    ///     Ok(())
+    /// }
+    ///
+    /// /// Produces the amount of time it took to await a given task.
+    /// async fn time(task: impl Future) -> Duration {
+    ///     let start = tokio::time::Instant::now();
+    ///     task.await;
+    ///     start.elapsed()
+    /// }
+    /// ```
+    ///
+    /// ### When is this metric recorded?
+    /// The delay between instrumentation and first poll is not recorded until the first poll actually occurs:
+    /// ```
+    /// # use tokio::time::Duration;
+    /// #
+    /// # #[tokio::main(flavor = "current_thread", start_paused = true)]
+    /// # async fn main() {
+    /// #     let monitor = tokio_metrics::TaskMonitor::new();
+    /// #     let mut interval = monitor.intervals();
+    /// #     let mut next_interval = || interval.next().unwrap();
+    /// #
+    /// // we construct and instrument a task, but do not `await` it
+    /// let task = monitor.instrument(async {});
+    ///
+    /// // let's sleep for 1s before we poll `task`
+    /// let one_sec = Duration::from_secs(1);
+    /// let _ = tokio::time::sleep(one_sec).await;
+    ///
+    /// // although 1s has now elapsed since the instrumentation of `task`,
+    /// // this is not reflected in `total_time_to_first_poll`...
+    /// assert_eq!(next_interval().total_time_to_first_poll, Duration::ZERO);
+    /// assert_eq!(monitor.cumulative().total_time_to_first_poll, Duration::ZERO);
+    ///
+    /// // ...and won't be until `task` is actually polled
+    /// task.await;
+    ///
+    /// // now, the 1s delay is reflected in `total_time_to_first_poll`:
+    /// assert_eq!(next_interval().total_time_to_first_poll, one_sec);
+    /// assert_eq!(monitor.cumulative().total_time_to_first_poll, one_sec);
+    /// # }
+    /// ```
+    ///
+    /// ### What if time-to-first-poll is very large?
+    /// The time-to-first-poll of *individual* tasks saturates at `u64::MAX` nanoseconds. However, if the *total*
+    /// time-to-first-poll *across* monitored tasks exceeds `u64::MAX` nanoseconds, this metric will wrap-around:
+    /// ```
+    /// use tokio::time::Duration;
+    ///
+    /// #[tokio::main(flavor = "current_thread", start_paused = true)]
+    /// async fn main() {
+    ///     let monitor = tokio_metrics::TaskMonitor::new();
+    ///
+    ///     // construct and instrument a task, but do not `await` it
+    ///     let task = monitor.instrument(async {});
+    ///
+    ///     // this is the maximum duration representable by tokio_metrics
+    ///     let max_duration = Duration::from_nanos(u64::MAX);
+    ///
+    ///     // let's advance the clock by double this amount and await `task`
+    ///     let _ = tokio::time::advance(max_duration * 2).await;
+    ///     task.await;
+    ///
+    ///     // the time-to-first-poll of `task` saturates at `max_duration`
+    ///     assert_eq!(monitor.cumulative().total_time_to_first_poll, max_duration);
+    ///
+    ///     // ...but note that the metric *will* wrap around if more tasks are involved
+    ///     let task = monitor.instrument(async {});
+    ///     let _ = tokio::time::advance(Duration::from_nanos(1)).await;
+    ///     task.await;
+    ///     assert_eq!(monitor.cumulative().total_time_to_first_poll, Duration::ZERO);
+    /// }
+    /// ```
+    pub total_time_to_first_poll: Duration,
+
+    pub total_time_idle: Duration,
+
+    /// The total amount of time tasks spent waiting to be scheduled.
+    ///
+    /// ### Derived metrics
+    /// - [`TaskMetrics::mean_time_scheduled`]:
+    ///   the mean amount of time that monitored tasks spent waiting to be run.
+    ///
+    /// ### Example
+    /// In the below example, a task that yields endlessly is raced against a task that blocks the
+    /// executor for 1 second; the yielding task spends approximately 1 second waiting to
+    /// be scheduled. In the next sampling period, a task that yields endlessly is raced against a
+    /// task that blocks the executor for half a second; the yielding task spends approximately half
+    /// a second waiting to be scheduled.
+    /// ```
+    /// use std::time::Duration;
+    ///
+    /// #[tokio::main(flavor = "current_thread")]
+    /// async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    ///     let metrics_monitor = tokio_metrics::TaskMonitor::new();
+    ///     let mut interval = metrics_monitor.intervals();
+    ///     let mut next_interval = || interval.next().unwrap();
+    ///
+    ///     // construct and instrument and spawn a task that yields endlessly
+    ///     let endless_task = metrics_monitor.instrument(async {
+    ///         loop { tokio::task::yield_now().await }
+    ///     });
+    ///
+    ///     // construct and spawn a task that blocks the executor for 1 second
+    ///     let one_sec_task = tokio::spawn(async {
+    ///         std::thread::sleep(Duration::from_millis(1000))
+    ///     });
+    ///
+    ///     // race `endless_task` against `one_sec_task`
+    ///     tokio::select! {
+    ///         biased;
+    ///         _ = endless_task => { unreachable!() }
+    ///         _ = one_sec_task => {}
+    ///     }
+    ///
+    ///     // `endless_task` will have spent approximately one second waiting
+    ///     let total_time_scheduled = next_interval().total_time_scheduled;
+    ///     assert!(total_time_scheduled >= Duration::from_millis(1000));
+    ///     assert!(total_time_scheduled <= Duration::from_millis(1100));
+    ///
+    ///     // construct and instrument and spawn a task that yields endlessly
+    ///     let endless_task = metrics_monitor.instrument(async {
+    ///         loop { tokio::task::yield_now().await }
+    ///     });
+    ///
+    ///     // construct and spawn a task that blocks the executor for 1 second
+    ///     let half_sec_task = tokio::spawn(async {
+    ///         std::thread::sleep(Duration::from_millis(500))
+    ///     });
+    ///
+    ///     // race `endless_task` against `half_sec_task`
+    ///     tokio::select! {
+    ///         biased;
+    ///         _ = endless_task => { unreachable!() }
+    ///         _ = half_sec_task => {}
+    ///     }
+    ///
+    ///     // `endless_task` will have spent approximately half a second waiting
+    ///     let total_time_scheduled = next_interval().total_time_scheduled;
+    ///     assert!(total_time_scheduled >= Duration::from_millis(500));
+    ///     assert!(total_time_scheduled <= Duration::from_millis(600));
+    ///
+    ///     Ok(())
+    /// }
+    /// ```
+    pub total_time_scheduled: Duration,
+
+    /// The total amount of time that fast polls took to complete.
+    ///
+    /// Here, 'fast' is defined as completing in strictly less time than [`TaskMonitor::slow_poll_threshold`].
+    ///
+    /// ### Derived metrics
+    /// - [`TaskMetrics::mean_fast_polls`]:
+    ///   the mean time consumed by fast polls of monitored tasks.
+    ///
+    /// ### Example
+    /// In the below example, no tasks are polled in the first sampling period; three fast polls consume
+    /// a total of 3μs time in the second sampling period;
+    /// and two fast polls consume a total of 2μs time in the third
+    /// sampling period:
+    /// ```
+    /// use std::future::Future;
+    /// use std::time::Duration;
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    ///     let metrics_monitor = tokio_metrics::TaskMonitor::new();
+    ///     let mut interval = metrics_monitor.intervals();
+    ///     let mut next_interval = || interval.next().unwrap();
+    ///
+    ///     // no tasks have been constructed, instrumented, or polled
+    ///     let interval = next_interval();
+    ///     assert_eq!(interval.total_time_fast_poll, Duration::ZERO);
+    ///
+    ///     let fast = Duration::from_micros(1);
+    ///
+    ///     // this task completes in three fast polls
+    ///     let task_a_time = time(metrics_monitor.instrument(async {
+    ///         spin_for(fast).await; // fast poll 1
+    ///         spin_for(fast).await; // fast poll 2
+    ///         spin_for(fast)        // fast poll 3
+    ///     })).await;
+    ///
+    ///     let interval = next_interval();
+    ///     assert!(interval.total_time_fast_poll >= fast * 3);
+    ///     assert!(interval.total_time_fast_poll <= task_a_time);
+    ///
+    ///     // this task completes in two fast polls
+    ///     let task_b_time = time(metrics_monitor.instrument(async {
+    ///         spin_for(fast).await; // fast poll 1
+    ///         spin_for(fast)        // fast poll 2
+    ///     })).await;
+    ///
+    ///     let interval = next_interval();
+    ///     assert!(interval.total_time_fast_poll >= fast * 2);
+    ///     assert!(interval.total_time_fast_poll <= task_b_time);
+    ///
+    ///     Ok(())
+    /// }
+    ///
+    /// /// Produces the amount of time it took to await a given async task.
+    /// async fn time(task: impl Future) -> Duration {
+    ///     let start = tokio::time::Instant::now();
+    ///     task.await;
+    ///     start.elapsed()
+    /// }
+    ///
+    /// /// Block the current thread for a given `duration`, then (optionally) yield to the scheduler.
+    /// fn spin_for(duration: Duration) -> impl Future<Output=()> {
+    ///     let start = tokio::time::Instant::now();
+    ///     while start.elapsed() <= duration {}
+    ///     tokio::task::yield_now()
+    /// }
+    /// ```
+    pub total_time_fast_poll: Duration,
 
     /// The total amount of time that slow polls took to complete.
     ///
+    /// Here, 'slowly' is defined as completing in at least as much time as [`TaskMonitor::slow_poll_threshold`].
+    ///
     /// ### See also
-    /// - [`TaskMetrics::total_time_slow_poll`]: `total_time_slow_poll_ns`, as a [`std::time::Duration`].
-    pub total_time_slow_poll_ns: u64,
+    /// - [`TaskMetrics::mean_slow_polls`]
+    ///   derived from [`TaskMetrics::total_time_slow_poll`] ÷ [`TaskMetrics::num_slow_polls`]
+    ///
+    /// ### Example
+    /// In the below example, no tasks are polled in the first sampling period; three slow polls consume
+    /// a total of 30 × [`TaskMonitor::DEFAULT_SLOW_POLL_THRESHOLD`] time in the second sampling period;
+    /// and two slow polls consume a total of 20 × [`TaskMonitor::DEFAULT_SLOW_POLL_THRESHOLD`] time in the
+    /// third sampling period:
+    /// ```
+    /// use std::future::Future;
+    /// use std::time::Duration;
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    ///     let metrics_monitor = tokio_metrics::TaskMonitor::new();
+    ///     let mut interval = metrics_monitor.intervals();
+    ///     let mut next_interval = || interval.next().unwrap();
+    ///
+    ///     // no tasks have been constructed, instrumented, or polled
+    ///     let interval = next_interval();
+    ///     assert_eq!(interval.total_time_slow_poll, Duration::ZERO);
+    ///
+    ///     let slow = 10 * metrics_monitor.slow_poll_threshold();
+    ///
+    ///     // this task completes in three slow polls
+    ///     let task_a_time = time(metrics_monitor.instrument(async {
+    ///         spin_for(slow).await; // slow poll 1
+    ///         spin_for(slow).await; // slow poll 2
+    ///         spin_for(slow)        // slow poll 3
+    ///     })).await;
+    ///
+    ///     let interval = next_interval();
+    ///     assert!(interval.total_time_slow_poll >= slow * 3);
+    ///     assert!(interval.total_time_slow_poll <= task_a_time);
+    ///
+    ///     // this task completes in two slow polls
+    ///     let task_b_time = time(metrics_monitor.instrument(async {
+    ///         spin_for(slow).await; // slow poll 1
+    ///         spin_for(slow)        // slow poll 2
+    ///     })).await;
+    ///
+    ///     let interval = next_interval();
+    ///     assert!(interval.total_time_slow_poll >= slow * 2);
+    ///     assert!(interval.total_time_slow_poll <= task_b_time);
+    ///
+    ///     Ok(())
+    /// }
+    ///
+    /// /// Produces the amount of time it took to await a given async task.
+    /// async fn time(task: impl Future) -> Duration {
+    ///     let start = tokio::time::Instant::now();
+    ///     task.await;
+    ///     start.elapsed()
+    /// }
+    ///
+    /// /// Block the current thread for a given `duration`, then (optionally) yield to the scheduler.
+    /// fn spin_for(duration: Duration) -> impl Future<Output=()> {
+    ///     let start = tokio::time::Instant::now();
+    ///     while start.elapsed() <= duration {}
+    ///     tokio::task::yield_now()
+    /// }
+    /// ```
+    pub total_time_slow_poll: Duration,
 }
 
 /// Tracks the metrics, shared across the various types.
@@ -908,11 +1222,16 @@ impl RawMetrics {
             num_scheduled: self.schedule_count.load(SeqCst),
             num_fast_polls: self.fast_polls_count.load(SeqCst),
             num_slow_polls: self.slow_polls_count.load(SeqCst),
-            total_time_to_first_poll_ns: self.time_to_first_poll_ns_total.load(SeqCst),
-            total_time_idle_ns: self.idle_ns_total.load(SeqCst),
-            total_time_scheduled_ns: self.scheduled_ns_total.load(SeqCst),
-            total_time_fast_poll_ns: self.fast_poll_ns_total.load(SeqCst),
-            total_time_slow_poll_ns: self.slow_poll_ns_total.load(SeqCst),
+            total_time_to_first_poll:
+                Duration::from_nanos(self.time_to_first_poll_ns_total.load(SeqCst)),
+            total_time_idle: 
+                Duration::from_nanos(self.idle_ns_total.load(SeqCst)),
+            total_time_scheduled: 
+                Duration::from_nanos(self.scheduled_ns_total.load(SeqCst)),
+            total_time_fast_poll:
+                Duration::from_nanos(self.fast_poll_ns_total.load(SeqCst)),
+            total_time_slow_poll:
+                Duration::from_nanos(self.slow_poll_ns_total.load(SeqCst)),
         }
     }
 }
@@ -927,378 +1246,26 @@ impl std::ops::Sub for TaskMetrics {
             num_scheduled: self.num_scheduled.wrapping_sub(prev.num_scheduled),
             num_fast_polls: self.num_fast_polls.wrapping_sub(prev.num_fast_polls),
             num_slow_polls: self.num_slow_polls.wrapping_sub(prev.num_slow_polls),
-            total_time_to_first_poll_ns: self
-                .total_time_to_first_poll_ns
-                .wrapping_sub(prev.total_time_to_first_poll_ns),
-            total_time_idle_ns: self
-                .total_time_idle_ns
-                .wrapping_sub(prev.total_time_idle_ns),
-            total_time_scheduled_ns: self
-                .total_time_scheduled_ns
-                .wrapping_sub(prev.total_time_scheduled_ns),
-            total_time_fast_poll_ns: self
-                .total_time_fast_poll_ns
-                .wrapping_sub(prev.total_time_fast_poll_ns),
-            total_time_slow_poll_ns: self
-                .total_time_slow_poll_ns
-                .wrapping_sub(prev.total_time_slow_poll_ns),
+            total_time_to_first_poll: 
+                sub(self.total_time_to_first_poll,
+                    prev.total_time_to_first_poll),
+            total_time_idle:
+                sub(self.total_time_idle,
+                    prev.total_time_idle),
+            total_time_scheduled: 
+                sub(self.total_time_scheduled,
+                    prev.total_time_scheduled),
+            total_time_fast_poll:
+                sub(self.total_time_fast_poll,
+                    prev.total_time_fast_poll),
+            total_time_slow_poll:
+                sub(self.total_time_slow_poll,
+                    prev.total_time_slow_poll),
         }
     }
 }
 
 impl TaskMetrics {
-    /// The amount of time elapsed between when tasks were instrumented and when they were first polled.
-    ///
-    /// ### Derived metrics
-    /// - [`TaskMetrics::mean_time_to_first_poll`]:
-    ///   the mean time elapsed between the instrumentation of tasks and the time they are first polled.
-    ///
-    /// ### Example
-    /// In the below example, 0 tasks have been instrumented or polled within the first sampling period,
-    /// a total of 500ms elapse between the instrumentation and polling of tasks within the second
-    /// sampling period, and a total of 350ms elapse between the instrumentation and polling of tasks
-    /// within the third sampling period:
-    /// ```
-    /// use core::future::Future;
-    /// use std::time::Duration;
-    ///
-    /// #[tokio::main]
-    /// async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    ///     let metrics_monitor = tokio_metrics::TaskMonitor::new();
-    ///     let mut interval = metrics_monitor.intervals();
-    ///     let mut next_interval = || interval.next().unwrap();
-    ///
-    ///     // no tasks have yet been created, instrumented, or polled
-    ///     assert_eq!(metrics_monitor.cumulative().total_time_to_first_poll(), Duration::ZERO);
-    ///     assert_eq!(next_interval().total_time_to_first_poll(), Duration::ZERO);
-    ///
-    ///     // constructs and instruments a task, pauses a given duration, then awaits the task
-    ///     async fn instrument_pause_await(monitor: &tokio_metrics::TaskMonitor, pause: Duration) {
-    ///         let task = monitor.instrument(async move {});
-    ///         tokio::time::sleep(pause).await;
-    ///         task.await;
-    ///     }
-    ///
-    ///     // construct and await a task that pauses for 500ms between instrumentation and first poll
-    ///     let task_a_pause_time = Duration::from_millis(500);
-    ///     let task_a_total_time = time(instrument_pause_await(&metrics_monitor, task_a_pause_time)).await;
-    ///
-    ///     // the `total_time_to_first_poll` in this period will be somewhere between the
-    ///     // pause time of `task_a`, and the total execution time of `task_a`
-    ///     let total_time_to_first_poll = next_interval().total_time_to_first_poll();
-    ///     assert!(total_time_to_first_poll >= task_a_pause_time);
-    ///     assert!(total_time_to_first_poll <= task_a_total_time);
-    ///
-    ///     // construct and await a task that pauses for 250ms between instrumentation and first poll
-    ///     let task_b_pause_time = Duration::from_millis(250);
-    ///     let task_b_total_time = time(instrument_pause_await(&metrics_monitor, task_b_pause_time)).await;
-    ///
-    ///     // construct and await a task that pauses for 100ms between instrumentation and first poll
-    ///     let task_c_pause_time = Duration::from_millis(100);
-    ///     let task_c_total_time = time(instrument_pause_await(&metrics_monitor, task_c_pause_time)).await;
-    ///
-    ///     // the `total_time_to_first_poll` in this period will be somewhere between the
-    ///     // combined pause times of `task_a` and `task_b` (350ms), and the combined total execution times
-    ///     // of `task_a` and `task_b`
-    ///     let total_time_to_first_poll = next_interval().total_time_to_first_poll();
-    ///     assert!(total_time_to_first_poll >= task_b_pause_time + task_c_pause_time);
-    ///     assert!(total_time_to_first_poll <= task_b_total_time + task_c_total_time);
-    ///
-    ///     Ok(())
-    /// }
-    ///
-    /// /// Produces the amount of time it took to await a given task.
-    /// async fn time(task: impl Future) -> Duration {
-    ///     let start = tokio::time::Instant::now();
-    ///     task.await;
-    ///     start.elapsed()
-    /// }
-    /// ```
-    ///
-    /// ### When is this metric recorded?
-    /// The delay between instrumentation and first poll is not recorded until the first poll actually occurs:
-    /// ```
-    /// # use tokio::time::Duration;
-    /// #
-    /// # #[tokio::main(flavor = "current_thread", start_paused = true)]
-    /// # async fn main() {
-    /// #     let monitor = tokio_metrics::TaskMonitor::new();
-    /// #     let mut interval = monitor.intervals();
-    /// #     let mut next_interval = || interval.next().unwrap();
-    /// #
-    /// // we construct and instrument a task, but do not `await` it
-    /// let task = monitor.instrument(async {});
-    ///
-    /// // let's sleep for 1s before we poll `task`
-    /// let one_sec = Duration::from_secs(1);
-    /// let _ = tokio::time::sleep(one_sec).await;
-    ///
-    /// // although 1s has now elapsed since the instrumentation of `task`,
-    /// // this is not reflected in `total_time_to_first_poll`...
-    /// assert_eq!(next_interval().total_time_to_first_poll(), Duration::ZERO);
-    /// assert_eq!(monitor.cumulative().total_time_to_first_poll(), Duration::ZERO);
-    ///
-    /// // ...and won't be until `task` is actually polled
-    /// task.await;
-    ///
-    /// // now, the 1s delay is reflected in `total_time_to_first_poll`:
-    /// assert_eq!(next_interval().total_time_to_first_poll(), one_sec);
-    /// assert_eq!(monitor.cumulative().total_time_to_first_poll(), one_sec);
-    /// # }
-    /// ```
-    ///
-    /// ### What if time-to-first-poll is very large?
-    /// The time-to-first-poll of *individual* tasks saturates at `u64::MAX` nanoseconds. However, if the *total*
-    /// time-to-first-poll *across* monitored tasks exceeds `u64::MAX` nanoseconds, this metric will wrap-around:
-    /// ```
-    /// use tokio::time::Duration;
-    ///
-    /// #[tokio::main(flavor = "current_thread", start_paused = true)]
-    /// async fn main() {
-    ///     let monitor = tokio_metrics::TaskMonitor::new();
-    ///
-    ///     // construct and instrument a task, but do not `await` it
-    ///     let task = monitor.instrument(async {});
-    ///
-    ///     // this is the maximum duration representable by tokio_metrics
-    ///     let max_duration = Duration::from_nanos(u64::MAX);
-    ///
-    ///     // let's advance the clock by double this amount and await `task`
-    ///     let _ = tokio::time::advance(max_duration * 2).await;
-    ///     task.await;
-    ///
-    ///     // the time-to-first-poll of `task` saturates at `max_duration`
-    ///     assert_eq!(monitor.cumulative().total_time_to_first_poll(), max_duration);
-    ///
-    ///     // ...but note that the metric *will* wrap around if more tasks are involved
-    ///     let task = monitor.instrument(async {});
-    ///     let _ = tokio::time::advance(Duration::from_nanos(1)).await;
-    ///     task.await;
-    ///     assert_eq!(monitor.cumulative().total_time_to_first_poll(), Duration::ZERO);
-    /// }
-    /// ```
-    pub fn total_time_to_first_poll(&self) -> Duration {
-        Duration::from_nanos(self.total_time_to_first_poll_ns)
-    }
-
-    pub fn total_time_idle(&self) -> Duration {
-        Duration::from_nanos(self.total_time_idle_ns)
-    }
-
-    /// The total amount of time tasks spent waiting to be scheduled.
-    ///
-    /// ### Derived metrics
-    /// - [`TaskMetrics::mean_time_scheduled`]:
-    ///   the mean amount of time that monitored tasks spent waiting to be run.
-    ///
-    /// ### Example
-    /// In the below example, a task that yields endlessly is raced against a task that blocks the
-    /// executor for 1 second; the yielding task spends approximately 1 second waiting to
-    /// be scheduled. In the next sampling period, a task that yields endlessly is raced against a
-    /// task that blocks the executor for half a second; the yielding task spends approximately half
-    /// a second waiting to be scheduled.
-    /// ```
-    /// use std::time::Duration;
-    ///
-    /// #[tokio::main(flavor = "current_thread")]
-    /// async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    ///     let metrics_monitor = tokio_metrics::TaskMonitor::new();
-    ///     let mut interval = metrics_monitor.intervals();
-    ///     let mut next_interval = || interval.next().unwrap();
-    ///
-    ///     // construct and instrument and spawn a task that yields endlessly
-    ///     let endless_task = metrics_monitor.instrument(async {
-    ///         loop { tokio::task::yield_now().await }
-    ///     });
-    ///
-    ///     // construct and spawn a task that blocks the executor for 1 second
-    ///     let one_sec_task = tokio::spawn(async {
-    ///         std::thread::sleep(Duration::from_millis(1000))
-    ///     });
-    ///
-    ///     // race `endless_task` against `one_sec_task`
-    ///     tokio::select! {
-    ///         biased;
-    ///         _ = endless_task => { unreachable!() }
-    ///         _ = one_sec_task => {}
-    ///     }
-    ///
-    ///     // `endless_task` will have spent approximately one second waiting
-    ///     let total_time_scheduled = next_interval().total_time_scheduled();
-    ///     assert!(total_time_scheduled >= Duration::from_millis(1000));
-    ///     assert!(total_time_scheduled <= Duration::from_millis(1100));
-    ///
-    ///     // construct and instrument and spawn a task that yields endlessly
-    ///     let endless_task = metrics_monitor.instrument(async {
-    ///         loop { tokio::task::yield_now().await }
-    ///     });
-    ///
-    ///     // construct and spawn a task that blocks the executor for 1 second
-    ///     let half_sec_task = tokio::spawn(async {
-    ///         std::thread::sleep(Duration::from_millis(500))
-    ///     });
-    ///
-    ///     // race `endless_task` against `half_sec_task`
-    ///     tokio::select! {
-    ///         biased;
-    ///         _ = endless_task => { unreachable!() }
-    ///         _ = half_sec_task => {}
-    ///     }
-    ///
-    ///     // `endless_task` will have spent approximately half a second waiting
-    ///     let total_time_scheduled = next_interval().total_time_scheduled();
-    ///     assert!(total_time_scheduled >= Duration::from_millis(500));
-    ///     assert!(total_time_scheduled <= Duration::from_millis(600));
-    ///
-    ///     Ok(())
-    /// }
-    /// ```
-    pub fn total_time_scheduled(&self) -> Duration {
-        Duration::from_nanos(self.total_time_scheduled_ns)
-    }
-
-    /// The total amount of time that fast polls took to complete.
-    ///
-    /// Here, 'fast' is defined as completing in strictly less time than [`TaskMonitor::slow_poll_threshold`].
-    ///
-    /// ### Derived metrics
-    /// - [`TaskMetrics::mean_fast_polls`]:
-    ///   the mean time consumed by fast polls of monitored tasks.
-    ///
-    /// ### Example
-    /// In the below example, no tasks are polled in the first sampling period; three fast polls consume
-    /// a total of 3μs time in the second sampling period;
-    /// and two fast polls consume a total of 2μs time in the third
-    /// sampling period:
-    /// ```
-    /// use std::future::Future;
-    /// use std::time::Duration;
-    ///
-    /// #[tokio::main]
-    /// async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    ///     let metrics_monitor = tokio_metrics::TaskMonitor::new();
-    ///     let mut interval = metrics_monitor.intervals();
-    ///     let mut next_interval = || interval.next().unwrap();
-    ///
-    ///     // no tasks have been constructed, instrumented, or polled
-    ///     let interval = next_interval();
-    ///     assert_eq!(interval.total_time_fast_poll(), Duration::ZERO);
-    ///
-    ///     let fast = Duration::from_micros(1);
-    ///
-    ///     // this task completes in three fast polls
-    ///     let task_a_time = time(metrics_monitor.instrument(async {
-    ///         spin_for(fast).await; // fast poll 1
-    ///         spin_for(fast).await; // fast poll 2
-    ///         spin_for(fast)        // fast poll 3
-    ///     })).await;
-    ///
-    ///     let interval = next_interval();
-    ///     assert!(interval.total_time_fast_poll() >= fast * 3);
-    ///     assert!(interval.total_time_fast_poll() <= task_a_time);
-    ///
-    ///     // this task completes in two fast polls
-    ///     let task_b_time = time(metrics_monitor.instrument(async {
-    ///         spin_for(fast).await; // fast poll 1
-    ///         spin_for(fast)        // fast poll 2
-    ///     })).await;
-    ///
-    ///     let interval = next_interval();
-    ///     assert!(interval.total_time_fast_poll() >= fast * 2);
-    ///     assert!(interval.total_time_fast_poll() <= task_b_time);
-    ///
-    ///     Ok(())
-    /// }
-    ///
-    /// /// Produces the amount of time it took to await a given async task.
-    /// async fn time(task: impl Future) -> Duration {
-    ///     let start = tokio::time::Instant::now();
-    ///     task.await;
-    ///     start.elapsed()
-    /// }
-    ///
-    /// /// Block the current thread for a given `duration`, then (optionally) yield to the scheduler.
-    /// fn spin_for(duration: Duration) -> impl Future<Output=()> {
-    ///     let start = tokio::time::Instant::now();
-    ///     while start.elapsed() <= duration {}
-    ///     tokio::task::yield_now()
-    /// }
-    /// ```
-    pub fn total_time_fast_poll(&self) -> Duration {
-        Duration::from_nanos(self.total_time_fast_poll_ns)
-    }
-
-    /// The total amount of time that slow polls took to complete.
-    ///
-    /// Here, 'slowly' is defined as completing in at least as much time as [`TaskMonitor::slow_poll_threshold`].
-    ///
-    /// ### See also
-    /// - [`TaskMetrics::mean_slow_polls`]
-    ///   derived from [`TaskMetrics::total_time_slow_poll`] ÷ [`TaskMetrics::num_slow_polls`]
-    ///
-    /// ### Example
-    /// In the below example, no tasks are polled in the first sampling period; three slow polls consume
-    /// a total of 30 × [`TaskMonitor::DEFAULT_SLOW_POLL_THRESHOLD`] time in the second sampling period;
-    /// and two slow polls consume a total of 20 × [`TaskMonitor::DEFAULT_SLOW_POLL_THRESHOLD`] time in the
-    /// third sampling period:
-    /// ```
-    /// use std::future::Future;
-    /// use std::time::Duration;
-    ///
-    /// #[tokio::main]
-    /// async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    ///     let metrics_monitor = tokio_metrics::TaskMonitor::new();
-    ///     let mut interval = metrics_monitor.intervals();
-    ///     let mut next_interval = || interval.next().unwrap();
-    ///
-    ///     // no tasks have been constructed, instrumented, or polled
-    ///     let interval = next_interval();
-    ///     assert_eq!(interval.total_time_slow_poll(), Duration::ZERO);
-    ///
-    ///     let slow = 10 * metrics_monitor.slow_poll_threshold();
-    ///
-    ///     // this task completes in three slow polls
-    ///     let task_a_time = time(metrics_monitor.instrument(async {
-    ///         spin_for(slow).await; // slow poll 1
-    ///         spin_for(slow).await; // slow poll 2
-    ///         spin_for(slow)        // slow poll 3
-    ///     })).await;
-    ///
-    ///     let interval = next_interval();
-    ///     assert!(interval.total_time_slow_poll() >= slow * 3);
-    ///     assert!(interval.total_time_slow_poll() <= task_a_time);
-    ///
-    ///     // this task completes in two slow polls
-    ///     let task_b_time = time(metrics_monitor.instrument(async {
-    ///         spin_for(slow).await; // slow poll 1
-    ///         spin_for(slow)        // slow poll 2
-    ///     })).await;
-    ///
-    ///     let interval = next_interval();
-    ///     assert!(interval.total_time_slow_poll() >= slow * 2);
-    ///     assert!(interval.total_time_slow_poll() <= task_b_time);
-    ///
-    ///     Ok(())
-    /// }
-    ///
-    /// /// Produces the amount of time it took to await a given async task.
-    /// async fn time(task: impl Future) -> Duration {
-    ///     let start = tokio::time::Instant::now();
-    ///     task.await;
-    ///     start.elapsed()
-    /// }
-    ///
-    /// /// Block the current thread for a given `duration`, then (optionally) yield to the scheduler.
-    /// fn spin_for(duration: Duration) -> impl Future<Output=()> {
-    ///     let start = tokio::time::Instant::now();
-    ///     while start.elapsed() <= duration {}
-    ///     tokio::task::yield_now()
-    /// }
-    /// ```
-    pub fn total_time_slow_poll(&self) -> Duration {
-        Duration::from_nanos(self.total_time_slow_poll_ns)
-    }
-
     /// The total number of polls.
     ///
     /// ##### Definition
@@ -1436,7 +1403,7 @@ impl TaskMetrics {
         if self.num_tasks == 0 {
             Duration::ZERO
         } else {
-            self.total_time_to_first_poll() / self.num_tasks as _
+            self.total_time_to_first_poll / self.num_tasks as _
         }
     }
 
@@ -1460,11 +1427,7 @@ impl TaskMetrics {
     /// }
     /// ```
     pub fn mean_time_idle(&self) -> Duration {
-        if self.num_idles == 0 {
-            Duration::ZERO
-        } else {
-            Duration::from_nanos(self.total_time_idle_ns / self.num_tasks)
-        }
+        mean(self.total_time_idle, self.num_tasks)
     }
 
     /// The mean amount of time that monitored tasks spent waiting to be run.
@@ -1544,11 +1507,7 @@ impl TaskMetrics {
     /// }
     /// ```
     pub fn mean_time_scheduled(&self) -> Duration {
-        if self.num_scheduled == 0 {
-            Duration::ZERO
-        } else {
-            Duration::from_nanos(self.total_time_scheduled_ns / self.num_scheduled)
-        }
+        mean(self.total_time_scheduled, self.num_scheduled)
     }
 
     /// The ratio between the number polls categorized as fast and slow.
@@ -1700,11 +1659,7 @@ impl TaskMetrics {
     /// }
     /// ```
     pub fn mean_fast_polls(&self) -> Duration {
-        if self.num_fast_polls == 0 {
-            Duration::ZERO
-        } else {
-            Duration::from_nanos(self.total_time_fast_poll_ns / self.num_fast_polls)
-        }
+        mean(self.total_time_fast_poll, self.num_fast_polls)
     }
 
     /// The mean time consumed by slow polls of monitored tasks.
@@ -1775,11 +1730,7 @@ impl TaskMetrics {
     /// }
     /// ```
     pub fn mean_slow_polls(&self) -> Duration {
-        if self.num_slow_polls == 0 {
-            Duration::ZERO
-        } else {
-            Duration::from_nanos(self.total_time_slow_poll_ns / self.num_slow_polls)
-        }
+        mean(self.total_time_slow_poll, self.num_slow_polls)
     }
 }
 
@@ -1917,5 +1868,28 @@ impl ArcWake for State {
     fn wake(self: Arc<State>) {
         self.on_wake();
         self.waker.wake();
+    }
+}
+
+#[inline(always)]
+fn to_nanos(d: Duration) -> u64 {
+    debug_assert!(d <= Duration::from_nanos(u64::MAX));
+    (d.as_secs() as u64)
+        .wrapping_mul(1_000_000_000)
+        .wrapping_add(d.subsec_nanos() as u64)
+}
+
+#[inline(always)]
+fn sub(a: Duration, b: Duration) -> Duration {
+    let nanos = to_nanos(a).wrapping_sub(to_nanos(b));
+    Duration::from_nanos(nanos)
+}
+
+#[inline(always)]
+fn mean(d: Duration, count: u64) -> Duration {
+    if let Some(quotient) = to_nanos(d).checked_div(count) {
+        Duration::from_nanos(quotient)
+    } else {
+        Duration::ZERO
     }
 }
