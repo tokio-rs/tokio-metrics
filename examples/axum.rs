@@ -13,29 +13,30 @@ async fn main() {
     // build our application with two instrumented endpoints
     let app = axum::Router::new()
         // `GET /` goes to `root`
-        .route("/", axum::routing::get({
-            let monitor = monitor_root.clone();
-            move || monitor.instrument(async { "Hello, World!" })
-        }))
+        .route(
+            "/",
+            axum::routing::get({
+                let monitor = monitor_root.clone();
+                move || monitor.instrument(async { "Hello, World!" })
+            }),
+        )
         // `POST /users` goes to `create_user`
-        .route("/users", axum::routing::post({
-            let monitors = monitor_create_user.clone();
-            let route = monitors.route.clone();
-            move |payload| {
-                route.instrument(create_user(payload, monitors))
-            }
-        }));
+        .route(
+            "/users",
+            axum::routing::post({
+                let monitors = monitor_create_user.clone();
+                let route = monitors.route.clone();
+                move |payload| route.instrument(create_user(payload, monitors))
+            }),
+        );
 
     // print task metrics for each endpoint every 1s
     let metrics_frequency = std::time::Duration::from_secs(1);
     tokio::spawn(async move {
         let root_intervals = monitor_root.intervals();
-        let create_user_route_intervals = 
-            monitor_create_user.route.intervals();
-        let create_user_insert_intervals = 
-            monitor_create_user.insert.intervals();
-        let create_user_intervals = 
-            create_user_route_intervals.zip(create_user_insert_intervals);
+        let create_user_route_intervals = monitor_create_user.route.intervals();
+        let create_user_insert_intervals = monitor_create_user.insert.intervals();
+        let create_user_intervals = create_user_route_intervals.zip(create_user_insert_intervals);
 
         let intervals = root_intervals.zip(create_user_intervals);
         for (root_route, (create_user_route, create_user_insert)) in intervals {
@@ -58,7 +59,10 @@ async fn create_user(
     axum::Json(payload): axum::Json<CreateUser>,
     monitors: CreateUserMonitors,
 ) -> impl axum::response::IntoResponse {
-    let user = User { id: 1337, username: payload.username, };
+    let user = User {
+        id: 1337,
+        username: payload.username,
+    };
     // instrument inserting the user into the db:
     let _ = monitors.insert.instrument(insert_user(user.clone())).await;
     (axum::http::StatusCode::CREATED, axum::Json(user))
@@ -72,8 +76,15 @@ struct CreateUserMonitors {
     insert: tokio_metrics::TaskMonitor,
 }
 
-#[derive(serde::Deserialize)] struct CreateUser { username: String, }
-#[derive(Clone, serde::Serialize)] struct User { id: u64, username: String, }
+#[derive(serde::Deserialize)]
+struct CreateUser {
+    username: String,
+}
+#[derive(Clone, serde::Serialize)]
+struct User {
+    id: u64,
+    username: String,
+}
 
 // insert the user into the database
 async fn insert_user(_: User) {
