@@ -2,9 +2,17 @@
 name = "tokio-metrics"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.56.0"
+authors = ["Tokio Contributors <team@tokio.rs>"]
+license = "MIT"
 readme = "README.md"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+repository = "https://github.com/tokio-rs/tokio"
+homepage = "https://tokio.rs"
+description = """
+Runtime and task level metrics for Tokio applications.
+"""
+categories = ["asynchronous", "network-programming"]
+keywords = ["io", "async", "non-blocking", "futures", "metrics", "debugging"]
 
 [features]
 default = ["rt"]
