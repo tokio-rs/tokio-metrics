@@ -74,12 +74,12 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        rust: ["${{ input.rust_stable }}", "${{ input.rust_nightly }}"]
+        rust: ["rust_stable", "rust_nightly"]
     steps:
     - uses: actions/checkout@master
     - uses: actions-rs/toolchain@v1
       with:
-        toolchain: ${{ matrix.rust }}
+        toolchain: ${{ env[matrix.rust] }}
         override: true
         profile: minimal
     - uses: Swatinem/rust-cache@v1
