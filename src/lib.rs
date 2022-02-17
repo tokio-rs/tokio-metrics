@@ -48,51 +48,56 @@
 //!     }
 //! }
 //! ```
-//!
-//! ### Monitoring runtime metrics (unstable)
-//! [Monitor][RuntimeMonitor] key [metrics][RuntimeMetrics] of a tokio runtime.
-//!
-//! In the below example, a [`RuntimeMonitor`] is [constructed][RuntimeMonitor::new] and
-//! three tasks are spawned and awaited; meanwhile, a fourth task prints [metrics][RuntimeMetrics]
-//! in 500ms [intervals][RuntimeMonitor::intervals]:
-//! ```
-//! use std::time::Duration;
-//!
-//! #[tokio::main]
-//! async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-//!     let handle = tokio::runtime::Handle::current();
-//!     // construct the runtime metrics monitor
-//!     let runtime_monitor = tokio_metrics::RuntimeMonitor::new(&handle);
-//!
-//!     // print runtime metrics every 500ms
-//!     {
-//!         tokio::spawn(async move {
-//!             for interval in runtime_monitor.intervals() {
-//!                 // pretty-print the metric interval
-//!                 println!("{:?}", interval);
-//!                 // wait 500ms
-//!                 tokio::time::sleep(Duration::from_millis(500)).await;
-//!             }
-//!         });
-//!     }
-//!
-//!     // await some tasks
-//!     tokio::join![
-//!         do_work(),
-//!         do_work(),
-//!         do_work(),
-//!     ];
-//!
-//!     Ok(())
-//! }
-//!
-//! async fn do_work() {
-//!     for _ in 0..25 {
-//!         tokio::task::yield_now().await;
-//!         tokio::time::sleep(Duration::from_millis(100)).await;
-//!     }
-//! }
-//! ```
+
+#![cfg_attr(
+    all(tokio_unstable, feature = "rt"),
+    doc = r##"
+### Monitoring runtime metrics (unstable)
+[Monitor][RuntimeMonitor] key [metrics][RuntimeMetrics] of a tokio runtime.
+**This functionality requires `tokio_unstable` and the crate feature `rt`.**
+
+In the below example, a [`RuntimeMonitor`] is [constructed][RuntimeMonitor::new] and
+three tasks are spawned and awaited; meanwhile, a fourth task prints [metrics][RuntimeMetrics]
+in 500ms [intervals][RuntimeMonitor::intervals]:
+```
+use std::time::Duration;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let handle = tokio::runtime::Handle::current();
+    // construct the runtime metrics monitor
+    let runtime_monitor = tokio_metrics::RuntimeMonitor::new(&handle);
+
+    // print runtime metrics every 500ms
+    {
+        tokio::spawn(async move {
+            for interval in runtime_monitor.intervals() {
+                // pretty-print the metric interval
+                println!("{:?}", interval);
+                // wait 500ms
+                tokio::time::sleep(Duration::from_millis(500)).await;
+            }
+        });
+    }
+
+    // await some tasks
+    tokio::join![
+        do_work(),
+        do_work(),
+        do_work(),
+    ];
+
+    Ok(())
+}
+
+async fn do_work() {
+    for _ in 0..25 {
+        tokio::task::yield_now().await;
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+}
+```"##
+)]
 
 macro_rules! cfg_rt {
     ($($item:item)*) => {
@@ -107,8 +112,8 @@ macro_rules! cfg_rt {
 cfg_rt! {
     mod runtime;
     pub use runtime::{
-        RuntimeMonitor,
         RuntimeMetrics,
+        RuntimeMonitor,
     };
 }
 
