@@ -30,6 +30,11 @@ for sample in metrics.sample() {
 
 ## Relation to Tokio Console
 
+Currently, Tokio Console is primarily intended for **local** debugging. Tokio
+metrics is intended to enable reporting of metrics in production to your
+preferred tools. Longer term, it is likely that `tokio-metrics` will merge with
+Tokio Console.
+
 ## License
 
 This project is licensed under the [MIT license].
