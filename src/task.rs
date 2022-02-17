@@ -524,10 +524,6 @@ pin_project! {
 pub struct TaskMetrics {
     /// The number of tasks instrumented.
     ///
-    /// ##### Derived metrics
-    /// - **[`extant_count`][TaskMetrics::extant_count]**   
-    ///   The number of extant tasks (i.e., instrumented, but not yet dropped).
-    ///
     /// ##### Examples
     /// ```
     /// #[tokio::main]
@@ -557,10 +553,6 @@ pub struct TaskMetrics {
     pub instrumented_count: u64,
 
     /// The number of tasks dropped.
-    ///
-    /// ##### Derived metrics
-    /// - **[`extant_count`][TaskMetrics::extant_count]**   
-    ///   The number of extant tasks (i.e., instrumented, but not yet dropped).
     /// 
     /// ##### Examples
     /// ```
@@ -1766,15 +1758,6 @@ impl RawMetrics {
 }
 
 impl TaskMetrics {
-    /// The number of extant tasks (i.e., instrumented, but not yet dropped).
-    /// 
-    /// ##### Definition
-    /// This metric is derived from 
-    /// [`TaskMetrics::instrumented_count`] - [`TaskMetrics::dropped_count`].
-    pub fn extant_count(&self) -> u64 {
-        self.instrumented_count.wrapping_sub(self.dropped_count)
-    }
-
     /// The mean duration elapsed between the instant tasks are instrumented, and the instant they
     /// are first polled.
     ///
