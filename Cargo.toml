@@ -18,11 +18,13 @@ tokio = { version = "1.15.0", features = ["rt", "stats", "time", "macros"], opti
 tokio = { path = "../tokio/tokio" }
 
 [dev-dependencies]
+axum = "0.4.5"
 criterion = "0.3.4"
 futures = "0.3"
 num_cpus = "1.13.1"
 tokio = { version = "1.15.0", features = ["full", "rt", "time", "test-util"] }
-
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 
 [[bench]]
 name = "poll_overhead"
