@@ -1,0 +1,107 @@
+name: CI
+
+on:
+  push:
+    branches:
+    - main
+  pull_request: {}
+
+env:
+  RUSTFLAGS: -Dwarnings
+  RUST_BACKTRACE: 1
+  # Change to specific Rust release to pin
+  rust_stable: stable
+  rust_clippy: 1.52.0
+  rust_min: 1.49.0
+
+jobs:
+  check:
+    # Run `cargo check` first to ensure that the pushed code at least compiles.
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@master
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: ${{ env.rust_stable }}
+        override: true
+        profile: minimal
+        components: clippy, rustfmt
+    - uses: Swatinem/rust-cache@v1
+    - name: Check
+      uses: actions-rs/cargo@v1
+      with:
+        command: clippy
+        args: --all --all-targets --all-features
+    - name: rustfmt
+      uses: actions-rs/cargo@v1
+      with:
+        command: fmt
+        args: --all -- --check
+
+  check-docs:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@master
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: ${{ env.rust_stable }}
+        override: true
+        profile: minimal
+    - uses: Swatinem/rust-cache@v1
+    - name: cargo doc
+      env:
+        RUSTDOCFLAGS: "-D broken-intra-doc-links"
+      run: cargo doc --all-features --no-deps
+
+  cargo-hack:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@master
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: ${{ env.rust_stable }}
+        override: true
+        profile: minimal
+    - uses: Swatinem/rust-cache@v1
+    - name: Install cargo-hack
+      run: |
+        curl -LsSf https://github.com/taiki-e/cargo-hack/releases/latest/download/cargo-hack-x86_64-unknown-linux-gnu.tar.gz | tar xzf - -C ~/.cargo/bin
+    - name: cargo hack check
+      run: cargo hack check --each-feature --no-dev-deps --all
+
+  test-versions:
+    needs: check
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rust: [${{ env.rust_stable }}, ${{ env.rust_nightly }}]
+    steps:
+    - uses: actions/checkout@master
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: ${{ matrix.rust }}
+        override: true
+        profile: minimal
+    - uses: Swatinem/rust-cache@v1
+    - name: Run tests
+      uses: actions-rs/cargo@v1
+      with:
+        command: test
+        args: --all --all-features --all-targets
+
+  test-docs:
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@master
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: ${{ env.rust_stable }}
+        override: true
+        profile: minimal
+    - uses: Swatinem/rust-cache@v1
+    - name: Run doc tests
+      uses: actions-rs/cargo@v1
+      with:
+        command: test
+        args: --all-features --doc
