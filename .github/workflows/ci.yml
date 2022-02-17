@@ -43,6 +43,7 @@ jobs:
   check-docs:
     runs-on: ubuntu-latest
     env:
+      RUSTDOCFLAGS: -D broken-intra-doc-links --cfg tokio_unstable
       RUSTCFLAGS: --cfg tokio_unstable
     steps:
     - uses: actions/checkout@master
@@ -53,9 +54,6 @@ jobs:
         profile: minimal
     - uses: Swatinem/rust-cache@v1
     - name: cargo doc
-      env:
-        RUSTDOCFLAGS: "-D broken-intra-doc-links --cfg tokio_unstable"
-        RUSTCFLAGS: --cfg tokio_unstable
       run: cargo doc --all-features --no-deps
 
   cargo-hack:
