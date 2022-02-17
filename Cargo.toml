@@ -14,9 +14,6 @@ futures-util = "0.3.19"
 pin-project-lite = "0.2.7"
 tokio = { version = "1.15.0", features = ["rt", "stats", "time", "macros"], optional = true }
 
-[patch.crates-io]
-tokio = { path = "../tokio/tokio" }
-
 [dev-dependencies]
 axum = "0.4.5"
 criterion = "0.3.4"
