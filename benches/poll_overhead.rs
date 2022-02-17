@@ -2,7 +2,7 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use futures::task;
 use tokio_metrics::TaskMonitor;
 use std::iter;
-use std::future::{self, Future};
+use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::thread;
@@ -29,8 +29,8 @@ fn bench_poll(c: &mut Criterion) {
             let start = Arc::new(Barrier::new(num_cpus + 1));
             let stop = Arc::new(Barrier::new(num_cpus + 1));
 
-            let workers: Vec<_> =
-                iter::repeat((monitor.clone(), start.clone(), stop.clone()))
+            let mut workers: Vec<_> =
+                iter::repeat((monitor, start.clone(), stop.clone()))
                     .take(num_cpus)
                     .map(|(monitor, start, stop)| {
                         thread::spawn(move || {
@@ -52,7 +52,7 @@ fn bench_poll(c: &mut Criterion) {
             start.wait();
             stop.wait();
 
-            let elapsed: Duration = workers.into_iter().map(|w| w.join().unwrap()).sum();
+            let elapsed: Duration = workers.drain(..).map(|w| w.join().unwrap()).sum();
 
             elapsed / (num_cpus as u32)
         })
