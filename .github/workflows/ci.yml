@@ -79,14 +79,11 @@ jobs:
     runs-on: ubuntu-latest
     env:
       RUSTFLAGS: --cfg tokio_unstable -Dwarnings
-    strategy:
-      matrix:
-        rust: ["rust_stable", "rust_nightly"]
     steps:
     - uses: actions/checkout@master
     - uses: actions-rs/toolchain@v1
       with:
-        toolchain: ${{ env[matrix.rust] }}
+        toolchain: ${{ env.rust_stable }}
         override: true
         profile: minimal
     - uses: Swatinem/rust-cache@v1
