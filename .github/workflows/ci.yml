@@ -18,6 +18,8 @@ jobs:
   check:
     # Run `cargo check` first to ensure that the pushed code at least compiles.
     runs-on: ubuntu-latest
+    env:
+      RUSTCFLAGS: --cfg tokio_unstable
     steps:
     - uses: actions/checkout@master
     - uses: actions-rs/toolchain@v1
@@ -40,6 +42,8 @@ jobs:
 
   check-docs:
     runs-on: ubuntu-latest
+    env:
+      RUSTCFLAGS: --cfg tokio_unstable
     steps:
     - uses: actions/checkout@master
     - uses: actions-rs/toolchain@v1
@@ -56,6 +60,8 @@ jobs:
 
   cargo-hack:
     runs-on: ubuntu-latest
+    env:
+      RUSTCFLAGS: --cfg tokio_unstable
     steps:
     - uses: actions/checkout@master
     - uses: actions-rs/toolchain@v1
@@ -73,6 +79,8 @@ jobs:
   test-versions:
     needs: check
     runs-on: ubuntu-latest
+    env:
+      RUSTCFLAGS: --cfg tokio_unstable
     strategy:
       matrix:
         rust: ["rust_stable", "rust_nightly"]
