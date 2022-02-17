@@ -2,6 +2,7 @@
 name = "tokio-metrics"
 version = "0.1.0"
 edition = "2021"
+readme = "README.md"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -12,20 +13,29 @@ rt = ["tokio"]
 [dependencies]
 futures-util = "0.3.19"
 pin-project-lite = "0.2.7"
-tokio = { version = "1.15.0", features = ["rt", "stats", "time", "macros"], optional = true }
-
-[patch.crates-io]
-tokio = { path = "../tokio/tokio" }
+tokio = { version = "1.15.0", features = ["rt", "stats", "time"], optional = true }
 
 [dev-dependencies]
 axum = "0.4.5"
 criterion = "0.3.4"
-futures = "0.3"
+futures = "0.3.21"
 num_cpus = "1.13.1"
+serde = { version = "1.0.136", features = ["derive"] }
+serde_json = "1.0.79"
 tokio = { version = "1.15.0", features = ["full", "rt", "time", "test-util"] }
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+
+[[example]]
+name = "runtime"
+required-features = ["rt"]
 
 [[bench]]
 name = "poll_overhead"
 harness = false
+
+[package.metadata.docs.rs]
+all-features = true
+# enable unstable features in the documentation
+rustdoc-args = ["--cfg", "docsrs", "--cfg", "tokio_unstable"]
+# it's necessary to _also_ pass `--cfg tokio_unstable` to rustc, or else
+# dependencies will not be enabled, and the docs build will fail.
+rustc-args = ["--cfg", "tokio_unstable"]

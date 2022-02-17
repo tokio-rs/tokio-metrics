@@ -5,7 +5,13 @@ use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering::SeqCst};
 use std::sync::Arc;
 use std::task::{Context, Poll};
+
+#[cfg(any(feature = "rt"))]
 use tokio::time::{Duration, Instant};
+
+#[cfg(not(any(feature = "rt")))]
+use std::time::{Duration, Instant};
+
 /// Monitors key metrics of instrumented tasks.
 ///
 /// ### Basic Usage
