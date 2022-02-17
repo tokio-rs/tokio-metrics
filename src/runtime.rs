@@ -77,6 +77,8 @@ pub struct RuntimeMetrics {
     ///     assert_eq!(next_interval().workers_count, 10);
     /// }
     /// ```
+    ///
+    /// [`tokio::main`]: https://docs.rs/tokio/latest/tokio/attr.main.html
     /// 
     /// When using the `current_thread` runtime, the return value is always `1`; e.g.:
     /// ```
