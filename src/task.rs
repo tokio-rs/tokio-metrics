@@ -1757,6 +1757,12 @@ impl RawMetrics {
     }
 }
 
+impl Default for TaskMonitor {
+    fn default() -> TaskMonitor {
+        TaskMonitor::new()
+    }
+}
+
 impl TaskMetrics {
     /// The mean duration elapsed between the instant tasks are instrumented, and the instant they
     /// are first polled.
@@ -2326,7 +2332,7 @@ impl<T: Future> Future for Instrumented<T> {
         state.waker.register(cx.waker());
 
         // Get the instrumented waker
-        let waker_ref = futures_util::task::waker_ref(&state);
+        let waker_ref = futures_util::task::waker_ref(state);
         let mut cx = Context::from_waker(&*waker_ref);
 
         // Poll the task
