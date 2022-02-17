@@ -50,7 +50,8 @@ jobs:
     - uses: Swatinem/rust-cache@v1
     - name: cargo doc
       env:
-        RUSTDOCFLAGS: "-D broken-intra-doc-links"
+        RUSTDOCFLAGS: "-D broken-intra-doc-links --cfg tokio_unstable"
+        RUSTCFLAGS: --cfg tokio_unstable
       run: cargo doc --all-features --no-deps
 
   cargo-hack:
@@ -105,3 +106,6 @@ jobs:
       with:
         command: test
         args: --all-features --doc
+      env:
+        RUSTDOCARGS: --cfg tokio_unstable
+        RUSTCARGS: --cfg tokio_unstable
