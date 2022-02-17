@@ -62,7 +62,7 @@ pub struct RuntimeMetrics {
     /// [`worker_threads`][`tokio::runtime::Builder::worker_threads`] with
     /// [`tokio::runtime::Builder`], or by parameterizing [`tokio::main`].
     ///
-    /// ### Examples
+    /// ##### Examples
     /// In the below example, the number of workers is set by parameterizing [`tokio::main`]:
     /// ```
     /// use tokio::runtime::Handle;
@@ -74,7 +74,7 @@ pub struct RuntimeMetrics {
     ///     let mut intervals = monitor.intervals();
     ///     let mut next_interval = || intervals.next().unwrap();
     /// 
-    ///     assert_eq!(next_interval().num_workers, 10);
+    ///     assert_eq!(next_interval().workers_count, 10);
     /// }
     /// ```
     /// 
@@ -89,7 +89,7 @@ pub struct RuntimeMetrics {
     ///     let mut intervals = monitor.intervals();
     ///     let mut next_interval = || intervals.next().unwrap();
     /// 
-    ///     assert_eq!(next_interval().num_workers, 1);
+    ///     assert_eq!(next_interval().workers_count, 1);
     /// }
     /// ```
     /// 
@@ -104,10 +104,10 @@ pub struct RuntimeMetrics {
     ///     let mut intervals = monitor.intervals();
     ///     let mut next_interval = || intervals.next().unwrap();
     ///
-    ///     assert_eq!(next_interval().num_workers, handle.metrics().num_workers());
+    ///     assert_eq!(next_interval().workers_count, handle.metrics().num_workers());
     /// }
     /// ```
-    pub num_workers: usize,
+    pub workers_count: usize,
 
     /// The number of times worker threads parked.
     ///
@@ -115,15 +115,15 @@ pub struct RuntimeMetrics {
     /// new inbound events to process. This usually means the worker has processed all pending work
     /// and is currently idle.
     ///
-    /// ### Definition
+    /// ##### Definition
     /// This metric is derived from the sum of [`tokio::runtime::RuntimeMetrics::worker_park_count`]
     /// across all worker threads.
     /// 
-    /// ### See also
-    /// - [`RuntimeMetrics::max_parks`]
-    /// - [`RuntimeMetrics::min_parks`]
+    /// ##### See also
+    /// - [`RuntimeMetrics::max_park_count`]
+    /// - [`RuntimeMetrics::min_park_count`]
     ///
-    /// ### Examples
+    /// ##### Examples
     /// ```
     /// #[tokio::main(flavor = "multi_thread", worker_threads = 2)]
     /// async fn main() {
@@ -133,12 +133,12 @@ pub struct RuntimeMetrics {
     ///     let mut next_interval = || intervals.next().unwrap();
     /// 
     ///     let interval = next_interval(); // end of interval 1
-    ///     assert_eq!(interval.num_parks, 0);
+    ///     assert_eq!(interval.total_park_count, 0);
     /// 
     ///     induce_parks().await;
     /// 
     ///     let interval = next_interval(); // end of interval 2
-    ///     assert!(interval.num_parks >= 1); // usually 1 or 2 parks
+    ///     assert!(interval.total_park_count >= 1); // usually 1 or 2 parks
     /// }
     /// 
     /// async fn induce_parks() {
@@ -147,40 +147,40 @@ pub struct RuntimeMetrics {
     ///     }).await;
     /// }
     /// ```
-    pub num_parks: u64,
+    pub total_park_count: u64,
 
     /// The maximum number of times any worker thread parked.
     /// 
-    /// ### Definition
+    /// ##### Definition
     /// This metric is derived from the maximum of 
     /// [`tokio::runtime::RuntimeMetrics::worker_park_count`] across all worker threads.
     /// 
-    /// ### See also
-    /// - [`RuntimeMetrics::num_parks`]
-    /// - [`RuntimeMetrics::min_parks`]
-    pub max_parks: u64,
+    /// ##### See also
+    /// - [`RuntimeMetrics::total_park_count`]
+    /// - [`RuntimeMetrics::min_park_count`]
+    pub max_park_count: u64,
 
     /// The minimum number of times any worker thread parked.
     /// 
-    /// ### Definition
+    /// ##### Definition
     /// This metric is derived from the maximum of 
     /// [`tokio::runtime::RuntimeMetrics::worker_park_count`] across all worker threads.
     /// 
-    /// ### See also
-    /// - [`RuntimeMetrics::num_parks`]
-    /// - [`RuntimeMetrics::max_parks`]
-    pub min_parks: u64,
+    /// ##### See also
+    /// - [`RuntimeMetrics::total_park_count`]
+    /// - [`RuntimeMetrics::max_park_count`]
+    pub min_park_count: u64,
 
     /// The number of times worker threads unparked but performed no work before parking again.
     ///
     /// The worker no-op count increases by one each time the worker unparks the thread but finds
     /// no new work and goes back to sleep. This indicates a false-positive wake up.
     /// 
-    /// ### Definition
+    /// ##### Definition
     /// This metric is derived from the sum of [`tokio::runtime::RuntimeMetrics::worker_noop_count`] 
     /// across all worker threads.
     ///
-    /// ### Examples
+    /// ##### Examples
     /// Unfortunately, there isn't a great way to reliably induce no-op parks, as they occur as
     /// false-positive events under concurrency.
     /// 
@@ -193,17 +193,17 @@ pub struct RuntimeMetrics {
     ///     let mut intervals = monitor.intervals();
     ///     let mut next_interval = || intervals.next().unwrap();
     /// 
-    ///     assert_eq!(next_interval().num_parks, 0);
+    ///     assert_eq!(next_interval().total_park_count, 0);
     ///     
     ///     async {
     ///         tokio::time::sleep(std::time::Duration::from_millis(1)).await;
     ///     }.await;
     /// 
-    ///     assert!(next_interval().num_parks > 0);
+    ///     assert!(next_interval().total_park_count > 0);
     /// }
     /// ```
     /// 
-    /// /// The below example triggers fewer than two parks in the multi-threaded runtime:
+    /// The below example triggers fewer than two parks in the multi-threaded runtime:
     /// ```
     /// #[tokio::main(flavor = "multi_thread")]
     /// async fn main() {
@@ -212,40 +212,40 @@ pub struct RuntimeMetrics {
     ///     let mut intervals = monitor.intervals();
     ///     let mut next_interval = || intervals.next().unwrap();
     /// 
-    ///     assert_eq!(next_interval().num_noops, 0);
+    ///     assert_eq!(next_interval().total_noop_count, 0);
     ///     
     ///     async {
     ///         tokio::time::sleep(std::time::Duration::from_millis(1)).await;
     ///     }.await;
     /// 
-    ///     assert!(next_interval().num_noops > 0);
+    ///     assert!(next_interval().total_noop_count > 0);
     /// }
     /// ```
-    pub num_noops: u64,
+    pub total_noop_count: u64,
 
     /// The maximum number of times any worker thread unparked but performed no work before parking
     /// again.
     /// 
-    /// ### Definition
+    /// ##### Definition
     /// This metric is derived from the maximum of 
     /// [`tokio::runtime::RuntimeMetrics::worker_noop_count`] across all worker threads.
     /// 
-    /// ### See also
-    /// - [`RuntimeMetrics::num_noops`]
-    /// - [`RuntimeMetrics::min_noops`]
-    pub max_noops: u64,
+    /// ##### See also
+    /// - [`RuntimeMetrics::total_noop_count`]
+    /// - [`RuntimeMetrics::min_noop_count`]
+    pub max_noop_count: u64,
 
     /// The minimum number of times any worker thread unparked but performed no work before parking
     /// again.
     /// 
-    /// ### Definition
+    /// ##### Definition
     /// This metric is derived from the minimum of 
     /// [`tokio::runtime::RuntimeMetrics::worker_noop_count`] across all worker threads.
     /// 
-    /// ### See also
-    /// - [`RuntimeMetrics::num_noops`]
-    /// - [`RuntimeMetrics::max_noops`]
-    pub min_noops: u64,
+    /// ##### See also
+    /// - [`RuntimeMetrics::total_noop_count`]
+    /// - [`RuntimeMetrics::max_noop_count`]
+    pub min_noop_count: u64,
 
     /// The number of times worker threads stole tasks from another worker thread.
     ///
@@ -255,15 +255,15 @@ pub struct RuntimeMetrics {
     /// This metric only applies to the **multi-threaded** runtime and will always return `0` when 
     /// using the current thread runtime.
     /// 
-    /// ### Definition
+    /// ##### Definition
     /// This metric is derived from the sum of [`tokio::runtime::RuntimeMetrics::worker_steal_count`] for 
     /// all worker threads.
     /// 
-    /// ### See also
-    /// - [`RuntimeMetrics::min_steals`]
-    /// - [`RuntimeMetrics::max_steals`]
+    /// ##### See also
+    /// - [`RuntimeMetrics::min_steal_count`]
+    /// - [`RuntimeMetrics::max_steal_count`]
     ///
-    /// ### Examples
+    /// ##### Examples
     /// In the below example, a blocking channel is used to backup one worker thread:
     /// ```
     /// #[tokio::main(flavor = "multi_thread", worker_threads = 2)]
@@ -274,9 +274,9 @@ pub struct RuntimeMetrics {
     ///     let mut next_interval = || intervals.next().unwrap();
     /// 
     ///     let interval = next_interval(); // end of first sampling interval
-    ///     assert_eq!(interval.num_steals, 0);
-    ///     assert_eq!(interval.min_steals, 0);
-    ///     assert_eq!(interval.max_steals, 0);
+    ///     assert_eq!(interval.total_steal_count, 0);
+    ///     assert_eq!(interval.min_steal_count, 0);
+    ///     assert_eq!(interval.max_steal_count, 0);
     /// 
     ///     // induce a steal
     ///     async {
@@ -298,43 +298,43 @@ pub struct RuntimeMetrics {
     ///     }.await;
     ///     
     ///     let interval = { flush_metrics().await; next_interval() }; // end of interval 2
-    ///     assert_eq!(interval.num_steals, 1);
-    ///     assert_eq!(interval.min_steals, 0);
-    ///     assert_eq!(interval.max_steals, 1);
+    ///     assert_eq!(interval.total_steal_count, 1);
+    ///     assert_eq!(interval.min_steal_count, 0);
+    ///     assert_eq!(interval.max_steal_count, 1);
     /// 
     ///     let interval = { flush_metrics().await; next_interval() }; // end of interval 3
-    ///     assert_eq!(interval.num_steals, 0);
-    ///     assert_eq!(interval.min_steals, 0);
-    ///     assert_eq!(interval.max_steals, 0);
+    ///     assert_eq!(interval.total_steal_count, 0);
+    ///     assert_eq!(interval.min_steal_count, 0);
+    ///     assert_eq!(interval.max_steal_count, 0);
     /// }
     /// 
     /// async fn flush_metrics() {
     ///     let _ = tokio::time::sleep(std::time::Duration::ZERO).await;
     /// }
     /// ```
-    pub num_steals: u64,
+    pub total_steal_count: u64,
 
     /// The maximum number of times any worker thread stole tasks from another worker thread.
     /// 
-    /// ### Definition
+    /// ##### Definition
     /// This metric is derived from the maximum of [`tokio::runtime::RuntimeMetrics::worker_steal_count`] 
     /// across all worker threads.
     /// 
-    /// ### See also
-    /// - [`RuntimeMetrics::num_steals`]
-    /// - [`RuntimeMetrics::min_steals`]
-    pub max_steals: u64,
+    /// ##### See also
+    /// - [`RuntimeMetrics::total_steal_count`]
+    /// - [`RuntimeMetrics::min_steal_count`]
+    pub max_steal_count: u64,
 
     /// The minimum number of times any worker thread stole tasks from another worker thread.
     /// 
-    /// ### Definition
+    /// ##### Definition
     /// This metric is derived from the minimum of [`tokio::runtime::RuntimeMetrics::worker_steal_count`] 
     /// across all worker threads.
     /// 
-    /// ### See also
-    /// - [`RuntimeMetrics::num_steals`]
-    /// - [`RuntimeMetrics::max_steals`]
-    pub min_steals: u64,
+    /// ##### See also
+    /// - [`RuntimeMetrics::total_steal_count`]
+    /// - [`RuntimeMetrics::max_steal_count`]
+    pub min_steal_count: u64,
 
     /// The number of tasks scheduled from **outside** of the runtime.
     ///
@@ -342,10 +342,10 @@ pub struct RuntimeMetrics {
     /// the runtime. This usually means that a task is spawned or notified from a non-runtime 
     /// thread and must be queued using the Runtime's injection queue, which tends to be slower.
     ///
-    /// ### Definition
+    /// ##### Definition
     /// This metric is derived from [`tokio::runtime::RuntimeMetrics::remote_schedule_count`].
     ///
-    /// ### Examples
+    /// ##### Examples
     /// In the below example, a remote schedule is induced by spawning a system thread, then
     /// spawning a tokio task from that system thread:
     /// ```
@@ -383,16 +383,16 @@ pub struct RuntimeMetrics {
     /// runtime. This usually means that a task is spawned or notified from within a runtime thread
     /// and will be queued on the worker-local queue.
     ///
-    /// ### Definition
+    /// ##### Definition
     /// This metric is derived from the sum of 
     /// [`tokio::runtime::RuntimeMetrics::worker_local_schedule_count`] across all worker threads.
     /// 
-    /// ### See also
-    /// - [`RuntimeMetrics::min_local_schedules`]
-    /// - [`RuntimeMetrics::max_local_schedules`]
+    /// ##### See also
+    /// - [`RuntimeMetrics::min_local_schedule_count`]
+    /// - [`RuntimeMetrics::max_local_schedule_count`]
     ///
-    /// ### Examples
-    /// #### With `current_thread` runtime
+    /// ##### Examples
+    /// ###### With `current_thread` runtime
     /// In the below example, two tasks are spawned from the context of a third tokio task:
     /// ```
     /// #[tokio::main(flavor = "current_thread")]
@@ -403,7 +403,7 @@ pub struct RuntimeMetrics {
     ///     let mut next_interval = || intervals.next().unwrap();
     /// 
     ///     let interval = { flush_metrics().await; next_interval() }; // end interval 2
-    ///     assert_eq!(interval.num_local_schedules, 0);
+    ///     assert_eq!(interval.total_local_schedule_count, 0);
     /// 
     ///     let task = async {
     ///         tokio::spawn(async {}); // local schedule 1
@@ -413,12 +413,12 @@ pub struct RuntimeMetrics {
     ///     let handle = tokio::spawn(task); // local schedule 3
     /// 
     ///     let interval = { flush_metrics().await; next_interval() }; // end interval 2
-    ///     assert_eq!(interval.num_local_schedules, 3);
+    ///     assert_eq!(interval.total_local_schedule_count, 3);
     /// 
     ///     let _ = handle.await;
     /// 
     ///     let interval = { flush_metrics().await; next_interval() }; // end interval 3
-    ///     assert_eq!(interval.num_local_schedules, 0);
+    ///     assert_eq!(interval.total_local_schedule_count, 0);
     /// }
     /// 
     /// async fn flush_metrics() {
@@ -426,7 +426,7 @@ pub struct RuntimeMetrics {
     /// }
     /// ```
     /// 
-    /// #### With `multi_thread` runtime
+    /// ###### With `multi_thread` runtime
     /// In the below example, 100 tasks are spawned:
     /// ```
     /// #[tokio::main(flavor = "multi_thread", worker_threads = 2)]
@@ -437,7 +437,7 @@ pub struct RuntimeMetrics {
     ///     let mut next_interval = || intervals.next().unwrap();
     /// 
     ///     let interval = next_interval(); // end of interval 1
-    ///     assert_eq!(interval.num_local_schedules, 0);
+    ///     assert_eq!(interval.total_local_schedule_count, 0);
     /// 
     ///     use std::sync::atomic::{AtomicBool, Ordering};
     ///     static SPINLOCK: AtomicBool = AtomicBool::new(true);
@@ -461,36 +461,36 @@ pub struct RuntimeMetrics {
     ///     SPINLOCK.store(false, Ordering::SeqCst);
     /// 
     ///     let interval = { flush_metrics().await; next_interval() }; // end of interval 2
-    ///     assert_eq!(interval.num_local_schedules, 100 + 1);
+    ///     assert_eq!(interval.total_local_schedule_count, 100 + 1);
     /// }
     /// 
     /// async fn flush_metrics() {
     ///     let _ = tokio::time::sleep(std::time::Duration::ZERO).await;
     /// }
     /// ```
-    pub num_local_schedules: u64,
+    pub total_local_schedule_count: u64,
 
     /// The maximum number of tasks scheduled from any one worker thread.
     /// 
-    /// ### Definition
+    /// ##### Definition
     /// This metric is derived from the maximum of 
     /// [`tokio::runtime::RuntimeMetrics::worker_local_schedule_count`] for all worker threads.
     /// 
-    /// ### See also
-    /// - [`RuntimeMetrics::num_local_schedules`]
-    /// - [`RuntimeMetrics::min_local_schedules`]
-    pub max_local_schedules: u64,
+    /// ##### See also
+    /// - [`RuntimeMetrics::total_local_schedule_count`]
+    /// - [`RuntimeMetrics::min_local_schedule_count`]
+    pub max_local_schedule_count: u64,
 
     /// The minimum number of tasks scheduled from any one worker thread.
     /// 
-    /// ### Definition
+    /// ##### Definition
     /// This metric is derived from the minimum of 
     /// [`tokio::runtime::RuntimeMetrics::worker_local_schedule_count`] for all worker threads.
     /// 
-    /// ### See also
-    /// - [`RuntimeMetrics::num_local_schedules`]
-    /// - [`RuntimeMetrics::max_local_schedules`]
-    pub min_local_schedules: u64,
+    /// ##### See also
+    /// - [`RuntimeMetrics::total_local_schedule_count`]
+    /// - [`RuntimeMetrics::max_local_schedule_count`]
+    pub min_local_schedule_count: u64,
 
     /// The number of times worker threads saturated their local queues.
     ///
@@ -500,15 +500,15 @@ pub struct RuntimeMetrics {
     /// 
     /// This metric only applies to the **multi-threaded** scheduler.
     /// 
-    /// ### Definition
+    /// ##### Definition
     /// This metric is derived from the sum of 
     /// [`tokio::runtime::RuntimeMetrics::worker_overflow_count`] across all worker threads.
     /// 
-    /// ### See also
-    /// - [`RuntimeMetrics::min_overflowed`]
-    /// - [`RuntimeMetrics::max_overflowed`]
+    /// ##### See also
+    /// - [`RuntimeMetrics::min_overflow_count`]
+    /// - [`RuntimeMetrics::max_overflow_count`]
     ///
-    /// ### Examples
+    /// ##### Examples
     /// ```
     /// #[tokio::main(flavor = "multi_thread", worker_threads = 2)]
     /// async fn main() {
@@ -518,7 +518,7 @@ pub struct RuntimeMetrics {
     ///     let mut next_interval = || intervals.next().unwrap();
     /// 
     ///     let interval = next_interval(); // end of interval 1
-    ///     assert_eq!(interval.num_overflowed, 0);
+    ///     assert_eq!(interval.total_overflow_count, 0);
     /// 
     ///     use std::sync::atomic::{AtomicBool, Ordering};
     ///     static SPINLOCK: AtomicBool = AtomicBool::new(true);
@@ -541,50 +541,50 @@ pub struct RuntimeMetrics {
     ///     SPINLOCK.store(false, Ordering::SeqCst);
     /// 
     ///     let interval = { flush_metrics().await; next_interval() }; // end of interval 2
-    ///     assert_eq!(interval.num_overflowed, 1);
+    ///     assert_eq!(interval.total_overflow_count, 1);
     /// }
     /// 
     /// async fn flush_metrics() {
     ///     let _ = tokio::time::sleep(std::time::Duration::from_millis(1)).await;
     /// }
     /// ```
-    pub num_overflowed: u64,
+    pub total_overflow_count: u64,
 
     /// The maximum number of times any one worker saturated its local queue.
     /// 
-    /// ### Definition
+    /// ##### Definition
     /// This metric is derived from the maximum of 
     /// [`tokio::runtime::RuntimeMetrics::worker_overflow_count`] across all worker threads.
     /// 
-    /// ### See also
-    /// - [`RuntimeMetrics::num_overflowed`]
-    /// - [`RuntimeMetrics::min_overflowed`]
-    pub max_overflowed: u64,
+    /// ##### See also
+    /// - [`RuntimeMetrics::total_overflow_count`]
+    /// - [`RuntimeMetrics::min_overflow_count`]
+    pub max_overflow_count: u64,
 
     /// The minimum number of times any one worker saturated its local queue.
     /// 
-    /// ### Definition
+    /// ##### Definition
     /// This metric is derived from the maximum of 
     /// [`tokio::runtime::RuntimeMetrics::worker_overflow_count`] across all worker threads.
     /// 
-    /// ### See also
-    /// - [`RuntimeMetrics::num_overflowed`]
-    /// - [`RuntimeMetrics::max_overflowed`]
-    pub min_overflowed: u64,
+    /// ##### See also
+    /// - [`RuntimeMetrics::total_overflow_count`]
+    /// - [`RuntimeMetrics::max_overflow_count`]
+    pub min_overflow_count: u64,
 
     /// The number of tasks that have been polled across all worker threads.
     ///
     /// The worker poll count increases by one each time a worker polls a scheduled task.
     /// 
-    /// ### Definition
+    /// ##### Definition
     /// This metric is derived from the sum of 
     /// [`tokio::runtime::RuntimeMetrics::worker_poll_count`] across all worker threads.
     /// 
-    /// ### See also
-    /// - [`RuntimeMetrics::min_polls`]
-    /// - [`RuntimeMetrics::max_polls`]
+    /// ##### See also
+    /// - [`RuntimeMetrics::min_polls_count`]
+    /// - [`RuntimeMetrics::max_polls_count`]
     /// 
-    /// ### Examples
+    /// ##### Examples
     /// In the below example, 42 tasks are spawned and polled:
     /// ```
     /// #[tokio::main(flavor = "current_thread")]
@@ -595,9 +595,9 @@ pub struct RuntimeMetrics {
     ///     let mut next_interval = || intervals.next().unwrap();
     /// 
     ///     let interval = { flush_metrics().await; next_interval() }; // end of interval 1
-    ///     assert_eq!(interval.num_polls, 0);
-    ///     assert_eq!(interval.min_polls, 0);
-    ///     assert_eq!(interval.max_polls, 0);
+    ///     assert_eq!(interval.total_polls_count, 0);
+    ///     assert_eq!(interval.min_polls_count, 0);
+    ///     assert_eq!(interval.max_polls_count, 0);
     /// 
     ///     const N: u64 = 42;
     /// 
@@ -606,53 +606,53 @@ pub struct RuntimeMetrics {
     ///     }
     /// 
     ///     let interval = { flush_metrics().await; next_interval() }; // end of interval 2
-    ///     assert_eq!(interval.num_polls, N);
-    ///     assert_eq!(interval.min_polls, N);
-    ///     assert_eq!(interval.max_polls, N);
+    ///     assert_eq!(interval.total_polls_count, N);
+    ///     assert_eq!(interval.min_polls_count, N);
+    ///     assert_eq!(interval.max_polls_count, N);
     /// }
     /// 
     /// async fn flush_metrics() {
     ///     let _ = tokio::task::yield_now().await;
     /// }
     /// ```
-    pub num_polls: u64,
+    pub total_polls_count: u64,
 
     /// The maximum number of tasks that have been polled in any worker thread.
     /// 
-    /// ### Definition
+    /// ##### Definition
     /// This metric is derived from the maximum of 
     /// [`tokio::runtime::RuntimeMetrics::worker_poll_count`] across all worker threads.
     /// 
-    /// ### See also
-    /// - [`RuntimeMetrics::num_polls`]
-    /// - [`RuntimeMetrics::min_polls`]
-    pub max_polls: u64,
+    /// ##### See also
+    /// - [`RuntimeMetrics::total_polls_count`]
+    /// - [`RuntimeMetrics::min_polls_count`]
+    pub max_polls_count: u64,
 
     /// The minimum number of tasks that have been polled in any worker thread.
     /// 
-    /// ### Definition
+    /// ##### Definition
     /// This metric is derived from the minimum of 
     /// [`tokio::runtime::RuntimeMetrics::worker_poll_count`] across all worker threads.
     /// 
-    /// ### See also
-    /// - [`RuntimeMetrics::num_polls`]
-    /// - [`RuntimeMetrics::max_polls`]
-    pub min_polls: u64,
+    /// ##### See also
+    /// - [`RuntimeMetrics::total_polls_count`]
+    /// - [`RuntimeMetrics::max_polls_count`]
+    pub min_polls_count: u64,
 
     /// The amount of time worker threads were busy.
     /// 
     /// The worker busy duration increases whenever the worker is spending time processing work.
     /// Using this value can indicate the total load of workers.
     /// 
-    /// ### Definition
+    /// ##### Definition
     /// This metric is derived from the sum of
     /// [`tokio::runtime::RuntimeMetrics::worker_total_busy_duration`] across all worker threads.
     /// 
-    /// ### See also
-    /// - [`RuntimeMetrics::min_time_busy`]
-    /// - [`RuntimeMetrics::max_time_busy`]
+    /// ##### See also
+    /// - [`RuntimeMetrics::min_busy_duration`]
+    /// - [`RuntimeMetrics::max_busy_duration`]
     ///
-    /// ### Examples
+    /// ##### Examples
     /// In the below example, tasks spend a total of 3s busy:
     /// ```
     /// use tokio::time::Duration;
@@ -686,11 +686,11 @@ pub struct RuntimeMetrics {
     ///     // flush metrics
     ///     drop(rt);
     /// 
-    ///     let total_time = start.elapsed();
+    ///     let elapsed = start.elapsed();
     /// 
     ///     let interval =  next_interval(); // end of interval 2
-    ///     assert!(interval.total_time_busy >= delay_1s + delay_3s);
-    ///     assert!(interval.total_time_busy <= total_time);
+    ///     assert!(interval.total_busy_duration >= delay_1s + delay_3s);
+    ///     assert!(interval.total_busy_duration <= elapsed);
     /// }
     /// 
     /// fn time<F>(task: F) -> Duration
@@ -727,7 +727,7 @@ pub struct RuntimeMetrics {
     /// 
     ///     let delay_1s = Duration::from_secs(1);
     /// 
-    ///     let total_time = time(|| rt.block_on(async {
+    ///     let elapsed = time(|| rt.block_on(async {
     ///         // keep the main task busy for 1s
     ///         spin_for(delay_1s);
     ///     }));
@@ -736,8 +736,8 @@ pub struct RuntimeMetrics {
     ///     drop(rt);
     /// 
     ///     let interval =  next_interval(); // end of interval 2
-    ///     assert!(interval.total_time_busy >= delay_1s); // FAIL
-    ///     assert!(interval.total_time_busy <= total_time);
+    ///     assert!(interval.total_busy_duration >= delay_1s); // FAIL
+    ///     assert!(interval.total_busy_duration <= elapsed);
     /// }
     /// 
     /// fn time<F>(task: F) -> Duration
@@ -755,41 +755,41 @@ pub struct RuntimeMetrics {
     ///     while start.elapsed() <= duration {}
     /// }
     /// ```
-    pub total_time_busy: Duration,
+    pub total_busy_duration: Duration,
 
     /// The maximum amount of time a worker thread was busy.
     /// 
-    /// ### Definition
+    /// ##### Definition
     /// This metric is derived from the maximum of
     /// [`tokio::runtime::RuntimeMetrics::worker_total_busy_duration`] across all worker threads.
     /// 
-    /// ### See also
-    /// - [`RuntimeMetrics::total_time_busy`]
-    /// - [`RuntimeMetrics::min_time_busy`]
-    pub max_time_busy: Duration,
+    /// ##### See also
+    /// - [`RuntimeMetrics::total_busy_duration`]
+    /// - [`RuntimeMetrics::min_busy_duration`]
+    pub max_busy_duration: Duration,
 
     /// The minimum amount of time a worker thread was busy.
     /// 
-    /// ### Definition
+    /// ##### Definition
     /// This metric is derived from the minimum of
     /// [`tokio::runtime::RuntimeMetrics::worker_total_busy_duration`] across all worker threads.
     /// 
-    /// ### See also
-    /// - [`RuntimeMetrics::total_time_busy`]
-    /// - [`RuntimeMetrics::max_time_busy`]
-    pub min_time_busy: Duration,
+    /// ##### See also
+    /// - [`RuntimeMetrics::total_busy_duration`]
+    /// - [`RuntimeMetrics::max_busy_duration`]
+    pub min_busy_duration: Duration,
 
     /// The number of tasks currently scheduled in the runtime's injection queue.
     ///
-    /// Tasks that are spanwed or notified from a non-runtime thread are scheduled using the 
+    /// Tasks that are spawned or notified from a non-runtime thread are scheduled using the 
     /// runtime's injection queue. This metric returns the **current** number of tasks pending in
     /// the injection queue. As such, the returned value may increase or decrease as new tasks are
     /// scheduled and processed.
     /// 
-    /// ### Definition
+    /// ##### Definition
     /// This metric is derived from [`tokio::runtime::RuntimeMetrics::injection_queue_depth`].
     ///
-    /// ### Example
+    /// ##### Example
     /// ```
     /// # let current_thread = tokio::runtime::Builder::new_current_thread()
     /// #     .enable_all()
@@ -825,21 +825,25 @@ pub struct RuntimeMetrics {
     /// assert_eq!(interval.num_remote_schedules, 2);
     /// # }
     /// ```
-    pub remote_queue_depth: usize,
+    pub injection_queue_depth: usize,
 
-    /// The number of tasks currently scheduled in workers' local queues.
+    /// The total number of tasks currently scheduled in workers' local queues.
     ///
     /// Tasks that are spawned or notified from within a runtime thread are scheduled using that
     /// worker's local queue. This metric returns the **current** number of tasks pending in all
     /// workers' local queues. As such, the returned value may increase or decrease as new tasks
     /// are scheduled and processed.
     ///
-    /// ### Definition
+    /// ##### Definition
     /// This metric is derived from [`tokio::runtime::RuntimeMetrics::worker_local_queue_depth`].
     ///
-    /// ### Example
+    /// ##### See also
+    /// - [`RuntimeMetrics::min_local_queue_depth`]
+    /// - [`RuntimeMetrics::max_local_queue_depth`]
     /// 
-    /// #### With `current_thread` runtime
+    /// ##### Example
+    /// 
+    /// ###### With `current_thread` runtime
     /// The below example spawns 100 tasks:
     /// ```
     /// #[tokio::main(flavor = "current_thread")]
@@ -852,18 +856,18 @@ pub struct RuntimeMetrics {
     ///     let mut next_interval = || intervals.next().unwrap();
     /// 
     ///     let interval =  next_interval(); // end of interval 1
-    ///     assert_eq!(interval.num_local_scheduled_tasks, 0);
+    ///     assert_eq!(interval.total_local_queue_depth, 0);
     /// 
     /// 
     ///     for _ in 0..N {
     ///         tokio::spawn(async {});
     ///     }
     ///     let interval =  next_interval(); // end of interval 2
-    ///     assert_eq!(interval.num_local_scheduled_tasks, N);
+    ///     assert_eq!(interval.total_local_queue_depth, N);
     /// }
     /// ```
     /// 
-    /// #### With `multi_thread runtime
+    /// ###### With `multi_thread runtime
     /// The below example spawns 100 tasks:
     /// ```
     /// #[tokio::main(flavor = "multi_thread", worker_threads = 2)]
@@ -876,7 +880,7 @@ pub struct RuntimeMetrics {
     ///     let mut next_interval = || intervals.next().unwrap();
     /// 
     ///     let interval =  next_interval(); // end of interval 1
-    ///     assert_eq!(interval.num_local_scheduled_tasks, 0);
+    ///     assert_eq!(interval.total_local_queue_depth, 0);
     /// 
     ///     use std::sync::atomic::{AtomicBool, Ordering};
     ///     static SPINLOCK_A: AtomicBool = AtomicBool::new(true);
@@ -900,31 +904,49 @@ pub struct RuntimeMetrics {
     ///     SPINLOCK_A.store(false, Ordering::SeqCst);
     /// 
     ///     let interval =  next_interval(); // end of interval 2
-    ///     assert_eq!(interval.num_local_scheduled_tasks, N - 1);
+    ///     assert_eq!(interval.total_local_queue_depth, N - 1);
     /// 
     ///     SPINLOCK_B.store(false, Ordering::SeqCst);
     /// }
     /// ```
-    pub num_local_scheduled_tasks: usize,
+    pub total_local_queue_depth: usize,
 
-    pub max_local_scheduled_tasks: usize,
+    /// The maximum number of tasks currently scheduled any worker's local queue.
+    /// 
+    /// ##### Definition
+    /// This metric is derived from the maximum of 
+    /// [`tokio::runtime::RuntimeMetrics::worker_local_queue_depth`] across all worker threads.
+    /// 
+    /// ##### See also
+    /// - [`RuntimeMetrics::total_local_queue_depth`]
+    /// - [`RuntimeMetrics::min_local_queue_depth`]
+    pub max_local_queue_depth: usize,
 
-    pub min_local_scheduled_tasks: usize,
+    /// The minimum number of tasks currently scheduled any worker's local queue.
+    /// 
+    /// ##### Definition
+    /// This metric is derived from the minimum of 
+    /// [`tokio::runtime::RuntimeMetrics::worker_local_queue_depth`] across all worker threads.
+    /// 
+    /// ##### See also
+    /// - [`RuntimeMetrics::total_local_queue_depth`]
+    /// - [`RuntimeMetrics::max_local_queue_depth`]
+    pub min_local_queue_depth: usize,
 
     /// Total amount of time elapsed since observing runtime metrics.
-    pub total_time: Duration,
+    pub elapsed: Duration,
 }
 
 /// Snapshot of per-worker metrics
 struct Worker {
     worker: usize,
-    num_parks: u64,
-    num_noops: u64,
-    num_steals: u64,
-    num_local_schedules: u64,
-    num_overflowed: u64,
-    num_polls: u64,
-    total_time_busy: Duration,
+    total_park_count: u64,
+    total_noop_count: u64,
+    total_steal_count: u64,
+    total_local_schedule_count: u64,
+    total_overflow_count: u64,
+    total_polls_count: u64,
+    total_busy_duration: Duration,
 }
 
 impl RuntimeMonitor {
@@ -953,18 +975,18 @@ impl RuntimeMonitor {
                 let num_remote_schedules = self.runtime.remote_schedule_count();
 
                 let mut metrics = RuntimeMetrics {
-                    num_workers: self.runtime.num_workers(),
-                    total_time: now - self.started_at,
-                    remote_queue_depth: self.runtime.injection_queue_depth(),
+                    workers_count: self.runtime.num_workers(),
+                    elapsed: now - self.started_at,
+                    injection_queue_depth: self.runtime.injection_queue_depth(),
                     num_remote_schedules: num_remote_schedules - self.num_remote_schedules,
-                    min_parks: u64::MAX,
-                    min_noops: u64::MAX,
-                    min_steals: u64::MAX,
-                    min_local_schedules: u64::MAX,
-                    min_overflowed: u64::MAX,
-                    min_polls: u64::MAX,
-                    min_time_busy: Duration::from_secs(1000000000),
-                    min_local_scheduled_tasks: usize::MAX,
+                    min_park_count: u64::MAX,
+                    min_noop_count: u64::MAX,
+                    min_steal_count: u64::MAX,
+                    min_local_schedule_count: u64::MAX,
+                    min_overflow_count: u64::MAX,
+                    min_polls_count: u64::MAX,
+                    min_busy_duration: Duration::from_secs(1000000000),
+                    min_local_queue_depth: usize::MAX,
                     .. Default::default()
                 };
 
@@ -1005,13 +1027,13 @@ impl Worker {
     fn new(worker: usize, rt: &runtime::RuntimeMetrics) -> Worker {
         Worker {
             worker,
-            num_parks: rt.worker_park_count(worker),
-            num_noops: rt.worker_noop_count(worker),
-            num_steals: rt.worker_steal_count(worker),
-            num_local_schedules: rt.worker_local_schedule_count(worker),
-            num_overflowed: rt.worker_overflow_count(worker),
-            num_polls: rt.worker_poll_count(worker),
-            total_time_busy: rt.worker_total_busy_duration(worker),
+            total_park_count: rt.worker_park_count(worker),
+            total_noop_count: rt.worker_noop_count(worker),
+            total_steal_count: rt.worker_steal_count(worker),
+            total_local_schedule_count: rt.worker_local_schedule_count(worker),
+            total_overflow_count: rt.worker_overflow_count(worker),
+            total_polls_count: rt.worker_poll_count(worker),
+            total_busy_duration: rt.worker_total_busy_duration(worker),
         }
     }
 
@@ -1034,41 +1056,41 @@ impl Worker {
             }};
         }
 
-        metric!(num_parks, max_parks, min_parks, worker_park_count);
-        metric!(num_noops, max_noops, min_noops, worker_noop_count);
-        metric!(num_steals, max_steals, min_steals, worker_steal_count);
-        metric!(num_local_schedules, max_local_schedules, min_local_schedules, worker_local_schedule_count);
-        metric!(num_overflowed, max_overflowed, min_overflowed, worker_overflow_count);
-        metric!(num_polls, max_polls, min_polls, worker_poll_count);
-        metric!(total_time_busy, max_time_busy, min_time_busy, worker_total_busy_duration);
+        metric!(total_park_count, max_park_count, min_park_count, worker_park_count);
+        metric!(total_noop_count, max_noop_count, min_noop_count, worker_noop_count);
+        metric!(total_steal_count, max_steal_count, min_steal_count, worker_steal_count);
+        metric!(total_local_schedule_count, max_local_schedule_count, min_local_schedule_count, worker_local_schedule_count);
+        metric!(total_overflow_count, max_overflow_count, min_overflow_count, worker_overflow_count);
+        metric!(total_polls_count, max_polls_count, min_polls_count, worker_poll_count);
+        metric!(total_busy_duration, max_busy_duration, min_busy_duration, worker_total_busy_duration);
 
         // Local scheduled tasks is an absolute value
 
         let local_scheduled_tasks = rt.worker_local_queue_depth(self.worker);
-        metrics.num_local_scheduled_tasks += local_scheduled_tasks;
+        metrics.total_local_queue_depth += local_scheduled_tasks;
 
-        if local_scheduled_tasks > metrics.max_local_scheduled_tasks {
-            metrics.max_local_scheduled_tasks = local_scheduled_tasks;
+        if local_scheduled_tasks > metrics.max_local_queue_depth {
+            metrics.max_local_queue_depth = local_scheduled_tasks;
         }
 
-        if local_scheduled_tasks < metrics.min_local_scheduled_tasks {
-            metrics.min_local_scheduled_tasks = local_scheduled_tasks;
+        if local_scheduled_tasks < metrics.min_local_queue_depth {
+            metrics.min_local_queue_depth = local_scheduled_tasks;
         }
     }
 }
 
 impl RuntimeMetrics {
     pub fn mean_polls_per_park(&self) -> f64 {
-        let num_parks = self.num_parks - self.num_noops;
-        if num_parks == 0 {
+        let total_park_count = self.total_park_count - self.total_noop_count;
+        if total_park_count == 0 {
             0.0
         } else {
-            self.num_polls as f64 / num_parks as f64
+            self.total_polls_count as f64 / total_park_count as f64
         }
     }
 
     pub fn busy_ratio(&self) -> f64 {
-        self.total_time_busy.as_nanos() as f64 /
-            self.total_time.as_nanos() as f64
+        self.total_busy_duration.as_nanos() as f64 /
+            self.elapsed.as_nanos() as f64
     }
 }
