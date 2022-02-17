@@ -19,7 +19,7 @@ jobs:
     # Run `cargo check` first to ensure that the pushed code at least compiles.
     runs-on: ubuntu-latest
     env:
-      RUSTCFLAGS: --cfg tokio_unstable
+      RUSTFLAGS: --cfg tokio_unstable -DWarnings
     steps:
     - uses: actions/checkout@master
     - uses: actions-rs/toolchain@v1
@@ -44,7 +44,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       RUSTDOCFLAGS: -D broken-intra-doc-links --cfg tokio_unstable
-      RUSTCFLAGS: --cfg tokio_unstable
+      RUSTFLAGS: --cfg tokio_unstable -DWarnings
     steps:
     - uses: actions/checkout@master
     - uses: actions-rs/toolchain@v1
@@ -59,7 +59,7 @@ jobs:
   cargo-hack:
     runs-on: ubuntu-latest
     env:
-      RUSTCFLAGS: --cfg tokio_unstable
+      RUSTFLAGS: --cfg tokio_unstable -DWarnings
     steps:
     - uses: actions/checkout@master
     - uses: actions-rs/toolchain@v1
@@ -78,7 +78,7 @@ jobs:
     needs: check
     runs-on: ubuntu-latest
     env:
-      RUSTCFLAGS: --cfg tokio_unstable
+      RUSTFLAGS: --cfg tokio_unstable -DWarnings
     strategy:
       matrix:
         rust: ["rust_stable", "rust_nightly"]
@@ -113,5 +113,5 @@ jobs:
         command: test
         args: --all-features --doc
       env:
-        RUSTDOCARGS: --cfg tokio_unstable
-        RUSTCARGS: --cfg tokio_unstable
+        RUSTDOCFLAGS: --cfg tokio_unstable
+        RUSTFLAGS: --cfg tokio_unstable -DWarnings
