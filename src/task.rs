@@ -644,61 +644,52 @@ pub struct TaskMetrics {
     /// second sampling period, and a total of 350ms elapse between the instrumentation and polling
     /// of tasks within the third sampling period:
     /// ```
-    /// use core::future::Future;
-    /// use std::time::Duration;
-    ///
-    /// #[tokio::main]
+    /// use tokio::time::Duration;
+    /// 
+    /// #[tokio::main(flavor = "current_thread", start_paused = true)]
     /// async fn main() {
-    ///     let metrics_monitor = tokio_metrics::TaskMonitor::new();
-    ///     let mut interval = metrics_monitor.intervals();
+    ///     let monitor = tokio_metrics::TaskMonitor::new();
+    ///     let mut interval = monitor.intervals();
     ///     let mut next_interval = || interval.next().unwrap();
-    ///
+    /// 
     ///     // no tasks have yet been created, instrumented, or polled
-    ///     assert_eq!(metrics_monitor.cumulative().total_first_poll_delay, Duration::ZERO);
+    ///     assert_eq!(monitor.cumulative().total_first_poll_delay, Duration::ZERO);
     ///     assert_eq!(next_interval().total_first_poll_delay, Duration::ZERO);
-    ///
+    /// 
     ///     // constructs and instruments a task, pauses a given duration, then awaits the task
     ///     async fn instrument_pause_await(monitor: &tokio_metrics::TaskMonitor, pause: Duration) {
     ///         let task = monitor.instrument(async move {});
     ///         tokio::time::sleep(pause).await;
     ///         task.await;
     ///     }
-    ///
+    /// 
     ///     // construct and await a task that pauses for 500ms between instrumentation and first poll
     ///     let task_a_pause_time = Duration::from_millis(500);
-    ///     let task_a_total_time = time(instrument_pause_await(&metrics_monitor, task_a_pause_time)).await;
-    ///
-    ///     // the `total_first_poll_delay` in this period will be somewhere between the
-    ///     // pause time of `task_a`, and the total execution time of `task_a`
-    ///     let total_first_poll_delay = next_interval().total_first_poll_delay;
-    ///     assert!(total_first_poll_delay >= task_a_pause_time);
-    ///     assert!(total_first_poll_delay <= task_a_total_time);
-    ///
+    ///     instrument_pause_await(&monitor, task_a_pause_time).await;
+    /// 
+    ///     assert_eq!(next_interval().total_first_poll_delay, task_a_pause_time);
+    ///     assert_eq!(monitor.cumulative().total_first_poll_delay, task_a_pause_time);
+    /// 
     ///     // construct and await a task that pauses for 250ms between instrumentation and first poll
     ///     let task_b_pause_time = Duration::from_millis(250);
-    ///     let task_b_total_time = time(instrument_pause_await(&metrics_monitor, task_b_pause_time)).await;
-    ///
+    ///     instrument_pause_await(&monitor, task_b_pause_time).await;
+    /// 
     ///     // construct and await a task that pauses for 100ms between instrumentation and first poll
     ///     let task_c_pause_time = Duration::from_millis(100);
-    ///     let task_c_total_time = time(instrument_pause_await(&metrics_monitor, task_c_pause_time)).await;
-    ///
-    ///     // the `total_first_poll_delay` in this period will be somewhere between the
-    ///     // combined pause times of `task_a` and `task_b` (350ms), and the combined total execution times
-    ///     // of `task_a` and `task_b`
-    ///     let total_first_poll_delay = next_interval().total_first_poll_delay;
-    ///     assert!(total_first_poll_delay >= task_b_pause_time + task_c_pause_time);
-    ///     assert!(total_first_poll_delay <= task_b_total_time + task_c_total_time);
-    /// }
-    ///
-    /// /// Produces the amount of time it took to await a given task.
-    /// async fn time(task: impl Future) -> Duration {
-    ///     let start = tokio::time::Instant::now();
-    ///     task.await;
-    ///     start.elapsed()
+    ///     instrument_pause_await(&monitor, task_c_pause_time).await;
+    /// 
+    ///     assert_eq!(
+    ///         next_interval().total_first_poll_delay,
+    ///         task_b_pause_time + task_c_pause_time
+    ///     );
+    ///     assert_eq!(
+    ///         monitor.cumulative().total_first_poll_delay,
+    ///         task_a_pause_time + task_b_pause_time + task_c_pause_time
+    ///     );
     /// }
     /// ```
     ///
-    /// ### When is this metric recorded?
+    /// ##### When is this metric recorded?
     /// The delay between instrumentation and first poll is not recorded until the first poll actually occurs:
     /// ```
     /// # use tokio::time::Duration;
@@ -923,7 +914,7 @@ pub struct TaskMetrics {
     /// task that blocks the executor for half a second; the yielding task spends approximately half
     /// a second waiting to be scheduled.
     /// ```
-    /// use std::time::Duration;
+    /// use tokio::time::Duration;
     ///
     /// #[tokio::main(flavor = "current_thread")]
     /// async fn main() {
