@@ -171,7 +171,7 @@ use std::time::{Duration, Instant};
 /// - they are waiting longer on external events to complete (e.g., asynchronous network requests)
 ///
 /// The culprits, at a high level, may be some combination of these sources of latency. Fortunately,
-/// you have instrumented the key tasks of each of your endpoints with distinct `TaskMonitor`s.
+/// you have instrumented the key tasks of each of your endpoints with distinct [`TaskMonitor`]s.
 /// Using the monitors on the endpoint experiencing elevated latency, you begin by answering:
 /// - [*Are my tasks taking longer to poll?*](#are-my-tasks-taking-longer-to-poll)
 /// - [*Are my tasks spending more time waiting to be polled?*](#are-my-tasks-spending-more-time-waiting-to-be-polled)
@@ -197,24 +197,23 @@ use std::time::{Duration, Instant};
 /// ##### Are my tasks spending more time waiting to be polled?
 /// - **Did [`mean_first_poll_delay`][TaskMetrics::mean_first_poll_delay] increase?**   
 ///   This metric reflects the mean delay between the instant a task is first instrumented and the
-///   instant it is first polled, during the sampling interval. If it increases, it means that, on
-///   average, tasks spent longer waiting to be initially run.
+///   instant it is first polled. If it increases, it means that, on average, tasks spent longer
+///   waiting to be initially run.
 /// - **Did [`mean_scheduled_duration`][TaskMetrics::mean_scheduled_duration] increase?**   
-///   This metric reflects the mean duration that tasks spent in the scheduled state during the
-///   sampling interval. The 'scheduled' state of a task is the duration between the instant a task
-///   is awoken and the instant it is then subsequently polled. If this metric increases, it means
-///   that, on average, tasks spent longer in tokio's queues before being polled.
+///   This metric reflects the mean duration that tasks spent in the scheduled state. The
+///   'scheduled' state of a task is the duration between the instant a task is awoken and the
+///   instant it is subsequently polled. If this metric increases, it means that, on average, tasks
+///   spent longer in tokio's queues before being polled.
 ///
 /// If so, [*why are my tasks spending more time waiting to be polled?*](#why-are-my-tasks-spending-more-time-waiting-to-be-polled)
 ///
 /// ##### Are my tasks spending more time waiting on external events to complete?
 /// - **Did [`mean_idle_duration`][TaskMetrics::mean_idle_duration] increase?**   
-///   This metric reflects the mean duration that tasks spent in the idle state during the
-///   sampling interval. The idle state is the duration spanning the instant a task completes a
-///   poll, and the instant that it is next awoken. Tasks inhabit this state when they are waiting
-///   for task-external events to complete (e.g., an asynchronous sleep, a network request, file
-///   I/O, etc.). If this metric increases, tasks, in aggregate, spent more time waiting for
-///   task-external events to complete.
+///   This metric reflects the mean duration that tasks spent in the idle state. The idle state is
+///   the duration spanning the instant a task completes a poll, and the instant that it is next
+///   awoken. Tasks inhabit this state when they are waiting for task-external events to complete
+///   (e.g., an asynchronous sleep, a network request, file I/O, etc.). If this metric increases,
+///   tasks, in aggregate, spent more time waiting for task-external events to complete.
 ///
 /// If so, [*why are my tasks spending more time waiting on external events to complete?*](#why-are-my-tasks-spending-more-time-waiting-on-external-events-to-complete)
 ///
@@ -249,12 +248,11 @@ use std::time::{Duration, Instant};
 /// Start by asking: [*Is time-to-first-poll unusually high?*](#is-time-to-first-poll-unusually-high)
 ///
 /// ##### Why are my tasks spending more time waiting on external events to complete?
-/// You observed that [your tasks are spending more time waiting to be polled](#are-my-tasks-spending-more-time-waiting-on-external-events-to-complete).
-/// But what event? Fortunately, within the task experiencing increased idle times, you monitored
-/// several sub-tasks with distinct `TaskMonitor`s. Some combination of these tasks is the culprit.
-/// For each of these sub-tasks, you check to see if their `mean_extant_duration` metric increased.
-/// Then, for each sub-task taking an increased amount of time to complete, [*you try to identify
-/// the performance culprit...*](#identifying-the-high-level-culprits)
+/// You observed that [your tasks are spending more time waiting waiting on external events to
+/// complete](#are-my-tasks-spending-more-time-waiting-on-external-events-to-complete). But what
+/// event? Fortunately, within the task experiencing increased idle times, you monitored several
+/// sub-tasks with distinct [`TaskMonitor`]s. For each of these sub-tasks, you [*you try to identify
+/// the performance culprits...*](#identifying-the-high-level-culprits)
 ///
 /// #### Digging even deeper
 ///
@@ -297,11 +295,11 @@ use std::time::{Duration, Instant};
 /// }
 /// ```
 ///
-/// Otherwise, time-to-first-poll might be unusually slow because [*your application is spawning key
-/// tasks into tokio's injection queue...*](#is-my-application-spawning-more-tasks-into-tokio’s-injection-queue)
+/// Otherwise, [`mean_first_poll_delay`][TaskMetrics::mean_first_poll_delay] might be unusually high
+/// because [*your application is spawning key tasks into tokio's injection queue...*](#is-my-application-spawning-more-tasks-into-tokio’s-injection-queue)
 ///
 /// ##### Is my application spawning more tasks into tokio's injection queue?
-/// Tasks awoken from threads *not* managed by the tokio runtime are scheduled  with a slower,
+/// Tasks awoken from threads *not* managed by the tokio runtime are scheduled with a slower,
 /// global "injection" queue.
 ///
 /// You may be notifying runtime tasks from off-runtime. For instance, Given the following:
@@ -335,12 +333,12 @@ use std::time::{Duration, Instant};
 ///     }).await;
 /// }
 /// ```
-/// The slowdown is caused by a higher time between the rx task being notified (in `tx.send()`) and
-/// the task being polled.
+/// The slowdown is caused by a higher time between the `rx` task being notified (in `tx.send()`)
+/// and the task being polled.
 ///
 /// ##### Are other tasks polling too long without yielding?
-/// You suspect that your tasks are slow because they're backed up in tokio's scheduling queue. For
-/// *each* of your application's `TaskMonitor`s you check to see [*if their associated tasks are
+/// You suspect that your tasks are slow because they're backed up in tokio's scheduling queues. For
+/// *each* of your application's [`TaskMonitor`]s you check to see [*if their associated tasks are
 /// taking longer to poll...*](#are-my-tasks-taking-longer-to-poll)
 ///
 /// ### Limitations
@@ -386,7 +384,7 @@ use std::time::{Duration, Instant};
 /// }
 /// ```
 /// If the total delay between instrumentation and first poll exceeds [`u64::MAX`] nanoseconds,
-/// `total_first_poll_delay` will overflow:
+/// [`total_first_poll_delay`][TaskMetrics::total_first_poll_delay] will overflow:
 /// ```
 /// # use tokio::time::Duration;
 /// #
@@ -439,8 +437,14 @@ use std::time::{Duration, Instant};
 /// for task in tasks { task.await; }
 ///
 /// // `total_first_poll_delay` is at the precipice of overflowing!
-/// assert_eq!(next_interval().total_first_poll_delay.as_nanos(), (max_duration - small_remainder) as u128);
-/// assert_eq!(monitor.cumulative().total_first_poll_delay.as_nanos(), (max_duration - small_remainder) as u128);
+/// assert_eq!(
+///     next_interval().total_first_poll_delay.as_nanos(),
+///     (max_duration - small_remainder) as u128
+/// );
+/// assert_eq!(
+///     monitor.cumulative().total_first_poll_delay.as_nanos(),
+///     (max_duration - small_remainder) as u128
+/// );
 /// # }
 /// ```
 /// Frequent, interval-sampled metrics will retain their accuracy, even if the cumulative
@@ -596,10 +600,10 @@ pub struct TaskMetrics {
     ///   are first polled.
     ///
     /// ##### Examples
-    /// In the below example, no tasks are instrumented or polled in the first sampling period;
-    /// one task is instrumented, but not polled, in the second sampling period; that task is
-    /// awaited to completion (and, thus, polled at least once) in the third sampling period; no
-    /// additional tasks are polled for the first time within the fourth sampling period:
+    /// In the below example, no tasks are instrumented or polled in the first sampling interval;
+    /// one task is instrumented (but not polled) in the second sampling interval; that task is
+    /// awaited to completion (and, thus, polled at least once) in the third sampling interval; no
+    /// additional tasks are polled for the first time within the fourth sampling interval:
     /// ```
     /// #[tokio::main]
     /// async fn main() {
@@ -638,9 +642,9 @@ pub struct TaskMetrics {
     ///
     /// ##### Examples
     /// In the below example, 0 tasks have been instrumented or polled within the first sampling
-    /// period, a total of 500ms elapse between the instrumentation and polling of tasks within the
-    /// second sampling period, and a total of 350ms elapse between the instrumentation and polling
-    /// of tasks within the third sampling period:
+    /// interval, a total of 500ms elapse between the instrumentation and polling of tasks within
+    /// the second sampling interval, and a total of 350ms elapse between the instrumentation and
+    /// polling of tasks within the third sampling interval:
     /// ```
     /// use tokio::time::Duration;
     ///
@@ -688,7 +692,8 @@ pub struct TaskMetrics {
     /// ```
     ///
     /// ##### When is this metric recorded?
-    /// The delay between instrumentation and first poll is not recorded until the first poll actually occurs:
+    /// The delay between instrumentation and first poll is not recorded until the first poll
+    /// actually occurs:
     /// ```
     /// # use tokio::time::Duration;
     /// #
@@ -719,9 +724,10 @@ pub struct TaskMetrics {
     /// # }
     /// ```
     ///
-    /// ### What if time-to-first-poll is very large?
-    /// The time-to-first-poll of *individual* tasks saturates at `u64::MAX` nanoseconds. However, if the *total*
-    /// time-to-first-poll *across* monitored tasks exceeds `u64::MAX` nanoseconds, this metric will wrap-around:
+    /// ##### What if first-poll-delay is very large?
+    /// The first-poll-delay of *individual* tasks saturates at `u64::MAX` nanoseconds. However, if
+    /// the *total* first-poll-delay *across* monitored tasks exceeds `u64::MAX` nanoseconds, this
+    /// metric will wrap around:
     /// ```
     /// use tokio::time::Duration;
     ///
@@ -840,7 +846,7 @@ pub struct TaskMetrics {
     ///
     /// ##### Examples
     /// In the below example, a task yields to the scheduler a varying number of times between
-    /// sample periods; this metric is equal to the number of times the task yielded:
+    /// sampling intervals; this metric is equal to the number of times the task yielded:
     /// ```
     /// #[tokio::main]
     /// async fn main(){
@@ -863,7 +869,7 @@ pub struct TaskMetrics {
     ///             tokio::task::yield_now().await; // yield to the scheduler
     ///
     ///             // [F] `task` has yielded to the scheduler once (and thus been
-    ///             // scheduled once) since the last sampling period
+    ///             // scheduled once) since the last sampling interval
     ///             assert_eq!(next_interval().total_scheduled_count, 1);
     ///
     ///             tokio::task::yield_now().await; // yield to the scheduler
@@ -871,7 +877,7 @@ pub struct TaskMetrics {
     ///             tokio::task::yield_now().await; // yield to the scheduler
     ///
     ///             // [G] `task` has yielded to the scheduler thrice (and thus been
-    ///             // scheduled thrice) since the last sampling period
+    ///             // scheduled thrice) since the last sampling interval
     ///             assert_eq!(next_interval().total_scheduled_count, 3);
     ///
     ///             tokio::task::yield_now().await; // yield to the scheduler
@@ -908,7 +914,7 @@ pub struct TaskMetrics {
     /// ##### Examples
     /// In the below example, a task that yields endlessly is raced against a task that blocks the
     /// executor for 1 second; the yielding task spends approximately 1 second waiting to
-    /// be scheduled. In the next sampling period, a task that yields endlessly is raced against a
+    /// be scheduled. In the next sampling interval, a task that yields endlessly is raced against a
     /// task that blocks the executor for half a second; the yielding task spends approximately half
     /// a second waiting to be scheduled.
     /// ```
@@ -979,7 +985,7 @@ pub struct TaskMetrics {
     ///
     /// ##### Examples
     /// In the below example, a task with multiple yield points is await'ed to completion; this
-    /// metric reflects the number of `await`s within each sample period:
+    /// metric reflects the number of `await`s within each sampling interval:
     /// ```
     /// #[tokio::main]
     /// async fn main() {
@@ -1077,8 +1083,9 @@ pub struct TaskMetrics {
     ///   The mean duration of fast polls.
     ///
     /// ##### Examples
-    /// In the below example, 0 polls occur within the first sampling period, 3 fast polls occur
-    /// within the second sampling period, and 2 fast polls occur within the third sampling period:
+    /// In the below example, 0 polls occur within the first sampling interval, 3 fast polls occur
+    /// within the second sampling interval, and 2 fast polls occur within the third sampling
+    /// interval:
     /// ```
     /// use std::future::Future;
     /// use std::time::Duration;
@@ -1131,9 +1138,9 @@ pub struct TaskMetrics {
     ///   The mean duration of fast polls.
     ///
     /// ##### Examples
-    /// In the below example, no tasks are polled in the first sampling period; three fast polls
-    /// consume a total of 3μs time in the second sampling period; and two fast polls consume a
-    /// total of 2μs time in the third sampling period:
+    /// In the below example, no tasks are polled in the first sampling interval; three fast polls
+    /// consume a total of 3μs time in the second sampling interval; and two fast polls consume a
+    /// total of 2μs time in the third sampling interval:
     /// ```
     /// use std::future::Future;
     /// use std::time::Duration;
@@ -1198,8 +1205,9 @@ pub struct TaskMetrics {
     ///   The mean duration of slow polls.
     ///
     /// ##### Examples
-    /// In the below example, 0 polls occur within the first sampling period, 3 slow polls occur
-    /// within the second sampling period, and 2 slow polls occur within the third sampling period:
+    /// In the below example, 0 polls occur within the first sampling interval, 3 slow polls occur
+    /// within the second sampling interval, and 2 slow polls occur within the third sampling
+    /// interval:
     /// ```
     /// use std::future::Future;
     /// use std::time::Duration;
@@ -1252,12 +1260,12 @@ pub struct TaskMetrics {
     ///   The mean duration of slow polls.
     ///
     /// ##### Examples
-    /// In the below example, no tasks are polled in the first sampling period; three slow polls
+    /// In the below example, no tasks are polled in the first sampling interval; three slow polls
     /// consume a total of
     /// 30 × [`DEFAULT_SLOW_POLL_THRESHOLD`][TaskMonitor::DEFAULT_SLOW_POLL_THRESHOLD]
-    /// time in the second sampling period; and two slow polls consume a total of
+    /// time in the second sampling interval; and two slow polls consume a total of
     /// 20 × [`DEFAULT_SLOW_POLL_THRESHOLD`][TaskMonitor::DEFAULT_SLOW_POLL_THRESHOLD] time in the
-    /// third sampling period:
+    /// third sampling interval:
     /// ```
     /// use std::future::Future;
     /// use std::time::Duration;
@@ -1371,7 +1379,8 @@ struct State {
 }
 
 impl TaskMonitor {
-    /// The default duration at which polls cross the threshold into being categorized as 'slow' is 50μs.
+    /// The default duration at which polls cross the threshold into being categorized as 'slow' is
+    /// 50μs.
     #[cfg(not(test))]
     pub const DEFAULT_SLOW_POLL_THRESHOLD: Duration = Duration::from_micros(50);
     #[cfg(test)]
@@ -1379,7 +1388,8 @@ impl TaskMonitor {
 
     /// Constructs a new task monitor.
     ///
-    /// Uses [`Self::DEFAULT_SLOW_POLL_THRESHOLD`] as the threshold at which polls will be considered 'slow'.
+    /// Uses [`Self::DEFAULT_SLOW_POLL_THRESHOLD`] as the threshold at which polls will be
+    /// considered 'slow'.
     pub fn new() -> TaskMonitor {
         TaskMonitor::with_slow_poll_threshold(Self::DEFAULT_SLOW_POLL_THRESHOLD)
     }
@@ -1390,9 +1400,9 @@ impl TaskMonitor {
     /// TODO. What advice can we give here?
     ///
     /// ##### Examples
-    /// In the below example, low-threshold and high-threshold monitors are constructed and instrument
-    /// identical tasks; the low-threshold monitor reports4 slow polls, and the high-threshold monitor
-    /// reports only 2 slow polls:
+    /// In the below example, low-threshold and high-threshold monitors are constructed and
+    /// instrument identical tasks; the low-threshold monitor reports4 slow polls, and the
+    /// high-threshold monitor reports only 2 slow polls:
     /// ```
     /// use std::future::Future;
     /// use std::time::Duration;
@@ -1452,8 +1462,8 @@ impl TaskMonitor {
     /// Produces the duration greater-than-or-equal-to at which polls are categorized as slow.
     ///
     /// ##### Examples
-    /// In the below example, [`TaskMonitor`] is initialized with [`TaskMonitor::new`]; consequently, its slow-poll
-    /// threshold equals [`TaskMonitor::DEFAULT_SLOW_POLL_THRESHOLD`]:
+    /// In the below example, [`TaskMonitor`] is initialized with [`TaskMonitor::new`];
+    /// consequently, its slow-poll threshold equals [`TaskMonitor::DEFAULT_SLOW_POLL_THRESHOLD`]:
     /// ```
     /// use tokio_metrics::TaskMonitor;
     ///
@@ -1547,17 +1557,17 @@ impl TaskMonitor {
         }
     }
 
-    /// Produces [`TaskMetrics`] for the tasks instrumented by this [`TaskMonitor`], collected since the
-    /// construction of [`TaskMonitor`].
+    /// Produces [`TaskMetrics`] for the tasks instrumented by this [`TaskMonitor`], collected since
+    /// the construction of [`TaskMonitor`].
     ///
     /// ##### See also
     /// - [`TaskMonitor::intervals`]:
-    ///     produces [`TaskMetrics`] for user-defined sampling-periods, instead of cumulatively
+    ///     produces [`TaskMetrics`] for user-defined sampling intervals, instead of cumulatively
     ///
     /// ##### Examples
-    /// In the below example, 0 polls occur within the first sampling period, 3 slow polls occur within the second
-    /// sampling period, and 2 slow polls occur within the third sampling period; five slow polls occur across
-    /// all sampling periods:
+    /// In the below example, 0 polls occur within the first sampling interval, 3 slow polls occur
+    /// within the second sampling interval, and 2 slow polls occur within the third sampling
+    /// interval; five slow polls occur across all sampling intervals:
     /// ```
     /// use std::future::Future;
     /// use std::time::Duration;
@@ -1566,10 +1576,10 @@ impl TaskMonitor {
     /// async fn main() {
     ///     let metrics_monitor = tokio_metrics::TaskMonitor::new();
     ///
-    ///     // initialize a stream of sampling periods
-    ///     let mut samples = metrics_monitor.intervals();
-    ///     // each call of `next_sample` will produce metrics for the last sampling period
-    ///     let mut next_sample = || samples.next().unwrap();
+    ///     // initialize a stream of sampling intervals
+    ///     let mut intervals = metrics_monitor.intervals();
+    ///     // each call of `next_interval` will produce metrics for the last sampling interval
+    ///     let mut next_interval = || intervals.next().unwrap();
     ///
     ///     let slow = 10 * metrics_monitor.slow_poll_threshold();
     ///
@@ -1580,8 +1590,8 @@ impl TaskMonitor {
     ///         spin_for(slow)        // slow poll 3
     ///     }).await;
     ///
-    ///     // in the previous sampling period, there were 3 slow polls
-    ///     assert_eq!(next_sample().total_slow_poll_count, 3);
+    ///     // in the previous sampling interval, there were 3 slow polls
+    ///     assert_eq!(next_interval().total_slow_poll_count, 3);
     ///     assert_eq!(metrics_monitor.cumulative().total_slow_poll_count, 3);
     ///
     ///     // this task completes in two slow polls
@@ -1590,10 +1600,10 @@ impl TaskMonitor {
     ///         spin_for(slow)        // slow poll 2
     ///     }).await;
     ///
-    ///     // in the previous sampling period, there were 3 slow polls
-    ///     assert_eq!(next_sample().total_slow_poll_count, 2);
+    ///     // in the previous sampling interval, there were 3 slow polls
+    ///     assert_eq!(next_interval().total_slow_poll_count, 2);
     ///
-    ///     // across all sampling periods, there were a total of 5 slow polls
+    ///     // across all sampling interval, there were a total of 5 slow polls
     ///     assert_eq!(metrics_monitor.cumulative().total_slow_poll_count, 5);
     /// }
     ///
@@ -1608,16 +1618,17 @@ impl TaskMonitor {
         self.metrics.metrics()
     }
 
-    /// Produces an unending iterator of metric sampling periods.
+    /// Produces an unending iterator of metric sampling intervals.
     ///
-    /// Each sampling period is defined by the time elapsed between advancements of the iterator
-    /// produced by [`TaskMonitor::intervals`]. The item type of this iterator is [`TaskMetrics`], which is a bundle
-    /// of task metrics that describe *only* events occuring within that sampling period.
+    /// Each sampling interval is defined by the time elapsed between advancements of the iterator
+    /// produced by [`TaskMonitor::intervals`]. The item type of this iterator is [`TaskMetrics`],
+    /// which is a bundle of task metrics that describe *only* events occurring within that sampling
+    /// interval.
     ///
     /// ##### Examples
-    /// In the below example, 0 polls occur within the first sampling period, 3 slow polls occur within the second
-    /// sampling period, and 2 slow polls occur within the third sampling period; five slow polls occur across
-    /// all sampling periods:
+    /// In the below example, 0 polls occur within the first sampling interval, 3 slow polls occur
+    /// within the second sampling interval, and 2 slow polls occur within the third sampling
+    /// interval; five slow polls occur across all sampling intervals:
     /// ```
     /// use std::future::Future;
     /// use std::time::Duration;
@@ -1626,10 +1637,10 @@ impl TaskMonitor {
     /// async fn main() {
     ///     let metrics_monitor = tokio_metrics::TaskMonitor::new();
     ///
-    ///     // initialize a stream of sampling periods
-    ///     let mut samples = metrics_monitor.intervals();
-    ///     // each call of `next_sample` will produce metrics for the last sampling period
-    ///     let mut next_sample = || samples.next().unwrap();
+    ///     // initialize a stream of sampling intervals
+    ///     let mut intervals = metrics_monitor.intervals();
+    ///     // each call of `next_interval` will produce metrics for the last sampling interval
+    ///     let mut next_interval = || intervals.next().unwrap();
     ///
     ///     let slow = 10 * metrics_monitor.slow_poll_threshold();
     ///
@@ -1640,8 +1651,8 @@ impl TaskMonitor {
     ///         spin_for(slow)        // slow poll 3
     ///     }).await;
     ///
-    ///     // in the previous sampling period, there were 3 slow polls
-    ///     assert_eq!(next_sample().total_slow_poll_count, 3);
+    ///     // in the previous sampling interval, there were 3 slow polls
+    ///     assert_eq!(next_interval().total_slow_poll_count, 3);
     ///
     ///     // this task completes in two slow polls
     ///     let _ = metrics_monitor.instrument(async {
@@ -1649,10 +1660,10 @@ impl TaskMonitor {
     ///         spin_for(slow)        // slow poll 2
     ///     }).await;
     ///
-    ///     // in the previous sampling period, there were 3 slow polls
-    ///     assert_eq!(next_sample().total_slow_poll_count, 2);
+    ///     // in the previous sampling interval, there were 3 slow polls
+    ///     assert_eq!(next_interval().total_slow_poll_count, 2);
     ///
-    ///     // across all sampling periods, there were a total of 5 slow polls
+    ///     // across all sampling intervals, there were a total of 5 slow polls
     ///     assert_eq!(metrics_monitor.cumulative().total_slow_poll_count, 5);
     /// }
     ///
@@ -1793,10 +1804,10 @@ impl TaskMetrics {
     ///   The mean duration that tasks spent waiting to be executed after awakening.
     ///
     /// ##### Examples
-    /// In the below example, no tasks are instrumented or polled within the first sample period; in
-    /// the second sampling period, 500ms elapse between the instrumentation of a task and its first
-    /// poll; in the third sampling period, a mean of 750ms elapse between the instrumentation and
-    /// first poll of two tasks:
+    /// In the below example, no tasks are instrumented or polled within the first sampling
+    /// interval; in the second sampling interval, 500ms elapse between the instrumentation of a
+    /// task and its first poll; in the third sampling interval, a mean of 750ms elapse between the
+    /// instrumentation and first poll of two tasks:
     /// ```
     /// use std::time::Duration;
     ///
@@ -1897,12 +1908,13 @@ impl TaskMetrics {
     ///
     /// ##### See also
     /// - **[`mean_first_poll_delay`][TaskMetrics::mean_first_poll_delay]**   
-    ///   The mean duration elapsed between the instant tasks are instrumented, and the instant they are first polled.
+    ///   The mean duration elapsed between the instant tasks are instrumented, and the instant they
+    ///   are first polled.
     ///
     /// ##### Examples
     /// In the below example, a task that yields endlessly is raced against a task that blocks the
     /// executor for 1 second; the yielding task spends approximately 1 second waiting to
-    /// be scheduled. In the next sampling period, a task that yields endlessly is raced against a
+    /// be scheduled. In the next sampling interval, a task that yields endlessly is raced against a
     /// task that blocks the executor for half a second; the yielding task spends approximately half
     /// a second waiting to be scheduled.
     /// ```
@@ -2030,7 +2042,7 @@ impl TaskMetrics {
     ///
     /// ##### Examples
     /// Changes in this metric may be observed by varying the ratio of slow and slow fast within
-    /// sampling periods; for instance:
+    /// sampling intervals; for instance:
     /// ```
     /// use std::future::Future;
     /// use std::time::Duration;
@@ -2110,12 +2122,12 @@ impl TaskMetrics {
     /// [`total_fast_poll_count`][TaskMetrics::total_fast_poll_count].
     ///
     /// ##### Examples
-    /// In the below example, no tasks are polled in the first sampling period; three fast polls
+    /// In the below example, no tasks are polled in the first sampling interval; three fast polls
     /// consume a mean of
     /// ⅜ × [`DEFAULT_SLOW_POLL_THRESHOLD`][TaskMonitor::DEFAULT_SLOW_POLL_THRESHOLD] time in the
-    /// second sampling period; and two fast polls consume a total of
+    /// second sampling interval; and two fast polls consume a total of
     /// ½ × [`DEFAULT_SLOW_POLL_THRESHOLD`][TaskMonitor::DEFAULT_SLOW_POLL_THRESHOLD] time in the
-    /// third sampling period:
+    /// third sampling interval:
     /// ```
     /// use std::future::Future;
     /// use std::time::Duration;
@@ -2201,12 +2213,12 @@ impl TaskMetrics {
     /// frequently.
     ///
     /// ##### Examples
-    /// In the below example, no tasks are polled in the first sampling period; three slow polls
+    /// In the below example, no tasks are polled in the first sampling interval; three slow polls
     /// consume a mean of
     /// 1.5 × [`DEFAULT_SLOW_POLL_THRESHOLD`][TaskMonitor::DEFAULT_SLOW_POLL_THRESHOLD] time in the
-    /// second sampling period; and two slow polls consume a total of
+    /// second sampling interval; and two slow polls consume a total of
     /// 2 × [`DEFAULT_SLOW_POLL_THRESHOLD`][TaskMonitor::DEFAULT_SLOW_POLL_THRESHOLD] time in the
-    /// third sampling period:
+    /// third sampling interval:
     /// ```
     /// use std::future::Future;
     /// use std::time::Duration;
