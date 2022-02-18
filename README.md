@@ -64,7 +64,7 @@ From within a Tokio runtime, use `RuntimeMonitor` to monitor key metrics of
 that runtime.
 ```rust
 let handle = tokio::runtime::Handle::current();
-let runtime_monitor = RuntimeMonitor::new(&handle);
+let runtime_monitor = tokio_metrics::RuntimeMonitor::new(&handle);
 
 // print runtime metrics every 500ms
 let frequency = std::time::Duration::from_millis(500);
