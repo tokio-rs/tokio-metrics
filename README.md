@@ -46,13 +46,23 @@ environment variable before compiling your application; e.g.:
 ```sh
 RUSTFLAGS="--cfg tokio_unstable" cargo build
 ```
-Or, by creating the file `.cargo/config` in the root directory of your crate
-with the contents:
+Or, by creating the file `.cargo/config.toml` in the root directory of your crate.
+If you're using a workspace, put this file in the root directory of your workspace instead.
 ```toml
 [build]
 rustflags = ["--cfg", "tokio_unstable"]
 rustdocflags = ["--cfg", "tokio_unstable"] 
 ```
+Putting `.cargo/config.toml` files below the workspace or crate root directory may lead to tools like
+Rust-Analyzer or VSCode not using your `.cargo/config.toml` since they invoke cargo from
+the workspace or crate root and cargo only looks for the `.cargo` directory in the current & parent directories.
+Cargo ignores configurations in child directories.
+More information about where cargo looks for configuration files can be found
+[here](https://doc.rust-lang.org/cargo/reference/config.html).
+
+Missing this configuration file during compilation will cause tokio-console to not work, and alternating
+between building with and without this configuration file included will cause full rebuilds of your project.
+
 The `rt` feature of `tokio-metrics` is on by default; simply check that you do
 not set `default-features = false` when declaring it as a dependency; e.g.:
 ```toml
