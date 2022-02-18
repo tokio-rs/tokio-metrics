@@ -280,10 +280,10 @@ use std::time::{Duration, Instant};
 ///
 /// For instance, in the below example, the application induces 1 second delay between when `task`
 /// is instrumented and when it is awaited:
-/// ```rust=
+/// ```rust
 /// #[tokio::main]
 /// async fn main() {
-///     use std::time::Duration;
+///     use tokio::time::Duration;
 ///     let monitor = tokio_metrics::TaskMonitor::new();
 ///
 ///     let task = monitor.instrument(async move {});
@@ -293,7 +293,7 @@ use std::time::{Duration, Instant};
 ///
 ///     let _ = tokio::spawn(task).await;
 ///
-///     assert!(monitor.cumulative().total_time_to_first_poll() >= one_sec);
+///     assert!(monitor.cumulative().total_first_poll_delay >= one_sec);
 /// }
 /// ```
 ///
