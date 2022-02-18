@@ -12,7 +12,7 @@ description = """
 Runtime and task level metrics for Tokio applications.
 """
 categories = ["asynchronous", "network-programming"]
-keywords = ["io", "async", "non-blocking", "futures", "metrics", "debugging"]
+keywords = ["async", "futures", "metrics", "debugging"]
 
 [features]
 default = ["rt"]
