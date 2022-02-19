@@ -6,7 +6,7 @@ rust-version = "1.56.0"
 authors = ["Tokio Contributors <team@tokio.rs>"]
 license = "MIT"
 readme = "README.md"
-repository = "https://github.com/tokio-rs/tokio"
+repository = "https://github.com/tokio-rs/tokio-metrics"
 homepage = "https://tokio.rs"
 description = """
 Runtime and task level metrics for Tokio applications.
