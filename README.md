@@ -60,7 +60,7 @@ Cargo ignores configurations in child directories.
 More information about where cargo looks for configuration files can be found
 [here](https://doc.rust-lang.org/cargo/reference/config.html).
 
-Missing this configuration file during compilation will cause tokio-console to not work, and alternating
+Missing this configuration file during compilation will cause tokio-metrics to not work, and alternating
 between building with and without this configuration file included will cause full rebuilds of your project.
 
 The `rt` feature of `tokio-metrics` is on by default; simply check that you do
