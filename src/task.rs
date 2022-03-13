@@ -1600,7 +1600,7 @@ impl TaskMonitor {
     ///         spin_for(slow)        // slow poll 2
     ///     }).await;
     ///
-    ///     // in the previous sampling interval, there were 3 slow polls
+    ///     // in the previous sampling interval, there were 2 slow polls
     ///     assert_eq!(next_interval().total_slow_poll_count, 2);
     ///
     ///     // across all sampling interval, there were a total of 5 slow polls
@@ -1660,7 +1660,7 @@ impl TaskMonitor {
     ///         spin_for(slow)        // slow poll 2
     ///     }).await;
     ///
-    ///     // in the previous sampling interval, there were 3 slow polls
+    ///     // in the previous sampling interval, there were 2 slow polls
     ///     assert_eq!(next_interval().total_slow_poll_count, 2);
     ///
     ///     // across all sampling intervals, there were a total of 5 slow polls
