@@ -955,72 +955,71 @@ struct Worker {
     total_busy_duration: Duration,
 }
 
+pub struct RuntimeMetricsIter {
+    runtime: runtime::RuntimeMetrics,
+    started_at: Instant,
+    workers: Vec<Worker>,
+
+    // Number of tasks scheduled from *outside* of the runtime
+    num_remote_schedules: u64,
+}
+
+impl RuntimeMetricsIter {
+    fn probe(&mut self) -> RuntimeMetrics {
+        let now = Instant::now();
+
+        let num_remote_schedules = self.runtime.remote_schedule_count();
+
+        let mut metrics = RuntimeMetrics {
+            workers_count: self.runtime.num_workers(),
+            elapsed: now - self.started_at,
+            injection_queue_depth: self.runtime.injection_queue_depth(),
+            num_remote_schedules: num_remote_schedules - self.num_remote_schedules,
+            min_park_count: u64::MAX,
+            min_noop_count: u64::MAX,
+            min_steal_count: u64::MAX,
+            min_local_schedule_count: u64::MAX,
+            min_overflow_count: u64::MAX,
+            min_polls_count: u64::MAX,
+            min_busy_duration: Duration::from_secs(1000000000),
+            min_local_queue_depth: usize::MAX,
+            ..Default::default()
+        };
+
+        self.num_remote_schedules = num_remote_schedules;
+        self.started_at = now;
+
+        for worker in &mut self.workers {
+            worker.probe(&self.runtime, &mut metrics);
+        }
+
+        metrics
+    }
+}
+
+impl Iterator for RuntimeMetricsIter {
+    type Item = RuntimeMetrics;
+
+    fn next(&mut self) -> Option<RuntimeMetrics> {
+        Some(self.probe())
+    }
+}
+
 impl RuntimeMonitor {
     pub fn new(runtime: &runtime::Handle) -> RuntimeMonitor {
         let runtime = runtime.metrics();
 
-        RuntimeMonitor {
-            runtime,
-        }
+        RuntimeMonitor { runtime }
     }
 
-    pub fn intervals(&self) -> impl Iterator<Item = RuntimeMetrics> {
-        struct Iter {
-            runtime: runtime::RuntimeMetrics,
-            started_at: Instant,
-            workers: Vec<Worker>,
-
-            // Number of tasks scheduled from *outside* of the runtime
-            num_remote_schedules: u64,
-        }
-
-        impl Iter {
-            fn probe(&mut self) -> RuntimeMetrics {
-                let now = Instant::now();
-
-                let num_remote_schedules = self.runtime.remote_schedule_count();
-
-                let mut metrics = RuntimeMetrics {
-                    workers_count: self.runtime.num_workers(),
-                    elapsed: now - self.started_at,
-                    injection_queue_depth: self.runtime.injection_queue_depth(),
-                    num_remote_schedules: num_remote_schedules - self.num_remote_schedules,
-                    min_park_count: u64::MAX,
-                    min_noop_count: u64::MAX,
-                    min_steal_count: u64::MAX,
-                    min_local_schedule_count: u64::MAX,
-                    min_overflow_count: u64::MAX,
-                    min_polls_count: u64::MAX,
-                    min_busy_duration: Duration::from_secs(1000000000),
-                    min_local_queue_depth: usize::MAX,
-                    .. Default::default()
-                };
-
-                self.num_remote_schedules = num_remote_schedules;
-                self.started_at = now;
-
-                for worker in &mut self.workers {
-                    worker.probe(&self.runtime, &mut metrics);
-                }
-        
-                metrics
-            }
-        }
-
-        impl Iterator for Iter {
-            type Item = RuntimeMetrics;
-
-            fn next(&mut self) -> Option<RuntimeMetrics> {
-                Some(self.probe())
-            }
-        }
-
+    pub fn intervals(&self) -> RuntimeMetricsIter {
         let started_at = Instant::now();
 
         let workers = (0..self.runtime.num_workers())
-            .map(|worker| Worker::new(worker, &self.runtime)).collect();
+            .map(|worker| Worker::new(worker, &self.runtime))
+            .collect();
 
-        Iter {
+        RuntimeMetricsIter {
             runtime: self.runtime.clone(),
             started_at,
             workers,
