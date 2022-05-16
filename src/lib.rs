@@ -112,8 +112,8 @@ macro_rules! cfg_rt {
 cfg_rt! {
     mod runtime;
     pub use runtime::{
+        RuntimeIntervals,
         RuntimeMetrics,
-        RuntimeMetricsIter,
         RuntimeMonitor,
     };
 }

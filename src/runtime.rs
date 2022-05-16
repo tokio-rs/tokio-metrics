@@ -955,7 +955,10 @@ struct Worker {
     total_busy_duration: Duration,
 }
 
-pub struct RuntimeMetricsIter {
+/// Iterator returned by [`RuntimeMonitor::intervals`].
+///
+/// See that method's documentation for more details.
+pub struct RuntimeIntervals {
     runtime: runtime::RuntimeMetrics,
     started_at: Instant,
     workers: Vec<Worker>,
@@ -964,7 +967,7 @@ pub struct RuntimeMetricsIter {
     num_remote_schedules: u64,
 }
 
-impl RuntimeMetricsIter {
+impl RuntimeIntervals {
     fn probe(&mut self) -> RuntimeMetrics {
         let now = Instant::now();
 
@@ -997,7 +1000,7 @@ impl RuntimeMetricsIter {
     }
 }
 
-impl Iterator for RuntimeMetricsIter {
+impl Iterator for RuntimeIntervals {
     type Item = RuntimeMetrics;
 
     fn next(&mut self) -> Option<RuntimeMetrics> {
@@ -1012,14 +1015,61 @@ impl RuntimeMonitor {
         RuntimeMonitor { runtime }
     }
 
-    pub fn intervals(&self) -> RuntimeMetricsIter {
+    /// Produces an unending iterator of [`RuntimeMetrics`].
+    ///
+    /// Each sampling interval is defined by the time elapsed between advancements of the iterator
+    /// produced by [`RuntimeMonitor::intervals`]. The item type of this iterator is [`RuntimeMetrics`],
+    /// which is a bundle of runtime metrics that describe *only* changes occurring within that sampling
+    /// interval.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use std::time::Duration;
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    ///     let handle = tokio::runtime::Handle::current();
+    ///     // construct the runtime metrics monitor
+    ///     let runtime_monitor = tokio_metrics::RuntimeMonitor::new(&handle);
+    ///
+    ///     // print runtime metrics every 500ms
+    ///     {
+    ///         tokio::spawn(async move {
+    ///             for interval in runtime_monitor.intervals() {
+    ///                 // pretty-print the metric interval
+    ///                 println!("{:?}", interval);
+    ///                 // wait 500ms
+    ///                 tokio::time::sleep(Duration::from_millis(500)).await;
+    ///             }
+    ///         });
+    ///     }
+    ///
+    ///     // await some tasks
+    ///     tokio::join![
+    ///         do_work(),
+    ///         do_work(),
+    ///         do_work(),
+    ///     ];
+    ///
+    ///     Ok(())
+    /// }
+    ///
+    /// async fn do_work() {
+    ///     for _ in 0..25 {
+    ///         tokio::task::yield_now().await;
+    ///         tokio::time::sleep(Duration::from_millis(100)).await;
+    ///     }
+    /// }
+    /// ```
+    pub fn intervals(&self) -> RuntimeIntervals {
         let started_at = Instant::now();
 
         let workers = (0..self.runtime.num_workers())
             .map(|worker| Worker::new(worker, &self.runtime))
             .collect();
 
-        RuntimeMetricsIter {
+        RuntimeIntervals {
             runtime: self.runtime.clone(),
             started_at,
             workers,
