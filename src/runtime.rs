@@ -955,72 +955,121 @@ struct Worker {
     total_busy_duration: Duration,
 }
 
+/// Iterator returned by [`RuntimeMonitor::intervals`].
+///
+/// See that method's documentation for more details.
+pub struct RuntimeIntervals {
+    runtime: runtime::RuntimeMetrics,
+    started_at: Instant,
+    workers: Vec<Worker>,
+
+    // Number of tasks scheduled from *outside* of the runtime
+    num_remote_schedules: u64,
+}
+
+impl RuntimeIntervals {
+    fn probe(&mut self) -> RuntimeMetrics {
+        let now = Instant::now();
+
+        let num_remote_schedules = self.runtime.remote_schedule_count();
+
+        let mut metrics = RuntimeMetrics {
+            workers_count: self.runtime.num_workers(),
+            elapsed: now - self.started_at,
+            injection_queue_depth: self.runtime.injection_queue_depth(),
+            num_remote_schedules: num_remote_schedules - self.num_remote_schedules,
+            min_park_count: u64::MAX,
+            min_noop_count: u64::MAX,
+            min_steal_count: u64::MAX,
+            min_local_schedule_count: u64::MAX,
+            min_overflow_count: u64::MAX,
+            min_polls_count: u64::MAX,
+            min_busy_duration: Duration::from_secs(1000000000),
+            min_local_queue_depth: usize::MAX,
+            ..Default::default()
+        };
+
+        self.num_remote_schedules = num_remote_schedules;
+        self.started_at = now;
+
+        for worker in &mut self.workers {
+            worker.probe(&self.runtime, &mut metrics);
+        }
+
+        metrics
+    }
+}
+
+impl Iterator for RuntimeIntervals {
+    type Item = RuntimeMetrics;
+
+    fn next(&mut self) -> Option<RuntimeMetrics> {
+        Some(self.probe())
+    }
+}
+
 impl RuntimeMonitor {
     pub fn new(runtime: &runtime::Handle) -> RuntimeMonitor {
         let runtime = runtime.metrics();
 
-        RuntimeMonitor {
-            runtime,
-        }
+        RuntimeMonitor { runtime }
     }
 
-    pub fn intervals(&self) -> impl Iterator<Item = RuntimeMetrics> {
-        struct Iter {
-            runtime: runtime::RuntimeMetrics,
-            started_at: Instant,
-            workers: Vec<Worker>,
-
-            // Number of tasks scheduled from *outside* of the runtime
-            num_remote_schedules: u64,
-        }
-
-        impl Iter {
-            fn probe(&mut self) -> RuntimeMetrics {
-                let now = Instant::now();
-
-                let num_remote_schedules = self.runtime.remote_schedule_count();
-
-                let mut metrics = RuntimeMetrics {
-                    workers_count: self.runtime.num_workers(),
-                    elapsed: now - self.started_at,
-                    injection_queue_depth: self.runtime.injection_queue_depth(),
-                    num_remote_schedules: num_remote_schedules - self.num_remote_schedules,
-                    min_park_count: u64::MAX,
-                    min_noop_count: u64::MAX,
-                    min_steal_count: u64::MAX,
-                    min_local_schedule_count: u64::MAX,
-                    min_overflow_count: u64::MAX,
-                    min_polls_count: u64::MAX,
-                    min_busy_duration: Duration::from_secs(1000000000),
-                    min_local_queue_depth: usize::MAX,
-                    .. Default::default()
-                };
-
-                self.num_remote_schedules = num_remote_schedules;
-                self.started_at = now;
-
-                for worker in &mut self.workers {
-                    worker.probe(&self.runtime, &mut metrics);
-                }
-        
-                metrics
-            }
-        }
-
-        impl Iterator for Iter {
-            type Item = RuntimeMetrics;
-
-            fn next(&mut self) -> Option<RuntimeMetrics> {
-                Some(self.probe())
-            }
-        }
-
+    /// Produces an unending iterator of [`RuntimeMetrics`].
+    ///
+    /// Each sampling interval is defined by the time elapsed between advancements of the iterator
+    /// produced by [`RuntimeMonitor::intervals`]. The item type of this iterator is [`RuntimeMetrics`],
+    /// which is a bundle of runtime metrics that describe *only* changes occurring within that sampling
+    /// interval.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use std::time::Duration;
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    ///     let handle = tokio::runtime::Handle::current();
+    ///     // construct the runtime metrics monitor
+    ///     let runtime_monitor = tokio_metrics::RuntimeMonitor::new(&handle);
+    ///
+    ///     // print runtime metrics every 500ms
+    ///     {
+    ///         tokio::spawn(async move {
+    ///             for interval in runtime_monitor.intervals() {
+    ///                 // pretty-print the metric interval
+    ///                 println!("{:?}", interval);
+    ///                 // wait 500ms
+    ///                 tokio::time::sleep(Duration::from_millis(500)).await;
+    ///             }
+    ///         });
+    ///     }
+    ///
+    ///     // await some tasks
+    ///     tokio::join![
+    ///         do_work(),
+    ///         do_work(),
+    ///         do_work(),
+    ///     ];
+    ///
+    ///     Ok(())
+    /// }
+    ///
+    /// async fn do_work() {
+    ///     for _ in 0..25 {
+    ///         tokio::task::yield_now().await;
+    ///         tokio::time::sleep(Duration::from_millis(100)).await;
+    ///     }
+    /// }
+    /// ```
+    pub fn intervals(&self) -> RuntimeIntervals {
         let started_at = Instant::now();
 
         let workers = (0..self.runtime.num_workers())
-            .map(|worker| Worker::new(worker, &self.runtime)).collect();
+            .map(|worker| Worker::new(worker, &self.runtime))
+            .collect();
 
-        Iter {
+        RuntimeIntervals {
             runtime: self.runtime.clone(),
             started_at,
             workers,
