@@ -498,13 +498,14 @@ use std::time::{Duration, Instant};
 /// ```
 /// If a cumulative metric overflows *more than once* in the midst of an interval,
 /// its interval-sampled counterpart will also overflow.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct TaskMonitor {
     metrics: Arc<RawMetrics>,
 }
 
 pin_project! {
     /// An async task that has been instrumented with [`TaskMonitor::instrument`].
+    #[derive(Debug)]
     pub struct Instrumented<T> {
         // The task being instrumented
         #[pin]
@@ -1322,6 +1323,7 @@ pub struct TaskMetrics {
 }
 
 /// Tracks the metrics, shared across the various types.
+#[derive(Debug)]
 struct RawMetrics {
     /// A task poll takes longer than this, it is considered a slow poll.
     slow_poll_threshold: Duration,
@@ -1363,6 +1365,7 @@ struct RawMetrics {
     total_slow_poll_duration: AtomicU64,
 }
 
+#[derive(Debug)]
 struct State {
     /// Where metrics should be recorded
     metrics: Arc<RawMetrics>,

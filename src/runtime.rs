@@ -44,6 +44,7 @@ use std::time::{Duration, Instant};
 ///     }
 /// }
 /// ```
+#[derive(Debug)]
 pub struct RuntimeMonitor {
     /// Handle to the runtime
     runtime: runtime::RuntimeMetrics,
@@ -944,6 +945,7 @@ pub struct RuntimeMetrics {
 }
 
 /// Snapshot of per-worker metrics
+#[derive(Debug)]
 struct Worker {
     worker: usize,
     total_park_count: u64,
@@ -958,6 +960,7 @@ struct Worker {
 /// Iterator returned by [`RuntimeMonitor::intervals`].
 ///
 /// See that method's documentation for more details.
+#[derive(Debug)]
 pub struct RuntimeIntervals {
     runtime: runtime::RuntimeMetrics,
     started_at: Instant,
