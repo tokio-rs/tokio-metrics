@@ -1,4 +1,3 @@
-use futures_core::Stream;
 use futures_util::task::{ArcWake, AtomicWaker};
 use pin_project_lite::pin_project;
 use std::future::Future;
@@ -6,6 +5,7 @@ use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering::SeqCst};
 use std::sync::Arc;
 use std::task::{Context, Poll};
+use tokio_stream::Stream;
 
 #[cfg(any(feature = "rt"))]
 use tokio::time::{Duration, Instant};
@@ -2373,7 +2373,7 @@ fn instrument_poll<T, Out>(
     state.waker.register(cx.waker());
     // Get the instrumented waker
     let waker_ref = futures_util::task::waker_ref(state);
-    let mut cx = Context::from_waker(&*waker_ref);
+    let mut cx = Context::from_waker(&waker_ref);
     // Poll the task
     let inner_poll_start = Instant::now();
     let ret = poll_fn(this.task, &mut cx);
