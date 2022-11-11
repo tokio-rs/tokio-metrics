@@ -2361,7 +2361,7 @@ impl<T: Future> Future for Instrumented<T> {
 
         // Get the instrumented waker
         let waker_ref = futures_util::task::waker_ref(state);
-        let mut cx = Context::from_waker(&*waker_ref);
+        let mut cx = Context::from_waker(&waker_ref);
 
         // Poll the task
         let inner_poll_start = Instant::now();
