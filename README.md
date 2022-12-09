@@ -177,11 +177,11 @@ tokio::spawn(do_work());
 - **[`min_noop_count`]**  
   The minimum number of times any worker thread unparked but performed no work before parking again.
 - **[`total_steal_count`]**  
-  The number of times worker threads stole tasks from another worker thread.
+  The number of tasks worker threads stole from another worker thread.
 - **[`max_steal_count`]**  
-  The maximum number of times any worker thread stole tasks from another worker thread.
+  The maximum number of tasks any worker thread stole from another worker thread.
 - **[`min_steal_count`]**  
-  The minimum number of times any worker thread stole tasks from another worker thread.
+  The minimum number of tasks any worker thread stole from another worker thread.
 - **[`num_remote_schedules`]**  
   The number of tasks scheduled from outside of the runtime.
 - **[`total_local_schedule_count`]**  
