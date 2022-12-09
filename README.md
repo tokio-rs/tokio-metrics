@@ -182,6 +182,12 @@ tokio::spawn(do_work());
   The maximum number of tasks any worker thread stole from another worker thread.
 - **[`min_steal_count`]**  
   The minimum number of tasks any worker thread stole from another worker thread.
+- **[`total_steal_operations`]**  
+  The number of times worker threads stole tasks from another worker thread.
+- **[`max_steal_operations`]**  
+  The maximum number of times any worker thread stole tasks from another worker thread.
+- **[`min_steal_operations`]**  
+  The minimum number of times any worker thread stole tasks from another worker thread.
 - **[`num_remote_schedules`]**  
   The number of tasks scheduled from outside of the runtime.
 - **[`total_local_schedule_count`]**  
@@ -233,6 +239,9 @@ tokio::spawn(do_work());
 [`total_steal_count`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.total_steal_count
 [`max_steal_count`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.max_steal_count
 [`min_steal_count`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.min_steal_count
+[`total_steal_operations`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.total_steal_operations
+[`max_steal_operations`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.max_steal_operations
+[`min_steal_operations`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.min_steal_operations
 [`num_remote_schedules`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.num_remote_schedules
 [`total_local_schedule_count`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.total_local_schedule_count
 [`max_local_schedule_count`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.max_local_schedule_count
