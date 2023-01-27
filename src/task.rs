@@ -2431,7 +2431,7 @@ impl ArcWake for State {
 #[inline(always)]
 fn to_nanos(d: Duration) -> u64 {
     debug_assert!(d <= Duration::from_nanos(u64::MAX));
-    (d.as_secs() as u64)
+    d.as_secs()
         .wrapping_mul(1_000_000_000)
         .wrapping_add(d.subsec_nanos() as u64)
 }
