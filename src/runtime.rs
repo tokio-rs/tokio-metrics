@@ -254,10 +254,11 @@ pub struct RuntimeMetrics {
     /// - [`RuntimeMetrics::max_noop_count`]
     pub min_noop_count: u64,
 
-    /// The number of times worker threads stole tasks from another worker thread.
+    /// The number of tasks worker threads stole from another worker thread.
     ///
-    /// The worker steal count starts increases by one each time the worker has processed its 
-    /// scheduled queue and successfully steals more pending tasks from another worker.
+    /// The worker steal count starts increases by the amount of stolen tasks each time the worker
+    /// has processed its scheduled queue and successfully steals more pending tasks from another
+    /// worker.
     /// 
     /// This metric only applies to the **multi-threaded** runtime and will always return `0` when 
     /// using the current thread runtime.
@@ -297,7 +298,7 @@ pub struct RuntimeMetrics {
     ///             // Spawn a task that bumps the previous task out of the "next
     ///             // scheduled" slot.
     ///             tokio::spawn(async {});
-    ///             // Blocking receive on the channe.
+    ///             // Blocking receive on the channel.
     ///             rx.recv().unwrap();
     ///             flush_metrics().await;
     ///         }).await.unwrap();
@@ -321,7 +322,7 @@ pub struct RuntimeMetrics {
     /// ```
     pub total_steal_count: u64,
 
-    /// The maximum number of times any worker thread stole tasks from another worker thread.
+    /// The maximum number of tasks any worker thread stole from another worker thread.
     /// 
     /// ##### Definition
     /// This metric is derived from the maximum of [`tokio::runtime::RuntimeMetrics::worker_steal_count`] 
@@ -332,7 +333,7 @@ pub struct RuntimeMetrics {
     /// - [`RuntimeMetrics::min_steal_count`]
     pub max_steal_count: u64,
 
-    /// The minimum number of times any worker thread stole tasks from another worker thread.
+    /// The minimum number of tasks any worker thread stole from another worker thread.
     /// 
     /// ##### Definition
     /// This metric is derived from the minimum of [`tokio::runtime::RuntimeMetrics::worker_steal_count`] 
