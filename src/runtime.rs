@@ -944,6 +944,12 @@ pub struct RuntimeMetrics {
     /// ##### Definition
     /// This metric is derived from [`tokio::runtime::RuntimeMetrics::budget_forced_yield_count`].
     pub budget_forced_yield_count: u64,
+
+    /// Returns the number of ready events processed by the runtime’s I/O driver.
+    ///
+    /// ##### Definition
+    /// This metric is derived from [`tokio::runtime::RuntimeMetrics::io_driver_ready_count`].
+    pub io_driver_ready_count: u64,
 }
 
 /// Snapshot of per-worker metrics
@@ -971,6 +977,7 @@ pub struct RuntimeIntervals {
     // Number of tasks scheduled from *outside* of the runtime
     num_remote_schedules: u64,
     budget_forced_yield_count: u64,
+    io_driver_ready_count: u64,
 }
 
 impl RuntimeIntervals {
@@ -979,6 +986,7 @@ impl RuntimeIntervals {
 
         let num_remote_schedules = self.runtime.remote_schedule_count();
         let budget_forced_yields = self.runtime.budget_forced_yield_count();
+        let io_driver_ready_events = self.runtime.io_driver_ready_count();
 
         let mut metrics = RuntimeMetrics {
             workers_count: self.runtime.num_workers(),
@@ -994,12 +1002,14 @@ impl RuntimeIntervals {
             min_busy_duration: Duration::from_secs(1000000000),
             min_local_queue_depth: usize::MAX,
             budget_forced_yield_count: budget_forced_yields - self.budget_forced_yield_count,
+            io_driver_ready_count: io_driver_ready_events - self.io_driver_ready_count,
             ..Default::default()
         };
 
         self.num_remote_schedules = num_remote_schedules;
         self.started_at = now;
         self.budget_forced_yield_count = budget_forced_yields;
+        self.io_driver_ready_count = io_driver_ready_events;
 
         for worker in &mut self.workers {
             worker.probe(&self.runtime, &mut metrics);
@@ -1084,6 +1094,7 @@ impl RuntimeMonitor {
             workers,
             num_remote_schedules: self.runtime.remote_schedule_count(),
             budget_forced_yield_count: self.runtime.budget_forced_yield_count(),
+            io_driver_ready_count: self.runtime.io_driver_ready_count(),
         }
     }
 }
