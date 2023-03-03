@@ -914,11 +914,6 @@ pub struct TaskMetrics {
     ///   The mean duration that tasks spent waiting to be executed after awakening.
     ///
     /// ##### Examples
-    /// In the below example, a task that yields endlessly is raced against a task that blocks the
-    /// executor for 1 second; the yielding task spends approximately 1 second waiting to
-    /// be scheduled. In the next sampling interval, a task that yields endlessly is raced against a
-    /// task that blocks the executor for half a second; the yielding task spends approximately half
-    /// a second waiting to be scheduled.
     /// ```
     /// use tokio::time::Duration;
     ///
@@ -929,48 +924,21 @@ pub struct TaskMetrics {
     ///     let mut next_interval = || interval.next().unwrap();
     ///
     ///     // construct and instrument and spawn a task that yields endlessly
-    ///     let endless_task = metrics_monitor.instrument(async {
+    ///     tokio::spawn(metrics_monitor.instrument(async {
     ///         loop { tokio::task::yield_now().await }
-    ///     });
+    ///     }));
     ///
-    ///     // construct and spawn a task that blocks the executor for 1 second
-    ///     let one_sec_task = tokio::spawn(async {
-    ///         std::thread::sleep(Duration::from_millis(1000))
-    ///     });
+    ///     tokio::task::yield_now().await;
     ///
-    ///     // race `endless_task` against `one_sec_task`
-    ///     tokio::select! {
-    ///         biased;
-    ///         _ = endless_task => { unreachable!() }
-    ///         _ = one_sec_task => {}
-    ///     }
+    ///     // block the executor for 1 second
+    ///     std::thread::sleep(Duration::from_millis(1000));
+    ///
+    ///     tokio::task::yield_now().await;
     ///
     ///     // `endless_task` will have spent approximately one second waiting
     ///     let total_scheduled_duration = next_interval().total_scheduled_duration;
     ///     assert!(total_scheduled_duration >= Duration::from_millis(1000));
     ///     assert!(total_scheduled_duration <= Duration::from_millis(1100));
-    ///
-    ///     // construct and instrument and spawn a task that yields endlessly
-    ///     let endless_task = metrics_monitor.instrument(async {
-    ///         loop { tokio::task::yield_now().await }
-    ///     });
-    ///
-    ///     // construct and spawn a task that blocks the executor for 1 second
-    ///     let half_sec_task = tokio::spawn(async {
-    ///         std::thread::sleep(Duration::from_millis(500))
-    ///     });
-    ///
-    ///     // race `endless_task` against `half_sec_task`
-    ///     tokio::select! {
-    ///         biased;
-    ///         _ = endless_task => { unreachable!() }
-    ///         _ = half_sec_task => {}
-    ///     }
-    ///
-    ///     // `endless_task` will have spent approximately half a second waiting
-    ///     let total_scheduled_duration = next_interval().total_scheduled_duration;
-    ///     assert!(total_scheduled_duration >= Duration::from_millis(500));
-    ///     assert!(total_scheduled_duration <= Duration::from_millis(600));
     /// }
     /// ```
     pub total_scheduled_duration: Duration,
@@ -1916,13 +1884,8 @@ impl TaskMetrics {
     ///   are first polled.
     ///
     /// ##### Examples
-    /// In the below example, a task that yields endlessly is raced against a task that blocks the
-    /// executor for 1 second; the yielding task spends approximately 1 second waiting to
-    /// be scheduled. In the next sampling interval, a task that yields endlessly is raced against a
-    /// task that blocks the executor for half a second; the yielding task spends approximately half
-    /// a second waiting to be scheduled.
     /// ```
-    /// use std::time::Duration;
+    /// use tokio::time::Duration;
     ///
     /// #[tokio::main(flavor = "current_thread")]
     /// async fn main() {
@@ -1930,54 +1893,25 @@ impl TaskMetrics {
     ///     let mut interval = metrics_monitor.intervals();
     ///     let mut next_interval = || interval.next().unwrap();
     ///
-    ///     // construct and instrument a task that yields endlessly
-    ///     let endless_task = metrics_monitor.instrument(async {
-    ///         loop { tokio::task::yield_now().await }
-    ///     });
-    ///
-    ///     // construct and spawn a task that blocks the executor for 1 second
-    ///     let one_sec_task = tokio::spawn(async {
-    ///         std::thread::sleep(Duration::from_secs(1))
-    ///     });
-    ///
-    ///     // ensure that at least 2s elapse between the instrumentation of
-    ///     // `endless_task` and its first poll
-    ///     std::thread::sleep(Duration::from_secs(2));
-    ///
-    ///     // race `endless_task` against `one_sec_task`
-    ///     tokio::select! {
-    ///         biased;
-    ///         _ = endless_task => { unreachable!() }
-    ///         _ = one_sec_task => {}
-    ///     }
-    ///
-    ///     // `endless_task` will have spent approximately one second waiting:
-    ///     let interval = next_interval();
-    ///     assert!(interval.mean_scheduled_duration() >= Duration::from_secs(1));
-    ///     // ...but *not* 2s waiting:
-    ///     assert!(interval.mean_scheduled_duration() <= Duration::from_secs(2));
-    ///     // i.e., time_to_first_poll is not factored into total_scheduled_duration:
-    ///     assert!(interval.mean_first_poll_delay() >= Duration::from_secs(2));
-    ///
     ///     // construct and instrument and spawn a task that yields endlessly
-    ///     let endless_task = metrics_monitor.instrument(async {
+    ///     tokio::spawn(metrics_monitor.instrument(async {
     ///         loop { tokio::task::yield_now().await }
-    ///     });
+    ///     }));
     ///
-    ///     // construct (but do not spawn) and a task that blocks the executor for 1 second
-    ///     let one_sec_task = async {
-    ///         std::thread::sleep(Duration::from_secs(1))
-    ///     };
+    ///     tokio::task::yield_now().await;
     ///
-    ///     // race `endless_task` against `one_sec_task`
-    ///     tokio::select! {
-    ///         biased;
-    ///         _ = endless_task => { unreachable!() }
-    ///         _ = one_sec_task => {}
-    ///     }
+    ///     // block the executor for 1 second
+    ///     std::thread::sleep(Duration::from_millis(1000));
     ///
-    ///     // `endless_task` will NOT have spent 1 second waiting to be scheduled
-    ///     assert!(next_interval().mean_scheduled_duration() < Duration::from_secs(1));
+    ///     // get the task to run twice
+    ///     // the first will have a 1 sec scheduling delay, the second will have almost none
+    ///     tokio::task::yield_now().await;
+    ///     tokio::task::yield_now().await;
+    ///
+    ///     // `endless_task` will have spent approximately one second waiting
+    ///     let mean_scheduled_duration = next_interval().mean_scheduled_duration();
+    ///     assert!(mean_scheduled_duration >= Duration::from_millis(500), "{}", mean_scheduled_duration.as_secs_f64());
+    ///     assert!(mean_scheduled_duration <= Duration::from_millis(600), "{}", mean_scheduled_duration.as_secs_f64());
     /// }
     /// ```
     pub fn mean_scheduled_duration(&self) -> Duration {

@@ -518,7 +518,7 @@ pub struct RuntimeMetrics {
     ///
     /// ##### Examples
     /// ```
-    /// #[tokio::main(flavor = "multi_thread", worker_threads = 2)]
+    /// #[tokio::main(flavor = "multi_thread", worker_threads = 1)]
     /// async fn main() {
     ///     let handle = tokio::runtime::Handle::current();
     ///     let monitor = tokio_metrics::RuntimeMonitor::new(&handle);
@@ -529,12 +529,6 @@ pub struct RuntimeMetrics {
     ///     assert_eq!(interval.total_overflow_count, 0);
     ///
     ///     use std::sync::atomic::{AtomicBool, Ordering};
-    ///     static SPINLOCK: AtomicBool = AtomicBool::new(true);
-    ///
-    ///     // block the other worker thread
-    ///     tokio::spawn(async {
-    ///         while SPINLOCK.load(Ordering::SeqCst) {}
-    ///     });
     ///
     ///     // spawn a ton of tasks
     ///     let _ = tokio::spawn(async {
@@ -544,9 +538,6 @@ pub struct RuntimeMetrics {
     ///             tokio::spawn(async {});
     ///         }
     ///     }).await;
-    ///
-    ///     // unblock the other worker thread
-    ///     SPINLOCK.store(false, Ordering::SeqCst);
     ///
     ///     let interval = { flush_metrics().await; next_interval() }; // end of interval 2
     ///     assert_eq!(interval.total_overflow_count, 1);
