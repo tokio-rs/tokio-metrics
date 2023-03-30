@@ -3,13 +3,14 @@ use pin_project_lite::pin_project;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicU64, Ordering::SeqCst};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 use tokio_stream::Stream;
 
 #[cfg(any(feature = "rt"))]
 use tokio::time::{Duration, Instant};
 
+use crate::stat_util::find_percentile;
 #[cfg(not(any(feature = "rt")))]
 use std::time::{Duration, Instant};
 
@@ -1289,6 +1290,18 @@ pub struct TaskMetrics {
     /// }
     /// ```
     pub total_slow_poll_duration: Duration,
+
+    pub percentile_90_poll_duration: Duration,
+
+    pub percentile_95_poll_duration: Duration,
+
+    pub percentile_99_poll_duration: Duration,
+
+    pub percentile_90_schedule_delay: Duration,
+
+    pub percentile_95_schedule_delay: Duration,
+
+    pub percentile_99_schedule_delay: Duration,
 }
 
 /// Tracks the metrics, shared across the various types.
@@ -1332,6 +1345,12 @@ struct RawMetrics {
 
     /// Total amount of time tasks spent being polled above the slow cut off.
     total_slow_poll_duration: AtomicU64,
+
+    /// List of poll durations for percentile computation.
+    poll_durations: Mutex<Vec<Duration>>,
+
+    /// List of scheduling delays for percentile computation.
+    scheduling_delays: Mutex<Vec<Duration>>,
 }
 
 #[derive(Debug)]
@@ -1427,6 +1446,8 @@ impl TaskMonitor {
                 total_idle_duration_ns: AtomicU64::new(0),
                 total_fast_poll_duration_ns: AtomicU64::new(0),
                 total_slow_poll_duration: AtomicU64::new(0),
+                poll_durations: Mutex::new(vec![]),
+                scheduling_delays: Mutex::new(vec![]),
             }),
         }
     }
@@ -1651,61 +1672,73 @@ impl TaskMonitor {
         let mut previous: Option<TaskMetrics> = None;
 
         std::iter::from_fn(move || {
-            let latest: TaskMetrics = latest.metrics();
+            let latest_metrics: TaskMetrics = latest.metrics();
+
+            latest.poll_durations.lock().unwrap().clear();
+            latest.scheduling_delays.lock().unwrap().clear();
+
             let next = if let Some(previous) = previous {
                 TaskMetrics {
-                    instrumented_count: latest
+                    instrumented_count: latest_metrics
                         .instrumented_count
                         .wrapping_sub(previous.instrumented_count),
-                    dropped_count: latest.dropped_count.wrapping_sub(previous.dropped_count),
-                    total_poll_count: latest
+                    dropped_count: latest_metrics
+                        .dropped_count
+                        .wrapping_sub(previous.dropped_count),
+                    total_poll_count: latest_metrics
                         .total_poll_count
                         .wrapping_sub(previous.total_poll_count),
                     total_poll_duration: sub(
-                        latest.total_poll_duration,
+                        latest_metrics.total_poll_duration,
                         previous.total_poll_duration,
                     ),
-                    first_poll_count: latest
+                    first_poll_count: latest_metrics
                         .first_poll_count
                         .wrapping_sub(previous.first_poll_count),
-                    total_idled_count: latest
+                    total_idled_count: latest_metrics
                         .total_idled_count
                         .wrapping_sub(previous.total_idled_count),
-                    total_scheduled_count: latest
+                    total_scheduled_count: latest_metrics
                         .total_scheduled_count
                         .wrapping_sub(previous.total_scheduled_count),
-                    total_fast_poll_count: latest
+                    total_fast_poll_count: latest_metrics
                         .total_fast_poll_count
                         .wrapping_sub(previous.total_fast_poll_count),
-                    total_slow_poll_count: latest
+                    total_slow_poll_count: latest_metrics
                         .total_slow_poll_count
                         .wrapping_sub(previous.total_slow_poll_count),
                     total_first_poll_delay: sub(
-                        latest.total_first_poll_delay,
+                        latest_metrics.total_first_poll_delay,
                         previous.total_first_poll_delay,
                     ),
                     total_idle_duration: sub(
-                        latest.total_idle_duration,
+                        latest_metrics.total_idle_duration,
                         previous.total_idle_duration,
                     ),
                     total_scheduled_duration: sub(
-                        latest.total_scheduled_duration,
+                        latest_metrics.total_scheduled_duration,
                         previous.total_scheduled_duration,
                     ),
                     total_fast_poll_duration: sub(
-                        latest.total_fast_poll_duration,
+                        latest_metrics.total_fast_poll_duration,
                         previous.total_fast_poll_duration,
                     ),
                     total_slow_poll_duration: sub(
-                        latest.total_slow_poll_duration,
+                        latest_metrics.total_slow_poll_duration,
                         previous.total_slow_poll_duration,
                     ),
+                    percentile_90_poll_duration: latest_metrics.percentile_90_poll_duration,
+                    percentile_95_poll_duration: latest_metrics.percentile_95_poll_duration,
+                    percentile_99_poll_duration: latest_metrics.percentile_99_poll_duration,
+                    percentile_90_schedule_delay: latest_metrics.percentile_90_schedule_delay,
+                    percentile_95_schedule_delay: latest_metrics.percentile_95_schedule_delay,
+                    percentile_99_schedule_delay: latest_metrics.percentile_99_schedule_delay,
                 }
             } else {
-                latest
+                latest_metrics
             };
 
-            previous = Some(latest);
+            previous = Some(latest_metrics);
 
             Some(next)
         })
@@ -1724,6 +1757,9 @@ impl RawMetrics {
 
         let total_poll_count = total_fast_poll_count + total_slow_poll_count;
         let total_poll_duration = total_fast_poll_duration + total_slow_poll_duration;
+
+        self.poll_durations.lock().unwrap().sort_unstable();
+        self.scheduling_delays.lock().unwrap().sort_unstable();
 
         TaskMetrics {
             instrumented_count: self.instrumented_count.load(SeqCst),
@@ -1748,6 +1784,30 @@ impl RawMetrics {
             ),
             total_slow_poll_duration: Duration::from_nanos(
                 self.total_slow_poll_duration.load(SeqCst),
+            ),
+            percentile_90_poll_duration: find_percentile(
+                &mut self.poll_durations.lock().unwrap(),
+                0.9,
+            ),
+            percentile_95_poll_duration: find_percentile(
+                &mut self.poll_durations.lock().unwrap(),
+                0.95,
+            ),
+            percentile_99_poll_duration: find_percentile(
+                &mut self.poll_durations.lock().unwrap(),
+                0.99,
+            ),
+            percentile_90_schedule_delay: find_percentile(
+                &mut self.scheduling_delays.lock().unwrap(),
+                0.9,
+            ),
+            percentile_95_schedule_delay: find_percentile(
+                &mut self.scheduling_delays.lock().unwrap(),
+                0.95,
+            ),
+            percentile_99_schedule_delay: find_percentile(
+                &mut self.scheduling_delays.lock().unwrap(),
+                0.99,
             ),
         }
     }
@@ -2291,12 +2351,18 @@ fn instrument_poll<T, Out>(
         // we need to instead represent it as a proper `Instant`.
         let woke_instant = instrumented_at + Duration::from_nanos(woke_at);
 
+        let scheduling_delay = poll_start - woke_instant;
+
         // the duration this task spent scheduled is time time elapsed between
         // when this task was awoke, and when it was polled.
-        let scheduled_ns = (poll_start - woke_instant)
-            .as_nanos()
-            .try_into()
-            .unwrap_or(u64::MAX);
+        let scheduled_ns = scheduling_delay.as_nanos().try_into().unwrap_or(u64::MAX);
+
+        // add this scheduling delay to the monitors list
+        metrics
+            .scheduling_delays
+            .lock()
+            .unwrap()
+            .push(scheduling_delay);
 
         // add `scheduled_ns` to the Monitor's total
         metrics
@@ -2319,6 +2385,7 @@ fn instrument_poll<T, Out>(
         .unwrap_or(u64::MAX);
     /* accounting for poll time */
     let inner_poll_duration = inner_poll_end - inner_poll_start;
+
     let inner_poll_ns: u64 = inner_poll_duration
         .as_nanos()
         .try_into()
@@ -2332,6 +2399,13 @@ fn instrument_poll<T, Out>(
     // update the appropriate bucket
     count_bucket.fetch_add(1, SeqCst);
     duration_bucket.fetch_add(inner_poll_ns, SeqCst);
+
+    metrics
+        .poll_durations
+        .lock()
+        .unwrap()
+        .push(inner_poll_duration);
+
     ret
 }
 
