@@ -1098,6 +1098,8 @@ pub struct TaskMetrics {
     /// ```
     pub total_fast_poll_count: u64,
 
+    pub total_short_delay_count: u64,
+
     /// The total duration of fast polls.
     ///
     /// Here, 'fast' is defined as completing in strictly less time than
@@ -1165,6 +1167,8 @@ pub struct TaskMetrics {
     /// ```
     pub total_fast_poll_duration: Duration,
 
+    pub total_short_delay_duration: Duration,
+
     /// The total number of times that polling tasks completed slowly.
     ///
     /// Here, 'slowly' is defined as completing in at least as much time as
@@ -1219,6 +1223,8 @@ pub struct TaskMetrics {
     /// }
     /// ```
     pub total_slow_poll_count: u64,
+
+    pub total_long_delay_count: u64,
 
     /// The total duration of slow polls.
     ///
@@ -1289,6 +1295,8 @@ pub struct TaskMetrics {
     /// }
     /// ```
     pub total_slow_poll_duration: Duration,
+
+    pub total_long_delay_duration: Duration,
 }
 
 /// Tracks the metrics, shared across the various types.
@@ -1296,6 +1304,9 @@ pub struct TaskMetrics {
 struct RawMetrics {
     /// A task poll takes longer than this, it is considered a slow poll.
     slow_poll_threshold: Duration,
+
+    /// A scheduling delay longer than this will be considered a long delay
+    long_delay_threshold: Duration,
 
     /// Total number of instrumented tasks.
     instrumented_count: AtomicU64,
@@ -1315,6 +1326,12 @@ struct RawMetrics {
     /// Total number of times tasks were polled slow
     total_slow_poll_count: AtomicU64,
 
+    /// Total number of times tasks had long delay,
+    total_long_delay_count: AtomicU64,
+
+    /// Total number of times tasks had little delay
+    total_short_delay_count: AtomicU64,
+
     /// Total number of times tasks were dropped
     dropped_count: AtomicU64,
 
@@ -1332,6 +1349,12 @@ struct RawMetrics {
 
     /// Total amount of time tasks spent being polled above the slow cut off.
     total_slow_poll_duration: AtomicU64,
+
+    /// Total amount of time tasks spent being polled below the long delay cut off.
+    total_short_delay_duration_ns: AtomicU64,
+
+    /// Total amount of time tasks spent being polled above the long delay cut off.
+    total_long_delay_duration_ns: AtomicU64,
 }
 
 #[derive(Debug)]
@@ -1420,6 +1443,7 @@ impl TaskMonitor {
                 total_scheduled_count: AtomicU64::new(0),
                 total_fast_poll_count: AtomicU64::new(0),
                 total_slow_poll_count: AtomicU64::new(0),
+                total_long_delay_count: AtomicU64::new(0),
                 instrumented_count: AtomicU64::new(0),
                 dropped_count: AtomicU64::new(0),
                 total_first_poll_delay_ns: AtomicU64::new(0),
@@ -1427,6 +1451,10 @@ impl TaskMonitor {
                 total_idle_duration_ns: AtomicU64::new(0),
                 total_fast_poll_duration_ns: AtomicU64::new(0),
                 total_slow_poll_duration: AtomicU64::new(0),
+                total_short_delay_duration_ns: AtomicU64::new(0),
+                long_delay_threshold: Default::default(),
+                total_short_delay_count: AtomicU64::new(0),
+                total_long_delay_duration_ns: AtomicU64::new(0),
             }),
         }
     }
@@ -1451,6 +1479,10 @@ impl TaskMonitor {
     /// ```
     pub fn slow_poll_threshold(&self) -> Duration {
         self.metrics.slow_poll_threshold
+    }
+
+    pub fn long_delay_threshold(&self) -> Duration {
+        self.metrics.long_delay_threshold
     }
 
     /// Produces an instrumented façade around a given async task.
@@ -1677,9 +1709,15 @@ impl TaskMonitor {
                     total_fast_poll_count: latest
                         .total_fast_poll_count
                         .wrapping_sub(previous.total_fast_poll_count),
+                    total_short_delay_count: latest
+                        .total_short_delay_count
+                        .wrapping_sub(previous.total_short_delay_count),
                     total_slow_poll_count: latest
                         .total_slow_poll_count
                         .wrapping_sub(previous.total_slow_poll_count),
+                    total_long_delay_count: latest
+                        .total_long_delay_count
+                        .wrapping_sub(previous.total_long_delay_count),
                     total_first_poll_delay: sub(
                         latest.total_first_poll_delay,
                         previous.total_first_poll_delay,
@@ -1696,9 +1734,17 @@ impl TaskMonitor {
                         latest.total_fast_poll_duration,
                         previous.total_fast_poll_duration,
                     ),
+                    total_short_delay_duration: sub(
+                        latest.total_short_delay_duration,
+                        previous.total_short_delay_duration,
+                    ),
                     total_slow_poll_duration: sub(
                         latest.total_slow_poll_duration,
                         previous.total_slow_poll_duration,
+                    ),
+                    total_long_delay_duration: sub(
+                        latest.total_long_delay_duration,
+                        previous.total_long_delay_duration,
                     ),
                 }
             } else {
@@ -1736,6 +1782,8 @@ impl RawMetrics {
             total_scheduled_count: self.total_scheduled_count.load(SeqCst),
             total_fast_poll_count: self.total_fast_poll_count.load(SeqCst),
             total_slow_poll_count: self.total_slow_poll_count.load(SeqCst),
+            total_short_delay_count: self.total_short_delay_count.load(SeqCst),
+            total_long_delay_count: self.total_long_delay_count.load(SeqCst),
             total_first_poll_delay: Duration::from_nanos(
                 self.total_first_poll_delay_ns.load(SeqCst),
             ),
@@ -1748,6 +1796,12 @@ impl RawMetrics {
             ),
             total_slow_poll_duration: Duration::from_nanos(
                 self.total_slow_poll_duration.load(SeqCst),
+            ),
+            total_short_delay_duration: Duration::from_nanos(
+                self.total_short_delay_duration_ns.load(SeqCst),
+            ),
+            total_long_delay_duration: Duration::from_nanos(
+                self.total_long_delay_duration_ns.load(SeqCst),
             ),
         }
     }
@@ -2052,6 +2106,10 @@ impl TaskMetrics {
         self.total_slow_poll_count as f64 / self.total_poll_count as f64
     }
 
+    pub fn long_delay_ratio(&self) -> f64 {
+        self.total_long_delay_count as f64 / self.total_poll_count as f64
+    }
+
     /// The mean duration of fast polls.
     ///
     /// ##### Definition
@@ -2124,6 +2182,13 @@ impl TaskMetrics {
     /// ```
     pub fn mean_fast_poll_duration(&self) -> Duration {
         mean(self.total_fast_poll_duration, self.total_fast_poll_count)
+    }
+
+    pub fn mean_short_poll_duration(&self) -> Duration {
+        mean(
+            self.total_short_delay_duration,
+            self.total_short_delay_count,
+        )
     }
 
     /// The mean duration of slow polls.
@@ -2216,6 +2281,10 @@ impl TaskMetrics {
     pub fn mean_slow_poll_duration(&self) -> Duration {
         mean(self.total_slow_poll_duration, self.total_slow_poll_count)
     }
+
+    pub fn mean_long_delay_duration(&self) -> Duration {
+        mean(self.total_long_delay_duration, self.total_long_delay_count)
+    }
 }
 
 impl<T: Future> Future for Instrumented<T> {
@@ -2297,6 +2366,18 @@ fn instrument_poll<T, Out>(
             .as_nanos()
             .try_into()
             .unwrap_or(u64::MAX);
+
+        let scheduled = Duration::from_nanos(scheduled_ns);
+
+        let (count_bucket, duration_bucket) = // was this a slow or fast poll?
+            if scheduled >= metrics.long_delay_threshold {
+                (&metrics.total_long_delay_count, &metrics.total_long_delay_duration_ns)
+            } else {
+                (&metrics.total_short_delay_count, &metrics.total_short_delay_duration_ns)
+            };
+        // update the appropriate bucket
+        count_bucket.fetch_add(1, SeqCst);
+        duration_bucket.fetch_add(scheduled_ns, SeqCst);
 
         // add `scheduled_ns` to the Monitor's total
         metrics
