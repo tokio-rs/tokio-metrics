@@ -1098,6 +1098,10 @@ pub struct TaskMetrics {
     /// ```
     pub total_fast_poll_count: u64,
 
+    /// The total number of times that a task was executed swiftly.
+    ///
+    /// Here, 'swiftly' is defined as executing in strictly less time than
+    /// [`long_delay_threshold`][TaskMonitor::long_delay_threshold].
     pub total_short_delay_count: u64,
 
     /// The total duration of fast polls.
@@ -1167,6 +1171,11 @@ pub struct TaskMetrics {
     /// ```
     pub total_fast_poll_duration: Duration,
 
+    /// The total scheduling duration for tasks which were quickly executed after being scheduled.
+    ///
+    /// Here, "quickly" means that the task takes less than
+    /// [`long_delay_threshold`][TaskMonitor::long_delay_threshold] to be executed after being
+    /// scheduled.
     pub total_short_delay_duration: Duration,
 
     /// The total number of times that polling tasks completed slowly.
@@ -1224,6 +1233,11 @@ pub struct TaskMetrics {
     /// ```
     pub total_slow_poll_count: u64,
 
+    /// The total count of tasks with long scheduling delays.
+    ///
+    /// This is defined as tasks taking longer than
+    /// [`long_delay_threshold`][TaskMonitor::long_delay_threshold] to be executed aftering being
+    /// scheduled.
     pub total_long_delay_count: u64,
 
     /// The total duration of slow polls.
@@ -1296,6 +1310,10 @@ pub struct TaskMetrics {
     /// ```
     pub total_slow_poll_duration: Duration,
 
+    /// The total number of times that a task had a long scheduling duration.
+    ///
+    /// Here, a long scheduling duration is defined as taking longer to start execution after
+    /// scheduling than [`long_delay_threshold`][TaskMonitor::long_delay_threshold].
     pub total_long_delay_duration: Duration,
 }
 
@@ -1481,6 +1499,7 @@ impl TaskMonitor {
         self.metrics.slow_poll_threshold
     }
 
+    /// The threshold after which a scheduling delay will be considered "long".
     pub fn long_delay_threshold(&self) -> Duration {
         self.metrics.long_delay_threshold
     }
@@ -2106,8 +2125,9 @@ impl TaskMetrics {
         self.total_slow_poll_count as f64 / self.total_poll_count as f64
     }
 
+    /// The ratio of tasks exceeding [`long_delay_threshold`][TaskMonitor::long_delay_threshold].
     pub fn long_delay_ratio(&self) -> f64 {
-        self.total_long_delay_count as f64 / self.total_poll_count as f64
+        self.total_long_delay_count as f64 / self.total_scheduled_count as f64
     }
 
     /// The mean duration of fast polls.
@@ -2184,6 +2204,8 @@ impl TaskMetrics {
         mean(self.total_fast_poll_duration, self.total_fast_poll_count)
     }
 
+    /// The average time taken for a task with a short scheduling delay to be executed after being
+    /// scheduled.
     pub fn mean_short_poll_duration(&self) -> Duration {
         mean(
             self.total_short_delay_duration,
@@ -2282,6 +2304,8 @@ impl TaskMetrics {
         mean(self.total_slow_poll_duration, self.total_slow_poll_count)
     }
 
+    /// The average scheduling delay for a task which takes a long time to start executing after
+    /// being scheduled.
     pub fn mean_long_delay_duration(&self) -> Duration {
         mean(self.total_long_delay_duration, self.total_long_delay_count)
     }
