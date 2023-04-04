@@ -2248,6 +2248,11 @@ impl TaskMetrics {
 
     /// The average time taken for a task with a short scheduling delay to be executed after being
     /// scheduled.
+    ///
+    /// ##### Definition
+    /// This metric is derived from
+    /// [`total_short_delay_duration`][TaskMetrics::total_short_delay_duration] ÷
+    /// [`total_short_delay_count`][TaskMetrics::total_short_delay_count].
     pub fn mean_short_delay_duration(&self) -> Duration {
         mean(
             self.total_short_delay_duration,
@@ -2348,6 +2353,11 @@ impl TaskMetrics {
 
     /// The average scheduling delay for a task which takes a long time to start executing after
     /// being scheduled.
+    ///
+    /// ##### Definition
+    /// This metric is derived from
+    /// [`total_long_delay_duration`][TaskMetrics::total_long_delay_duration] ÷
+    /// [`total_long_delay_count`][TaskMetrics::total_long_delay_count].
     pub fn mean_long_delay_duration(&self) -> Duration {
         mean(self.total_long_delay_duration, self.total_long_delay_count)
     }
