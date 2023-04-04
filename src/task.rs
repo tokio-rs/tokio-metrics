@@ -1118,13 +1118,6 @@ pub struct TaskMetrics {
     /// ```
     pub total_fast_poll_count: u64,
 
-    /// The total count of tasks with short scheduling delays.
-    ///
-    /// This is defined as tasks taking strictly less than
-    /// [`long_delay_threshold`][TaskMonitor::long_delay_threshold] to be executed after being
-    /// scheduled.
-    pub total_short_delay_count: u64,
-
     /// The total duration of fast polls.
     ///
     /// Here, 'fast' is defined as completing in strictly less time than
@@ -1192,13 +1185,6 @@ pub struct TaskMetrics {
     /// ```
     pub total_fast_poll_duration: Duration,
 
-    /// The total duration of tasks with short scheduling delays.
-    ///
-    /// This is defined as tasks taking strictly less than
-    /// [`long_delay_threshold`][TaskMonitor::long_delay_threshold] to be executed after being
-    /// scheduled.
-    pub total_short_delay_duration: Duration,
-
     /// The total number of times that polling tasks completed slowly.
     ///
     /// Here, 'slowly' is defined as completing in at least as much time as
@@ -1253,13 +1239,6 @@ pub struct TaskMetrics {
     /// }
     /// ```
     pub total_slow_poll_count: u64,
-
-    /// The total count of tasks with long scheduling delays.
-    ///
-    /// This is defined as tasks taking
-    /// [`long_delay_threshold`][TaskMonitor::long_delay_threshold] or longer to be executed
-    /// after being scheduled.
-    pub total_long_delay_count: u64,
 
     /// The total duration of slow polls.
     ///
@@ -1331,10 +1310,47 @@ pub struct TaskMetrics {
     /// ```
     pub total_slow_poll_duration: Duration,
 
+    /// The total count of tasks with short scheduling delays.
+    ///
+    /// This is defined as tasks taking strictly less than
+    /// [`long_delay_threshold`][TaskMonitor::long_delay_threshold] to be executed after being
+    /// scheduled.
+    ///
+    /// ##### Derived metrics
+    /// - **[`mean_short_delay_duration`][TaskMetrics::mean_short_delay_duration]**   
+    ///   The mean duration of short scheduling delays.
+    pub total_short_delay_count: u64,
+
+    /// The total count of tasks with long scheduling delays.
+    ///
+    /// This is defined as tasks taking
+    /// [`long_delay_threshold`][TaskMonitor::long_delay_threshold] or longer to be executed
+    /// after being scheduled.
+    ///
+    /// ##### Derived metrics
+    /// - **[`mean_long_delay_duration`][TaskMetrics::mean_long_delay_duration]**   
+    ///   The mean duration of short scheduling delays.
+    pub total_long_delay_count: u64,
+
+    /// The total duration of tasks with short scheduling delays.
+    ///
+    /// This is defined as tasks taking strictly less than
+    /// [`long_delay_threshold`][TaskMonitor::long_delay_threshold] to be executed after being
+    /// scheduled.
+    ///
+    /// ##### Derived metrics
+    /// - **[`mean_short_delay_duration`][TaskMetrics::mean_short_delay_duration]**   
+    ///   The mean duration of short scheduling delays.
+    pub total_short_delay_duration: Duration,
+
     /// The total number of times that a task had a long scheduling duration.
     ///
     /// Here, a long scheduling duration is defined as taking longer to start execution after
     /// scheduling than [`long_delay_threshold`][TaskMonitor::long_delay_threshold].
+    ///
+    /// ##### Derived metrics
+    /// - **[`mean_long_delay_duration`][TaskMetrics::mean_long_delay_duration]**   
+    ///   The mean duration of short scheduling delays.
     pub total_long_delay_duration: Duration,
 }
 
