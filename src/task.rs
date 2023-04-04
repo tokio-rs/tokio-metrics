@@ -1324,7 +1324,7 @@ struct RawMetrics {
     /// A task poll takes longer than this, it is considered a slow poll.
     slow_poll_threshold: Duration,
 
-    /// A scheduling delay longer than this will be considered a long delay
+    /// A scheduling delay of at least this long will be considered a long delay
     long_delay_threshold: Duration,
 
     /// Total number of instrumented tasks.
