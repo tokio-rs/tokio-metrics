@@ -1500,7 +1500,7 @@ impl TaskMonitor {
         self.metrics.slow_poll_threshold
     }
 
-    /// The threshold after which a scheduling delay will be considered "long".
+    /// The threshold at which a scheduling delay will be considered "long".
     pub fn long_delay_threshold(&self) -> Duration {
         self.metrics.long_delay_threshold
     }
