@@ -1372,7 +1372,7 @@ struct RawMetrics {
     /// Total amount of time tasks spent being polled below the long delay cut off.
     total_short_delay_duration_ns: AtomicU64,
 
-    /// Total amount of time tasks spent being polled above the long delay cut off.
+    /// Total amount of time tasks spent being polled at or above the long delay cut off.
     total_long_delay_duration_ns: AtomicU64,
 }
 
