@@ -905,6 +905,7 @@ pub struct TaskMetrics {
     ///     assert_eq!(metrics_monitor.cumulative().total_scheduled_count, 5);
     /// }
     /// ```
+    #[doc(alias = "total_delay_count")]
     pub total_scheduled_count: u64,
 
     /// The total duration that tasks spent waiting to be polled after awakening.
@@ -941,6 +942,7 @@ pub struct TaskMetrics {
     ///     assert!(total_scheduled_duration <= Duration::from_millis(1100));
     /// }
     /// ```
+    #[doc(alias = "total_delay_duration")]
     pub total_scheduled_duration: Duration,
 
     /// The total number of times that tasks were polled.
