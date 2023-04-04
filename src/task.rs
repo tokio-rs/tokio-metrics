@@ -2164,6 +2164,10 @@ impl TaskMetrics {
     }
 
     /// The ratio of tasks exceeding [`long_delay_threshold`][TaskMonitor::long_delay_threshold].
+    ///
+    /// ##### Definition
+    /// This metric is derived from [`total_long_delay_count`][TaskMetrics::total_long_delay_count] ÷
+    /// [`total_scheduled_count`][TaskMetrics::total_scheduled_count].
     pub fn long_delay_ratio(&self) -> f64 {
         self.total_long_delay_count as f64 / self.total_scheduled_count as f64
     }
