@@ -1098,10 +1098,11 @@ pub struct TaskMetrics {
     /// ```
     pub total_fast_poll_count: u64,
 
-    /// The total number of times that a task was executed swiftly.
+    /// The total count of tasks with short scheduling delays.
     ///
-    /// Here, 'swiftly' is defined as executing in strictly less time than
-    /// [`long_delay_threshold`][TaskMonitor::long_delay_threshold].
+    /// This is defined as tasks taking strictly less than
+    /// [`long_delay_threshold`][TaskMonitor::long_delay_threshold] to be executed after being
+    /// scheduled.
     pub total_short_delay_count: u64,
 
     /// The total duration of fast polls.
