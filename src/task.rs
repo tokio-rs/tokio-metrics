@@ -1172,9 +1172,9 @@ pub struct TaskMetrics {
     /// ```
     pub total_fast_poll_duration: Duration,
 
-    /// The total scheduling duration for tasks which were quickly executed after being scheduled.
+    /// The total duration of tasks with short scheduling delays.
     ///
-    /// Here, "quickly" means that the task takes less than
+    /// This is defined as tasks taking strictly less than
     /// [`long_delay_threshold`][TaskMonitor::long_delay_threshold] to be executed after being
     /// scheduled.
     pub total_short_delay_duration: Duration,
