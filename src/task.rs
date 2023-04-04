@@ -2207,7 +2207,7 @@ impl TaskMetrics {
 
     /// The average time taken for a task with a short scheduling delay to be executed after being
     /// scheduled.
-    pub fn mean_short_poll_duration(&self) -> Duration {
+    pub fn mean_short_delay_duration(&self) -> Duration {
         mean(
             self.total_short_delay_duration,
             self.total_short_delay_count,
