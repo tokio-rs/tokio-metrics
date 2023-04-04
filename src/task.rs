@@ -205,6 +205,16 @@ use std::time::{Duration, Instant};
 ///   'scheduled' state of a task is the duration between the instant a task is awoken and the
 ///   instant it is subsequently polled. If this metric increases, it means that, on average, tasks
 ///   spent longer in tokio's queues before being polled.
+/// - **Did [`long_delay_ratio`][TaskMetrics::long_delay_ratio] increase?**
+///   This metric reflects the proportion of scheduling delays which were 'long'. If it increased,
+///   it means that a greater proportion of tasks experienced excessive delays before they could
+///   execute after being woken. This does not necessarily indicate an increase in latency, as this
+///   could be offset by fewer or faster task polls.
+/// - **Did [`mean_long_delay_duration`][TaskMetrics::mean_long_delay_duration] increase?**
+///   This metric reflects the mean duration of long delays. If it increased, it means that, on
+///   average, long delays got even longer. This does not necessarily imply increased task latency:
+///   an increase in average long delay duration could be offset by fewer or faster polls or more
+///   short schedules.
 ///
 /// If so, [*why are my tasks spending more time waiting to be polled?*](#why-are-my-tasks-spending-more-time-waiting-to-be-polled)
 ///
