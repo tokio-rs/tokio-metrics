@@ -852,6 +852,10 @@ pub struct TaskMetrics {
     /// The total number of times that tasks were awoken (and then, presumably, scheduled for
     /// execution).
     ///
+    /// ##### Definition
+    /// This metric is equal to [`total_short_delay_duration`][TaskMetrics::total_short_delay_duration]
+    /// + [`total_long_delay_duration`][TaskMetrics::total_long_delay_duration].
+    ///
     /// ##### Derived metrics
     /// - **[`mean_scheduled_duration`][TaskMetrics::mean_scheduled_duration]**   
     ///   The mean duration that tasks spent waiting to be executed after awakening.
@@ -919,6 +923,10 @@ pub struct TaskMetrics {
     pub total_scheduled_count: u64,
 
     /// The total duration that tasks spent waiting to be polled after awakening.
+    ///
+    /// ##### Definition
+    /// This metric is equal to [`total_short_delay_count`][TaskMetrics::total_short_delay_count]
+    /// + [`total_long_delay_count`][TaskMetrics::total_long_delay_count].
     ///
     /// ##### Derived metrics
     /// - **[`mean_scheduled_duration`][TaskMetrics::mean_scheduled_duration]**   
