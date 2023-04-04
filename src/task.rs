@@ -1236,9 +1236,9 @@ pub struct TaskMetrics {
 
     /// The total count of tasks with long scheduling delays.
     ///
-    /// This is defined as tasks taking longer than
-    /// [`long_delay_threshold`][TaskMonitor::long_delay_threshold] to be executed aftering being
-    /// scheduled.
+    /// This is defined as tasks taking
+    /// [`long_delay_threshold`][TaskMonitor::long_delay_threshold] or longer to be executed
+    /// after being scheduled.
     pub total_long_delay_count: u64,
 
     /// The total duration of slow polls.
