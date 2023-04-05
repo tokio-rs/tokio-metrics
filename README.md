@@ -67,6 +67,14 @@ loop {
   The total number of times that polling tasks completed slowly.
 - **[`total_slow_poll_duration`]**
   The total duration of slow polls.
+- **[`total_short_delay_count`]**
+  The total count of short scheduling delays.
+- **[`total_short_delay_duration`]**
+  The total duration of short scheduling delays.
+- **[`total_long_delay_count`]**
+  The total count of long scheduling delays.
+- **[`total_long_delay_duration`]**
+  The total duration of long scheduling delays.
 
 #### Derived Metrics
 - **[`mean_first_poll_delay`]**  
@@ -83,6 +91,12 @@ loop {
   The mean duration of fast polls.
 - **[`mean_slow_poll_duration`]**  
   The mean duration of slow polls.
+- **[`long_delay_ratio`]**
+- The ratio between the number of long scheduling delays and the number of total schedules.
+- **[`mean_short_delay_duration`]**
+  The mean duration of short schedules.
+- **[`mean_long_delay_duration`]**
+  The mean duration of long schedules.
 
 [`instrumented_count`]: https://docs.rs/tokio-metrics/0.2.*/tokio_metrics/struct.TaskMetrics.html#structfield.instrumented_count
 [`dropped_count`]: https://docs.rs/tokio-metrics/0.2.*/tokio_metrics/struct.TaskMetrics.html#structfield.dropped_count
@@ -105,6 +119,13 @@ loop {
 [`slow_poll_ratio`]: https://docs.rs/tokio-metrics/0.2.*/tokio_metrics/struct.TaskMetrics.html#method.slow_poll_ratio
 [`mean_fast_poll_duration`]: https://docs.rs/tokio-metrics/0.2.*/tokio_metrics/struct.TaskMetrics.html#method.mean_fast_poll_duration
 [`mean_slow_poll_duration`]: https://docs.rs/tokio-metrics/0.2.*/tokio_metrics/struct.TaskMetrics.html#method.mean_slow_poll_duration
+[`total_short_delay_count`]: https://docs.rs/tokio-metrics/0.2.*/tokio_metrics/struct.TaskMetrics.html#structfield.total_short_delay_count
+[`total_short_delay_duration`]: https://docs.rs/tokio-metrics/0.2.*/tokio_metrics/struct.TaskMetrics.html#structfield.total_short_delay_duration
+[`total_long_delay_count`]: https://docs.rs/tokio-metrics/0.2.*/tokio_metrics/struct.TaskMetrics.html#structfield.total_long_delay_count
+[`total_long_delay_duration`]: https://docs.rs/tokio-metrics/0.2.*/tokio_metrics/struct.TaskMetrics.html#structfield.total_long_delay_duration
+[`long_delay_ratio`]: https://docs.rs/tokio-metrics/0.2.*/tokio_metrics/struct.TaskMetrics.html#method.long_delay_ratio
+[`mean_short_delay_duration`]: https://docs.rs/tokio-metrics/0.2.*/tokio_metrics/struct.TaskMetrics.html#method.mean_short_delay_duration
+[`mean_long_delay_duration`]: https://docs.rs/tokio-metrics/0.2.*/tokio_metrics/struct.TaskMetrics.html#method.mean_long_delay_duration
 
 ## Getting Started With Runtime Metrics
 

@@ -205,6 +205,16 @@ use std::time::{Duration, Instant};
 ///   'scheduled' state of a task is the duration between the instant a task is awoken and the
 ///   instant it is subsequently polled. If this metric increases, it means that, on average, tasks
 ///   spent longer in tokio's queues before being polled.
+/// - **Did [`long_delay_ratio`][TaskMetrics::long_delay_ratio] increase?**
+///   This metric reflects the proportion of scheduling delays which were 'long'. If it increased,
+///   it means that a greater proportion of tasks experienced excessive delays before they could
+///   execute after being woken. This does not necessarily indicate an increase in latency, as this
+///   could be offset by fewer or faster task polls.
+/// - **Did [`mean_long_delay_duration`][TaskMetrics::mean_long_delay_duration] increase?**
+///   This metric reflects the mean duration of long delays. If it increased, it means that, on
+///   average, long delays got even longer. This does not necessarily imply increased task latency:
+///   an increase in average long delay duration could be offset by fewer or faster polls or more
+///   short schedules.
 ///
 /// If so, [*why are my tasks spending more time waiting to be polled?*](#why-are-my-tasks-spending-more-time-waiting-to-be-polled)
 ///
@@ -842,6 +852,10 @@ pub struct TaskMetrics {
     /// The total number of times that tasks were awoken (and then, presumably, scheduled for
     /// execution).
     ///
+    /// ##### Definition
+    /// This metric is equal to [`total_short_delay_duration`][TaskMetrics::total_short_delay_duration]
+    /// + [`total_long_delay_duration`][TaskMetrics::total_long_delay_duration].
+    ///
     /// ##### Derived metrics
     /// - **[`mean_scheduled_duration`][TaskMetrics::mean_scheduled_duration]**   
     ///   The mean duration that tasks spent waiting to be executed after awakening.
@@ -905,9 +919,14 @@ pub struct TaskMetrics {
     ///     assert_eq!(metrics_monitor.cumulative().total_scheduled_count, 5);
     /// }
     /// ```
+    #[doc(alias = "total_delay_count")]
     pub total_scheduled_count: u64,
 
     /// The total duration that tasks spent waiting to be polled after awakening.
+    ///
+    /// ##### Definition
+    /// This metric is equal to [`total_short_delay_count`][TaskMetrics::total_short_delay_count]
+    /// + [`total_long_delay_count`][TaskMetrics::total_long_delay_count].
     ///
     /// ##### Derived metrics
     /// - **[`mean_scheduled_duration`][TaskMetrics::mean_scheduled_duration]**   
@@ -941,6 +960,7 @@ pub struct TaskMetrics {
     ///     assert!(total_scheduled_duration <= Duration::from_millis(1100));
     /// }
     /// ```
+    #[doc(alias = "total_delay_duration")]
     pub total_scheduled_duration: Duration,
 
     /// The total number of times that tasks were polled.
@@ -1289,6 +1309,49 @@ pub struct TaskMetrics {
     /// }
     /// ```
     pub total_slow_poll_duration: Duration,
+
+    /// The total count of tasks with short scheduling delays.
+    ///
+    /// This is defined as tasks taking strictly less than
+    /// [`long_delay_threshold`][TaskMonitor::long_delay_threshold] to be executed after being
+    /// scheduled.
+    ///
+    /// ##### Derived metrics
+    /// - **[`mean_short_delay_duration`][TaskMetrics::mean_short_delay_duration]**   
+    ///   The mean duration of short scheduling delays.
+    pub total_short_delay_count: u64,
+
+    /// The total count of tasks with long scheduling delays.
+    ///
+    /// This is defined as tasks taking
+    /// [`long_delay_threshold`][TaskMonitor::long_delay_threshold] or longer to be executed
+    /// after being scheduled.
+    ///
+    /// ##### Derived metrics
+    /// - **[`mean_long_delay_duration`][TaskMetrics::mean_long_delay_duration]**   
+    ///   The mean duration of short scheduling delays.
+    pub total_long_delay_count: u64,
+
+    /// The total duration of tasks with short scheduling delays.
+    ///
+    /// This is defined as tasks taking strictly less than
+    /// [`long_delay_threshold`][TaskMonitor::long_delay_threshold] to be executed after being
+    /// scheduled.
+    ///
+    /// ##### Derived metrics
+    /// - **[`mean_short_delay_duration`][TaskMetrics::mean_short_delay_duration]**   
+    ///   The mean duration of short scheduling delays.
+    pub total_short_delay_duration: Duration,
+
+    /// The total number of times that a task had a long scheduling duration.
+    ///
+    /// Here, a long scheduling duration is defined as taking longer to start execution after
+    /// scheduling than [`long_delay_threshold`][TaskMonitor::long_delay_threshold].
+    ///
+    /// ##### Derived metrics
+    /// - **[`mean_long_delay_duration`][TaskMetrics::mean_long_delay_duration]**   
+    ///   The mean duration of short scheduling delays.
+    pub total_long_delay_duration: Duration,
 }
 
 /// Tracks the metrics, shared across the various types.
@@ -1296,6 +1359,9 @@ pub struct TaskMetrics {
 struct RawMetrics {
     /// A task poll takes longer than this, it is considered a slow poll.
     slow_poll_threshold: Duration,
+
+    /// A scheduling delay of at least this long will be considered a long delay
+    long_delay_threshold: Duration,
 
     /// Total number of instrumented tasks.
     instrumented_count: AtomicU64,
@@ -1315,6 +1381,12 @@ struct RawMetrics {
     /// Total number of times tasks were polled slow
     total_slow_poll_count: AtomicU64,
 
+    /// Total number of times tasks had long delay,
+    total_long_delay_count: AtomicU64,
+
+    /// Total number of times tasks had little delay
+    total_short_delay_count: AtomicU64,
+
     /// Total number of times tasks were dropped
     dropped_count: AtomicU64,
 
@@ -1332,6 +1404,12 @@ struct RawMetrics {
 
     /// Total amount of time tasks spent being polled above the slow cut off.
     total_slow_poll_duration: AtomicU64,
+
+    /// Total amount of time tasks spent being polled below the long delay cut off.
+    total_short_delay_duration_ns: AtomicU64,
+
+    /// Total amount of time tasks spent being polled at or above the long delay cut off.
+    total_long_delay_duration_ns: AtomicU64,
 }
 
 #[derive(Debug)]
@@ -1420,6 +1498,7 @@ impl TaskMonitor {
                 total_scheduled_count: AtomicU64::new(0),
                 total_fast_poll_count: AtomicU64::new(0),
                 total_slow_poll_count: AtomicU64::new(0),
+                total_long_delay_count: AtomicU64::new(0),
                 instrumented_count: AtomicU64::new(0),
                 dropped_count: AtomicU64::new(0),
                 total_first_poll_delay_ns: AtomicU64::new(0),
@@ -1427,6 +1506,10 @@ impl TaskMonitor {
                 total_idle_duration_ns: AtomicU64::new(0),
                 total_fast_poll_duration_ns: AtomicU64::new(0),
                 total_slow_poll_duration: AtomicU64::new(0),
+                total_short_delay_duration_ns: AtomicU64::new(0),
+                long_delay_threshold: Default::default(),
+                total_short_delay_count: AtomicU64::new(0),
+                total_long_delay_duration_ns: AtomicU64::new(0),
             }),
         }
     }
@@ -1451,6 +1534,12 @@ impl TaskMonitor {
     /// ```
     pub fn slow_poll_threshold(&self) -> Duration {
         self.metrics.slow_poll_threshold
+    }
+
+    /// Produces the duration greater-than-or-equal-to at which scheduling delays are categorized
+    /// as long.
+    pub fn long_delay_threshold(&self) -> Duration {
+        self.metrics.long_delay_threshold
     }
 
     /// Produces an instrumented façade around a given async task.
@@ -1677,9 +1766,15 @@ impl TaskMonitor {
                     total_fast_poll_count: latest
                         .total_fast_poll_count
                         .wrapping_sub(previous.total_fast_poll_count),
+                    total_short_delay_count: latest
+                        .total_short_delay_count
+                        .wrapping_sub(previous.total_short_delay_count),
                     total_slow_poll_count: latest
                         .total_slow_poll_count
                         .wrapping_sub(previous.total_slow_poll_count),
+                    total_long_delay_count: latest
+                        .total_long_delay_count
+                        .wrapping_sub(previous.total_long_delay_count),
                     total_first_poll_delay: sub(
                         latest.total_first_poll_delay,
                         previous.total_first_poll_delay,
@@ -1696,9 +1791,17 @@ impl TaskMonitor {
                         latest.total_fast_poll_duration,
                         previous.total_fast_poll_duration,
                     ),
+                    total_short_delay_duration: sub(
+                        latest.total_short_delay_duration,
+                        previous.total_short_delay_duration,
+                    ),
                     total_slow_poll_duration: sub(
                         latest.total_slow_poll_duration,
                         previous.total_slow_poll_duration,
+                    ),
+                    total_long_delay_duration: sub(
+                        latest.total_long_delay_duration,
+                        previous.total_long_delay_duration,
                     ),
                 }
             } else {
@@ -1736,6 +1839,8 @@ impl RawMetrics {
             total_scheduled_count: self.total_scheduled_count.load(SeqCst),
             total_fast_poll_count: self.total_fast_poll_count.load(SeqCst),
             total_slow_poll_count: self.total_slow_poll_count.load(SeqCst),
+            total_short_delay_count: self.total_short_delay_count.load(SeqCst),
+            total_long_delay_count: self.total_long_delay_count.load(SeqCst),
             total_first_poll_delay: Duration::from_nanos(
                 self.total_first_poll_delay_ns.load(SeqCst),
             ),
@@ -1748,6 +1853,12 @@ impl RawMetrics {
             ),
             total_slow_poll_duration: Duration::from_nanos(
                 self.total_slow_poll_duration.load(SeqCst),
+            ),
+            total_short_delay_duration: Duration::from_nanos(
+                self.total_short_delay_duration_ns.load(SeqCst),
+            ),
+            total_long_delay_duration: Duration::from_nanos(
+                self.total_long_delay_duration_ns.load(SeqCst),
             ),
         }
     }
@@ -2052,6 +2163,15 @@ impl TaskMetrics {
         self.total_slow_poll_count as f64 / self.total_poll_count as f64
     }
 
+    /// The ratio of tasks exceeding [`long_delay_threshold`][TaskMonitor::long_delay_threshold].
+    ///
+    /// ##### Definition
+    /// This metric is derived from [`total_long_delay_count`][TaskMetrics::total_long_delay_count] ÷
+    /// [`total_scheduled_count`][TaskMetrics::total_scheduled_count].
+    pub fn long_delay_ratio(&self) -> f64 {
+        self.total_long_delay_count as f64 / self.total_scheduled_count as f64
+    }
+
     /// The mean duration of fast polls.
     ///
     /// ##### Definition
@@ -2124,6 +2244,20 @@ impl TaskMetrics {
     /// ```
     pub fn mean_fast_poll_duration(&self) -> Duration {
         mean(self.total_fast_poll_duration, self.total_fast_poll_count)
+    }
+
+    /// The average time taken for a task with a short scheduling delay to be executed after being
+    /// scheduled.
+    ///
+    /// ##### Definition
+    /// This metric is derived from
+    /// [`total_short_delay_duration`][TaskMetrics::total_short_delay_duration] ÷
+    /// [`total_short_delay_count`][TaskMetrics::total_short_delay_count].
+    pub fn mean_short_delay_duration(&self) -> Duration {
+        mean(
+            self.total_short_delay_duration,
+            self.total_short_delay_count,
+        )
     }
 
     /// The mean duration of slow polls.
@@ -2216,6 +2350,17 @@ impl TaskMetrics {
     pub fn mean_slow_poll_duration(&self) -> Duration {
         mean(self.total_slow_poll_duration, self.total_slow_poll_count)
     }
+
+    /// The average scheduling delay for a task which takes a long time to start executing after
+    /// being scheduled.
+    ///
+    /// ##### Definition
+    /// This metric is derived from
+    /// [`total_long_delay_duration`][TaskMetrics::total_long_delay_duration] ÷
+    /// [`total_long_delay_count`][TaskMetrics::total_long_delay_count].
+    pub fn mean_long_delay_duration(&self) -> Duration {
+        mean(self.total_long_delay_duration, self.total_long_delay_count)
+    }
 }
 
 impl<T: Future> Future for Instrumented<T> {
@@ -2297,6 +2442,18 @@ fn instrument_poll<T, Out>(
             .as_nanos()
             .try_into()
             .unwrap_or(u64::MAX);
+
+        let scheduled = Duration::from_nanos(scheduled_ns);
+
+        let (count_bucket, duration_bucket) = // was the scheduling delay long or short?
+            if scheduled >= metrics.long_delay_threshold {
+                (&metrics.total_long_delay_count, &metrics.total_long_delay_duration_ns)
+            } else {
+                (&metrics.total_short_delay_count, &metrics.total_short_delay_duration_ns)
+            };
+        // update the appropriate bucket
+        count_bucket.fetch_add(1, SeqCst);
+        duration_bucket.fetch_add(scheduled_ns, SeqCst);
 
         // add `scheduled_ns` to the Monitor's total
         metrics
