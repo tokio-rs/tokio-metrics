@@ -1,3 +1,10 @@
+# 0.2.1 (April 5th, 2023)
+
+### Added
+- task: add short and long delay metrics ([#44])
+
+[#44]: https://github.com/tokio-rs/tokio-metrics/pull/44
+
 # 0.2.0 (March 6th, 2023)
 
 ### Added
