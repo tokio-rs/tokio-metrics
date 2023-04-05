@@ -2445,7 +2445,7 @@ fn instrument_poll<T, Out>(
 
         let scheduled = Duration::from_nanos(scheduled_ns);
 
-        let (count_bucket, duration_bucket) = // was this a slow or fast poll?
+        let (count_bucket, duration_bucket) = // was the scheduling delay long or short?
             if scheduled >= metrics.long_delay_threshold {
                 (&metrics.total_long_delay_count, &metrics.total_long_delay_duration_ns)
             } else {
