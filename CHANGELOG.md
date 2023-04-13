@@ -1,3 +1,12 @@
+# 0.2.2 (April 13th, 2023)
+### Added
+- task: add TaskMonitorBuilder ([#46])
+
+### Fixed
+- task: fix default long delay threshold ([#46])
+
+[#46]: https://github.com/tokio-rs/tokio-metrics/pull/46
+
 # 0.2.1 (April 5th, 2023)
 
 ### Added
