@@ -514,6 +514,47 @@ pub struct TaskMonitor {
     metrics: Arc<RawMetrics>,
 }
 
+/// Provides an interface for constructing a [`TaskMonitor`] with specialized configuration
+/// parameters.
+#[derive(Clone, Debug, Default)]
+pub struct TaskMonitorBuilder {
+    slow_poll_threshold: Option<Duration>,
+    long_delay_threshold: Option<Duration>,
+}
+
+impl TaskMonitorBuilder {
+    pub fn new() -> Self {
+        Self {
+            slow_poll_threshold: None,
+            long_delay_threshold: None,
+        }
+    }
+
+    /// Specifies the threshold at which polls are considered 'slow'.
+    pub fn with_slow_poll_threshold(&mut self, threshold: Duration) -> &mut Self {
+        self.slow_poll_threshold = Some(threshold);
+
+        self
+    }
+
+    /// Specifies the threshold at which schedules are considered 'long'.
+    pub fn with_long_delay_threshold(&mut self, threshold: Duration) -> &mut Self {
+        self.long_delay_threshold = Some(threshold);
+
+        self
+    }
+
+    /// Consume the builder, producing a [`TaskMonitor`].
+    pub fn build(self) -> TaskMonitor {
+        TaskMonitor::create(
+            self.slow_poll_threshold
+                .unwrap_or(TaskMonitor::DEFAULT_SLOW_POLL_THRESHOLD),
+            self.long_delay_threshold
+                .unwrap_or(TaskMonitor::DEFAULT_LONG_DELAY_THRESHOLD),
+        )
+    }
+}
+
 pin_project! {
     /// An async task that has been instrumented with [`TaskMonitor::instrument`].
     #[derive(Debug)]
@@ -1436,12 +1477,27 @@ impl TaskMonitor {
     #[cfg(test)]
     pub const DEFAULT_SLOW_POLL_THRESHOLD: Duration = Duration::from_millis(500);
 
+    /// The default duration at which schedules cross the threshold into being categorized as 'long'
+    /// is 50μs.
+    #[cfg(not(test))]
+    pub const DEFAULT_LONG_DELAY_THRESHOLD: Duration = Duration::from_micros(50);
+    #[cfg(test)]
+    pub const DEFAULT_LONG_DELAY_THRESHOLD: Duration = Duration::from_millis(500);
+
     /// Constructs a new task monitor.
     ///
     /// Uses [`Self::DEFAULT_SLOW_POLL_THRESHOLD`] as the threshold at which polls will be
     /// considered 'slow'.
+    ///
+    /// Uses [`Self::DEFAULT_LONG_DELAY_THRESHOLD`] as the threshold at which scheduling will be
+    /// considered 'long'.
     pub fn new() -> TaskMonitor {
         TaskMonitor::with_slow_poll_threshold(Self::DEFAULT_SLOW_POLL_THRESHOLD)
+    }
+
+    /// Constructs a builder for a task monitor.
+    pub fn builder() -> TaskMonitorBuilder {
+        TaskMonitorBuilder::new()
     }
 
     /// Constructs a new task monitor with a given threshold at which polls are considered 'slow'.
@@ -1490,6 +1546,10 @@ impl TaskMonitor {
     /// }
     /// ```
     pub fn with_slow_poll_threshold(slow_poll_cut_off: Duration) -> TaskMonitor {
+        Self::create(slow_poll_cut_off, Self::DEFAULT_LONG_DELAY_THRESHOLD)
+    }
+
+    fn create(slow_poll_cut_off: Duration, long_delay_cut_off: Duration) -> TaskMonitor {
         TaskMonitor {
             metrics: Arc::new(RawMetrics {
                 slow_poll_threshold: slow_poll_cut_off,
@@ -1507,7 +1567,7 @@ impl TaskMonitor {
                 total_fast_poll_duration_ns: AtomicU64::new(0),
                 total_slow_poll_duration: AtomicU64::new(0),
                 total_short_delay_duration_ns: AtomicU64::new(0),
-                long_delay_threshold: Default::default(),
+                long_delay_threshold: long_delay_cut_off,
                 total_short_delay_count: AtomicU64::new(0),
                 total_long_delay_duration_ns: AtomicU64::new(0),
             }),
