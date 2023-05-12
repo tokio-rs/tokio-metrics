@@ -1,3 +1,4 @@
+use std::ops::Range;
 use std::time::{Duration, Instant};
 use tokio::runtime;
 
@@ -54,7 +55,7 @@ pub struct RuntimeMonitor {
 #[cfg_attr(docsrs, doc(cfg(all(tokio_unstable, feature = "rt"))))]
 /// Key runtime metrics.
 #[non_exhaustive]
-#[derive(Default, Debug, Clone, Copy)]
+#[derive(Default, Debug, Clone)]
 pub struct RuntimeMetrics {
     /// The number of worker threads used by the runtime.
     ///
@@ -1039,6 +1040,8 @@ pub struct RuntimeMetrics {
     /// ##### Definition
     /// This metric is derived from [`tokio::runtime::RuntimeMetrics::io_driver_ready_count`].
     pub io_driver_ready_count: u64,
+
+    pub task_poll_count_histogram: Option<Box<[u64]>>,
 }
 
 /// Snapshot of per-worker metrics
@@ -1053,6 +1056,7 @@ struct Worker {
     total_overflow_count: u64,
     total_polls_count: u64,
     total_busy_duration: Duration,
+    poll_count_histogram: Option<Box<[u64]>>,
 }
 
 /// Iterator returned by [`RuntimeMonitor::intervals`].
@@ -1093,6 +1097,11 @@ impl RuntimeIntervals {
             min_local_queue_depth: usize::MAX,
             budget_forced_yield_count: budget_forced_yields - self.budget_forced_yield_count,
             io_driver_ready_count: io_driver_ready_events - self.io_driver_ready_count,
+            task_poll_count_histogram: if self.runtime.poll_count_histogram_enabled() {
+                Some(vec![0; self.runtime.poll_count_histogram_num_buckets()].into_boxed_slice())
+            } else {
+                None
+            },
             ..Default::default()
         };
 
@@ -1187,10 +1196,29 @@ impl RuntimeMonitor {
             io_driver_ready_count: self.runtime.io_driver_ready_count(),
         }
     }
+
+    pub fn task_poll_count_histogram_bucket_ranges(&self) -> Option<Box<[Range<Duration>]>> {
+        if self.runtime.poll_count_histogram_enabled() {
+            Some((0..self.runtime.poll_count_histogram_num_buckets()).map(|bucket| self.runtime.poll_count_histogram_bucket_range(bucket)).collect::<Vec<_>>().into_boxed_slice())
+        } else {
+            None
+        }
+    }
 }
 
 impl Worker {
     fn new(worker: usize, rt: &runtime::RuntimeMetrics) -> Worker {
+        let poll_count_histogram = if rt.poll_count_histogram_enabled() {
+            Some(
+                (0..rt.poll_count_histogram_num_buckets())
+                    .map(|bucket| rt.poll_count_histogram_bucket_count(worker, bucket))
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice(),
+            )
+        } else {
+            None
+        };
+
         Worker {
             worker,
             total_park_count: rt.worker_park_count(worker),
@@ -1201,6 +1229,7 @@ impl Worker {
             total_overflow_count: rt.worker_overflow_count(worker),
             total_polls_count: rt.worker_poll_count(worker),
             total_busy_duration: rt.worker_total_busy_duration(worker),
+            poll_count_histogram,
         }
     }
 
@@ -1221,6 +1250,16 @@ impl Worker {
                     metrics.$min = delta;
                 }
             }};
+        }
+
+        if let Some(poll_count_histogram) = &mut self.poll_count_histogram {
+            for (i, bucket) in poll_count_histogram.iter_mut().enumerate() {
+                let val = rt.poll_count_histogram_bucket_count(self.worker, i);
+                let delta = val - *bucket;
+                *bucket = val;
+
+                metrics.task_poll_count_histogram.as_mut().unwrap()[i] += delta;
+            }
         }
 
         metric!(
