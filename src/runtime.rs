@@ -1112,6 +1112,12 @@ pub struct RuntimeMetrics {
     /// - [`RuntimeMetrics::max_local_queue_depth`]
     pub min_local_queue_depth: usize,
 
+    /// The number of tasks currently waiting to be executed in the runtime's blocking threadpool.
+    ///
+    /// ##### Definition
+    /// This metric is derived from [`tokio::runtime::RuntimeMetrics::blocking_queue_depth`].
+    pub blocking_queue_depth: usize,
+
     /// Total amount of time elapsed since observing runtime metrics.
     pub elapsed: Duration,
 
@@ -1422,7 +1428,6 @@ impl Worker {
         }
 
         // Local scheduled tasks is an absolute value
-
         let local_scheduled_tasks = rt.worker_local_queue_depth(self.worker);
         metrics.total_local_queue_depth += local_scheduled_tasks;
 
@@ -1433,6 +1438,9 @@ impl Worker {
         if local_scheduled_tasks < metrics.min_local_queue_depth {
             metrics.min_local_queue_depth = local_scheduled_tasks;
         }
+
+        // Blocking queue depth is an absolute value too
+        metrics.blocking_queue_depth = rt.blocking_queue_depth();
     }
 }
 
