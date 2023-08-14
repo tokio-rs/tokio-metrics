@@ -7,10 +7,10 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 use tokio_stream::Stream;
 
-#[cfg(any(feature = "rt"))]
+#[cfg(feature = "rt")]
 use tokio::time::{Duration, Instant};
 
-#[cfg(not(any(feature = "rt")))]
+#[cfg(not(feature = "rt"))]
 use std::time::{Duration, Instant};
 
 /// Monitors key metrics of instrumented tasks.
