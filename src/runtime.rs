@@ -1415,7 +1415,7 @@ impl Worker {
                 let delta = new - self.poll_count_histogram[bucket];
                 self.poll_count_histogram[bucket] = new;
 
-                *cell = *cell + delta;
+                *cell += delta;
             }
         }
 
