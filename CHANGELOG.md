@@ -1,3 +1,12 @@
+# 0.3.0 (August 14th, 2023)
+
+### Added
+- rt: add support for mean task poll time ([#50])
+- rt: add support for task poll count histogram ([#52])
+
+[#50]: https://github.com/tokio-rs/tokio-metrics/pull/50
+[#52]: https://github.com/tokio-rs/tokio-metrics/pull/52
+
 # 0.2.2 (April 13th, 2023)
 ### Added
 - task: add TaskMonitorBuilder ([#46])
