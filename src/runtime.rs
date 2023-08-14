@@ -54,7 +54,7 @@ pub struct RuntimeMonitor {
 #[cfg_attr(docsrs, doc(cfg(all(tokio_unstable, feature = "rt"))))]
 /// Key runtime metrics.
 #[non_exhaustive]
-#[derive(Default, Debug, Clone, Copy)]
+#[derive(Default, Debug, Clone)]
 pub struct RuntimeMetrics {
     /// The number of worker threads used by the runtime.
     ///
@@ -239,6 +239,42 @@ pub struct RuntimeMetrics {
     /// }
     /// ```
     pub mean_poll_duration_worker_max: Duration,
+
+    /// A histogram of task polls since the previous probe grouped by poll
+    /// times.
+    ///
+    /// This metric must be explicitly enabled when creating the runtime with
+    /// [`enable_metrics_poll_count_histogram`][tokio::runtime::Builder::enable_metrics_poll_count_histogram].
+    /// Bucket sizes are fixed and configured at the runtime level. See
+    /// configuration options on
+    /// [`runtime::Builder`][tokio::runtime::Builder::enable_metrics_poll_count_histogram].
+    ///
+    /// ##### Examples
+    /// ```
+    /// use tokio::runtime::HistogramScale;
+    /// use std::time::Duration;
+    ///
+    /// fn main() {
+    ///     let rt = tokio::runtime::Builder::new_multi_thread()
+    ///         .enable_metrics_poll_count_histogram()
+    ///         .metrics_poll_count_histogram_scale(HistogramScale::Linear)
+    ///         .metrics_poll_count_histogram_resolution(Duration::from_micros(50))
+    ///         .metrics_poll_count_histogram_buckets(12)
+    ///         .build()
+    ///         .unwrap();
+    ///
+    ///     rt.block_on(async {
+    ///         let handle = tokio::runtime::Handle::current();
+    ///         let monitor = tokio_metrics::RuntimeMonitor::new(&handle);
+    ///         let mut intervals = monitor.intervals();
+    ///         let mut next_interval = || intervals.next().unwrap();
+    ///
+    ///         let interval = next_interval();
+    ///         println!("poll count histogram {:?}", interval.poll_count_histogram);
+    ///     });
+    /// }
+    /// ```
+    pub poll_count_histogram: Vec<u64>,
 
     /// The number of times worker threads unparked but performed no work before parking again.
     ///
@@ -1107,6 +1143,7 @@ struct Worker {
     total_overflow_count: u64,
     total_polls_count: u64,
     total_busy_duration: Duration,
+    poll_count_histogram: Vec<u64>,
 }
 
 /// Iterator returned by [`RuntimeMonitor::intervals`].
@@ -1146,6 +1183,7 @@ impl RuntimeIntervals {
             min_busy_duration: Duration::from_secs(1000000000),
             min_local_queue_depth: usize::MAX,
             mean_poll_duration_worker_min: Duration::MAX,
+            poll_count_histogram: vec![0; self.runtime.poll_count_histogram_num_buckets()],
             budget_forced_yield_count: budget_forced_yields - self.budget_forced_yield_count,
             io_driver_ready_count: io_driver_ready_events - self.io_driver_ready_count,
             ..Default::default()
@@ -1253,6 +1291,12 @@ impl RuntimeMonitor {
 
 impl Worker {
     fn new(worker: usize, rt: &runtime::RuntimeMetrics) -> Worker {
+        let poll_count_histogram = if rt.poll_count_histogram_enabled() {
+            vec![0; rt.poll_count_histogram_num_buckets()]
+        } else {
+            vec![]
+        };
+
         Worker {
             worker,
             total_park_count: rt.worker_park_count(worker),
@@ -1263,6 +1307,7 @@ impl Worker {
             total_overflow_count: rt.worker_overflow_count(worker),
             total_polls_count: rt.worker_poll_count(worker),
             total_busy_duration: rt.worker_total_busy_duration(worker),
+            poll_count_histogram,
         }
     }
 
@@ -1363,6 +1408,16 @@ impl Worker {
             metrics.mean_poll_duration = Duration::from_nanos(mean as u64);
         }
         
+        // Update the histogram counts if there were polls since last count
+        if worker_polls_count > 0 {
+            for (bucket, cell) in metrics.poll_count_histogram.iter_mut().enumerate() {
+                let new = rt.poll_count_histogram_bucket_count(self.worker, bucket);
+                let delta = new - self.poll_count_histogram[bucket];
+                self.poll_count_histogram[bucket] = new;
+
+                *cell += delta;
+            }
+        }
 
         // Local scheduled tasks is an absolute value
 
