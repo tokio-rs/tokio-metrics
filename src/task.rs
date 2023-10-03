@@ -812,7 +812,7 @@ pub struct TaskMetrics {
 
     /// The total number of times that tasks idled, waiting to be awoken.
     ///
-    /// An idle is recorded as occurring if a if a non-zero duration elapses between the instant a
+    /// An idle is recorded as occurring if a non-zero duration elapses between the instant a
     /// task completes a poll, and the instant that it is next awoken.
     ///
     /// ##### Derived metrics
@@ -853,7 +853,7 @@ pub struct TaskMetrics {
 
     /// The total duration that tasks idled.
     ///
-    /// An idle is recorded as occurring if a if a non-zero duration elapses between the instant a
+    /// An idle is recorded as occurring if a non-zero duration elapses between the instant a
     /// task completes a poll, and the instant that it is next awoken.
     ///
     /// ##### Derived metrics
