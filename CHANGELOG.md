@@ -1,3 +1,12 @@
+# 0.3.1 (October 12th, 2023)
+
+### Fixed
+- task: fix doc error in idle definition ([#54])
+- chore: support tokio 1.33 without stats feature ([#55])
+
+[#54]: https://github.com/tokio-rs/tokio-metrics/pull/54
+[#55]: https://github.com/tokio-rs/tokio-metrics/pull/55
+
 # 0.3.0 (August 14th, 2023)
 
 ### Added
