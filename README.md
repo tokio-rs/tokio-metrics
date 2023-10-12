@@ -5,7 +5,7 @@ runtime and per-task metrics.
 
 ```toml
 [dependencies]
-tokio-metrics = { version = "0.3.0", default-features = false }
+tokio-metrics = { version = "0.3.1", default-features = false }
 ```
 
 ## Getting Started With Task Metrics
@@ -157,7 +157,7 @@ The `rt` feature of `tokio-metrics` is on by default; simply check that you do
 not set `default-features = false` when declaring it as a dependency; e.g.:
 ```toml
 [dependencies]
-tokio-metrics = "0.2.2"
+tokio-metrics = "0.3.1"
 ```
 
 From within a Tokio runtime, use `RuntimeMonitor` to monitor key metrics of
