@@ -106,20 +106,19 @@ fn probe(
     }
 }
 
-/// Utility to help with "really nice to add a warning for tasks that might be blocking"
-/// Example use:
+/// Utility to help with detecting blocking in tokio workers.
+/// 
+/// # Example
+/// 
 ///  ```
 ///    use std::sync::Arc;
-///    use tokio::runtime::lrtd::LongRunningTaskDetector;
+///    use tokio_metrics::lrtd::LongRunningTaskDetector;
 ///
-///    let mut builder = tokio::runtime::Builder::new_multi_thread();
-///    let mutable_builder = builder.worker_threads(2);
-///    let lrtd = LongRunningTaskDetector::new(
+///    let (lrtd, mut builder) = LongRunningTaskDetector::new_multi_threaded(
 ///      std::time::Duration::from_millis(10),
-///      std::time::Duration::from_millis(100),
-///      mutable_builder,
+///      std::time::Duration::from_millis(100)
 ///    );
-///    let runtime = builder.enable_all().build().unwrap();
+///    let runtime = builder.worker_threads(2).enable_all().build().unwrap();
 ///    let arc_runtime = Arc::new(runtime);
 ///    let arc_runtime2 = arc_runtime.clone();
 ///    lrtd.start(arc_runtime);
@@ -130,13 +129,14 @@ fn probe(
 /// ```
 ///
 ///    The above will allow you to get details on what is blocking your tokio worker threads for longer that 100ms.
-///    The detail will look like:
+///    The detail with default action handler will look like:
 ///    
 ///  ```text
 ///     Detected blocking in worker threads: [123145318232064, 123145320341504]
 ///  ```
 ///   
-///  To get more details(like stack traces) start LongRunningTaskDetector with start_with_custom_action and provide a custom handler.
+///  To get more details(like stack traces) start LongRunningTaskDetector with start_with_custom_action and provide a custom handler that can dump the thread stack traces.
+///  (see poc in the tests)
 ///
 impl LongRunningTaskDetector {
     /// Creates a new `LongRunningTaskDetector` instance.
@@ -146,12 +146,12 @@ impl LongRunningTaskDetector {
     /// * `interval` - The interval between probes. This interval is randomized.
     /// * `detection_time` - The maximum time allowed for a probe to succeed.
     ///                      A probe running for longer indicates something is blocking the worker threads.
-    /// * `runtime_builder` - A mutable reference to a `tokio::runtime::Builder`.
+    /// * `current_threaded` - true for returning a curent thread tokio runtime Builder, flase for a multithreaded one.
     ///
     /// # Returns
     ///
     /// Returns a new `LongRunningTaskDetector` instance.    
-    pub fn new(
+    fn new(
         interval: Duration,
         detection_time: Duration,
         current_threaded: bool,
@@ -194,19 +194,65 @@ impl LongRunningTaskDetector {
         }
     }
 
+    /// Creates a new instance of `LongRunningTaskDetector` linked to a single-threaded Tokio runtime.
+    ///
+    /// This function takes the `interval` and `detection_time` parameters and initializes a
+    /// `LongRunningTaskDetector` with a single-threaded Tokio runtime.
+    ///
+    /// # Parameters
+    ///
+    /// - `interval`: The time interval between probes.
+    /// - `detection_time`: The maximum blocking time allowed for detecting a long-running task.
+    ///
+    /// # Returns
+    ///
+    /// Returns a tuple containing the created `LongRunningTaskDetector` instance and the Tokio
+    /// runtime `Builder` used for configuration.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use tokio_metrics::lrtd::LongRunningTaskDetector;
+    /// use std::time::Duration;
+    ///
+    /// let (detector, builder) = LongRunningTaskDetector::new_single_threaded(Duration::from_secs(1), Duration::from_secs(5));
+    /// ```
     pub fn new_single_threaded(interval: Duration, detection_time: Duration) -> (Self, Builder) {
         LongRunningTaskDetector::new(interval, detection_time, true)
     }
 
+    /// Creates a new instance of `LongRunningTaskDetector` linked to a multi-threaded Tokio runtime.
+    ///
+    /// This function takes the `interval` and `detection_time` parameters and initializes a
+    /// `LongRunningTaskDetector` with a multi-threaded Tokio runtime.
+    ///
+    /// # Parameters
+    ///
+    /// - `interval`: The time interval between probes.
+    /// - `detection_time`: The maximum blocking time allowed for detecting a long-running task.
+    ///
+    /// # Returns
+    ///
+    /// Returns a tuple containing the created `LongRunningTaskDetector` instance and the Tokio
+    /// runtime `Builder` used for configuration.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use tokio_metrics::lrtd::LongRunningTaskDetector;
+    /// use std::time::Duration;
+    ///
+    /// let (detector, builder) = LongRunningTaskDetector::new_multi_threaded(Duration::from_secs(1), Duration::from_secs(5));
+    /// ```    
     pub fn new_multi_threaded(interval: Duration, detection_time: Duration) -> (Self, Builder) {
         LongRunningTaskDetector::new(interval, detection_time, false)
     }
 
     /// Starts the monitoring thread with default action handlers (that write details to std err).
     ///
-    /// # Arguments
+    /// # Parameters
     ///
-    /// * `runtime` - An `Arc` reference to a `tokio::runtime::Runtime`.    
+    /// - `runtime` - An `Arc` reference to a `tokio::runtime::Runtime`.    
     pub fn start(&self, runtime: Arc<Runtime>) {
         self.start_with_custom_action(runtime, Arc::new(StdErrBlockingActionHandler))
     }
@@ -214,11 +260,11 @@ impl LongRunningTaskDetector {
     /// Starts the monitoring process with custom action handlers that
     ///  allow you to customize what happens when blocking is detected.
     ///
-    /// # Arguments
+    /// # Parameters
     ///
-    /// * `runtime` - An `Arc` reference to a `tokio::runtime::Runtime`.
-    /// * `action` - An `Arc` reference to a custom `BlockingActionHandler`.
-    /// * `thread_action` - An `Arc` reference to a custom `ThreadStateHandler`.
+    /// - `runtime` - An `Arc` reference to a `tokio::runtime::Runtime`.
+    /// - `action` - An `Arc` reference to a custom `BlockingActionHandler`.
+    /// - `thread_action` - An `Arc` reference to a custom `ThreadStateHandler`.
     pub fn start_with_custom_action(
         &self,
         runtime: Arc<Runtime>,
