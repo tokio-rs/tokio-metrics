@@ -120,3 +120,11 @@ cfg_rt! {
 
 mod task;
 pub use task::{Instrumented, TaskMetrics, TaskMonitor};
+
+#[cfg(unix)]
+pub mod lrtd;
+#[cfg(unix)]
+pub use lrtd::{
+    LongRunningTaskDetector,
+    BlockingActionHandler
+};
