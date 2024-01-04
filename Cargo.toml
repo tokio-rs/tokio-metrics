@@ -22,7 +22,7 @@ rt = ["tokio"]
 tokio-stream = "0.1.11"
 futures-util = "0.3.19"
 pin-project-lite = "0.2.7"
-tokio = { version = "1.31.0", features = ["rt", "time", "net"], optional = true }
+tokio = { version = "1.31.0", features = ["rt", "time", "net", "rt-multi-thread"], optional = true }
 rand = "0.8.5"
 
 [target.'cfg(unix)'.dependencies]
