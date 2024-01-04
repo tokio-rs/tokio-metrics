@@ -5,6 +5,7 @@ use rand::Rng;
 use std::collections::HashSet;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
+use std::thread::ThreadId;
 use std::time::Duration;
 use std::{env, thread};
 use tokio::runtime::{Builder, Runtime};
@@ -19,8 +20,26 @@ fn get_panic_worker_block_duration() -> Duration {
         .unwrap_or(PANIC_WORKER_BLOCK_DURATION_DEFAULT)
 }
 
+#[cfg(unix)]
 fn get_thread_id() -> libc::pthread_t {
     unsafe { libc::pthread_self() }
+}
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+pub struct ThreadInfo {
+    pub id: ThreadId,
+    #[cfg(unix)]
+    pub pthread_id: libc::pthread_t,
+}
+
+impl ThreadInfo {
+    fn new() -> Self {
+        ThreadInfo {
+            id: thread::current().id(),
+            #[cfg(unix)]
+            pthread_id: get_thread_id(),
+        }
+    }
 }
 
 /// A trait for handling actions when blocking is detected.
@@ -33,21 +52,21 @@ pub trait BlockingActionHandler: Send + Sync {
     ///
     /// * `workers` - The list of thread IDs of the tokio runtime worker threads.   /// # Returns
     ///
-    fn blocking_detected(&self, workers: &[libc::pthread_t]);
+    fn blocking_detected(&self, workers: &[ThreadInfo]);
 }
 
 struct StdErrBlockingActionHandler;
 
 /// BlockingActionHandler implementation that writes blocker details to standard error.
 impl BlockingActionHandler for StdErrBlockingActionHandler {
-    fn blocking_detected(&self, workers: &[libc::pthread_t]) {
+    fn blocking_detected(&self, workers: &[ThreadInfo]) {
         eprintln!("Detected blocking in worker threads: {:?}", workers);
     }
 }
 
 #[derive(Debug)]
 struct WorkerSet {
-    inner: Mutex<HashSet<libc::pthread_t>>,
+    inner: Mutex<HashSet<ThreadInfo>>,
 }
 
 impl WorkerSet {
@@ -57,17 +76,17 @@ impl WorkerSet {
         }
     }
 
-    fn add(&self, pid: libc::pthread_t) {
+    fn add(&self, pid: ThreadInfo) {
         let mut set = self.inner.lock().unwrap();
         set.insert(pid);
     }
 
-    fn remove(&self, pid: libc::pthread_t) {
+    fn remove(&self, pid: ThreadInfo) {
         let mut set = self.inner.lock().unwrap();
         set.remove(&pid);
     }
 
-    fn get_all(&self) -> Vec<libc::pthread_t> {
+    fn get_all(&self) -> Vec<ThreadInfo> {
         let set = self.inner.lock().unwrap();
         set.iter().cloned().collect()
     }
@@ -107,9 +126,9 @@ fn probe(
 }
 
 /// Utility to help with detecting blocking in tokio workers.
-/// 
+///
 /// # Example
-/// 
+///
 ///  ```
 ///    use std::sync::Arc;
 ///    use tokio_metrics::lrtd::LongRunningTaskDetector;
@@ -158,7 +177,7 @@ impl LongRunningTaskDetector {
     ) -> (Self, Builder) {
         let workers = Arc::new(WorkerSet::new());
         if current_threaded {
-            workers.add(get_thread_id());
+            workers.add(ThreadInfo::new());
             let runtime_builder = tokio::runtime::Builder::new_current_thread();
             (
                 LongRunningTaskDetector {
@@ -175,12 +194,10 @@ impl LongRunningTaskDetector {
             let workers_clone2 = Arc::clone(&workers);
             runtime_builder
                 .on_thread_start(move || {
-                    let pid = get_thread_id();
-                    workers_clone.add(pid);
+                    workers_clone.add(ThreadInfo::new());
                 })
                 .on_thread_stop(move || {
-                    let pid = get_thread_id();
-                    workers_clone2.remove(pid);
+                    workers_clone2.remove(ThreadInfo::new());
                 });
             (
                 LongRunningTaskDetector {

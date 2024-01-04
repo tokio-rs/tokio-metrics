@@ -1,12 +1,8 @@
-#![cfg(unix)]
 mod lrtd_tests {
-    use std::backtrace::Backtrace;
-    use std::collections::HashMap;
-    use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
     use std::thread;
-    use std::time::{Duration, Instant};
-    use tokio_metrics::lrtd::{BlockingActionHandler, LongRunningTaskDetector};
+    use std::time::Duration;
+    use tokio_metrics::lrtd::LongRunningTaskDetector;
 
     async fn run_blocking_stuff() {
         println!("slow start");
@@ -56,6 +52,24 @@ mod lrtd_tests {
             Duration::from_millis(100),
         );
     }
+}
+
+#[cfg(unix)]
+mod unix_lrtd_tests {
+
+    use std::backtrace::Backtrace;
+    use std::collections::HashMap;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::{Arc, Mutex};
+    use std::thread;
+    use std::time::{Duration, Instant};
+    use tokio_metrics::lrtd::{BlockingActionHandler, LongRunningTaskDetector, ThreadInfo};
+
+    async fn run_blocking_stuff() {
+        println!("slow start");
+        thread::sleep(Duration::from_secs(1));
+        println!("slow done");
+    }
 
     fn get_thread_id() -> libc::pthread_t {
         unsafe { libc::pthread_self() }
@@ -91,7 +105,7 @@ mod lrtd_tests {
     /// A naive stack trace capture implementation for threads for DEMO/TEST only purposes.
     fn get_thread_info(
         signal: libc::c_int,
-        targets: &[libc::pthread_t],
+        targets: &[ThreadInfo],
     ) -> HashMap<libc::pthread_t, String> {
         let _lock = GTI_MUTEX.lock();
         {
@@ -100,7 +114,7 @@ mod lrtd_tests {
             SIGNAL_COUNTER.store(targets.len(), Ordering::SeqCst);
         }
         for thread_id in targets {
-            let result = unsafe { libc::pthread_kill(*thread_id, signal) };
+            let result = unsafe { libc::pthread_kill(thread_id.pthread_id, signal) };
             if result != 0 {
                 eprintln!("Error sending signal: {:?}", result);
             }
@@ -152,7 +166,7 @@ mod lrtd_tests {
     }
 
     impl BlockingActionHandler for DetailedCaptureBlockingActionHandler {
-        fn blocking_detected(&self, workers: &[libc::pthread_t]) {
+        fn blocking_detected(&self, workers: &[ThreadInfo]) {
             let mut map = self.inner.lock().unwrap();
             let tinfo = get_thread_info(libc::SIGUSR1, workers);
             eprintln!("Blocking detected with details: {:?}", tinfo);
