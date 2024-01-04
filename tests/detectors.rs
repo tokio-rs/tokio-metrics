@@ -2,7 +2,7 @@ mod lrtd_tests {
     use std::sync::Arc;
     use std::thread;
     use std::time::Duration;
-    use tokio_metrics::lrtd::LongRunningTaskDetector;
+    use tokio_metrics::detectors::LongRunningTaskDetector;
 
     async fn run_blocking_stuff() {
         println!("slow start");
@@ -63,7 +63,7 @@ mod unix_lrtd_tests {
     use std::sync::{Arc, Mutex};
     use std::thread;
     use std::time::{Duration, Instant};
-    use tokio_metrics::lrtd::{BlockingActionHandler, LongRunningTaskDetector, ThreadInfo};
+    use tokio_metrics::detectors::{BlockingActionHandler, LongRunningTaskDetector, ThreadInfo};
 
     async fn run_blocking_stuff() {
         println!("slow start");

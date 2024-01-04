@@ -121,4 +121,4 @@ cfg_rt! {
 mod task;
 pub use task::{Instrumented, TaskMetrics, TaskMonitor};
 
-pub mod lrtd;
+pub mod detectors;
