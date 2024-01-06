@@ -1,4 +1,5 @@
 mod lrtd_tests {
+    use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;
     use std::thread;
     use std::time::Duration;
@@ -51,6 +52,32 @@ mod lrtd_tests {
             Duration::from_millis(10),
             Duration::from_millis(100),
         );
+    }
+
+    #[test]
+    fn test_blocking_detection_lambda() {
+        let (lrtd, mut builder) = LongRunningTaskDetector::new_single_threaded(
+            Duration::from_millis(10),
+            Duration::from_millis(100),
+        );
+        let runtime = builder.enable_all().build().unwrap();
+        let arc_runtime = Arc::new(runtime);
+        let arc_runtime2 = arc_runtime.clone();
+        let my_atomic_bool = Arc::new(AtomicBool::new(false));
+        let my_atomic_bool2 = my_atomic_bool.clone();
+        lrtd.start_with_custom_action(
+            arc_runtime,
+            Arc::new(move |workers: &_| {
+                eprintln!("Blocking: {:?}", workers);
+                my_atomic_bool.store(true, Ordering::SeqCst);
+            }),
+        );
+        arc_runtime2.block_on(async {
+            run_blocking_stuff().await;
+            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+            println!("Done");
+        });
+        assert!(my_atomic_bool2.load(Ordering::SeqCst));
     }
 }
 

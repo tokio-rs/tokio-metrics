@@ -55,6 +55,16 @@ pub trait BlockingActionHandler: Send + Sync {
     fn blocking_detected(&self, workers: &[ThreadInfo]);
 }
 
+impl<F> BlockingActionHandler for F
+where
+    F: Fn(&[ThreadInfo]) + Send + Sync,
+{
+    fn blocking_detected(&self, workers: &[ThreadInfo]) {
+        // Implement the behavior for blocking_detected using the provided function.
+        // You can call the function here with the given workers.
+        self(workers);
+    }
+}
 struct StdErrBlockingActionHandler;
 
 /// BlockingActionHandler implementation that writes blocker details to standard error.
