@@ -140,8 +140,8 @@ mod unix_lrtd_tests {
             *omap = Some(HashMap::new());
             SIGNAL_COUNTER.store(targets.len(), Ordering::SeqCst);
         }
-        for thread_id in targets {
-            let result = unsafe { libc::pthread_kill(thread_id.pthread_id, signal) };
+        for thread_info in targets {
+            let result = unsafe { libc::pthread_kill(*thread_info.get_pthread_id(), signal) };
             if result != 0 {
                 eprintln!("Error sending signal: {:?}", result);
             }

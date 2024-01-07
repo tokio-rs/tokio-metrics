@@ -27,9 +27,9 @@ fn get_thread_id() -> libc::pthread_t {
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct ThreadInfo {
-    pub id: ThreadId,
+    id: ThreadId,
     #[cfg(unix)]
-    pub pthread_id: libc::pthread_t,
+    pthread_id: libc::pthread_t,
 }
 
 impl ThreadInfo {
@@ -39,6 +39,17 @@ impl ThreadInfo {
             #[cfg(unix)]
             pthread_id: get_thread_id(),
         }
+    }
+
+    // Getter for the id field
+    pub fn get_id(&self) -> &ThreadId {
+        &self.id
+    }
+
+    // Getter for the pthread_id field (only available on Unix)
+    #[cfg(unix)]
+    pub fn get_pthread_id(&self) -> &libc::pthread_t {
+        &self.pthread_id
     }
 }
 
