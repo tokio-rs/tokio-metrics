@@ -42,13 +42,13 @@ impl ThreadInfo {
     }
 
     // Getter for the id field
-    pub fn get_id(&self) -> &ThreadId {
+    pub fn id(&self) -> &ThreadId {
         &self.id
     }
 
     // Getter for the pthread_id field (only available on Unix)
     #[cfg(unix)]
-    pub fn get_pthread_id(&self) -> &libc::pthread_t {
+    pub fn pthread_id(&self) -> &libc::pthread_t {
         &self.pthread_id
     }
 }

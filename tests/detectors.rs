@@ -141,7 +141,7 @@ mod unix_lrtd_tests {
             SIGNAL_COUNTER.store(targets.len(), Ordering::SeqCst);
         }
         for thread_info in targets {
-            let result = unsafe { libc::pthread_kill(*thread_info.get_pthread_id(), signal) };
+            let result = unsafe { libc::pthread_kill(*thread_info.pthread_id(), signal) };
             if result != 0 {
                 eprintln!("Error sending signal: {:?}", result);
             }
