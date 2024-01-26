@@ -199,7 +199,7 @@ impl LongRunningTaskDetector {
         let workers = Arc::new(WorkerSet::new());
         if current_threaded {
             workers.add(ThreadInfo::new());
-            let runtime_builder = tokio::runtime::Builder::new_current_thread();
+            let runtime_builder = Builder::new_current_thread();
             (
                 LongRunningTaskDetector {
                     interval,
@@ -210,7 +210,7 @@ impl LongRunningTaskDetector {
                 runtime_builder,
             )
         } else {
-            let mut runtime_builder = tokio::runtime::Builder::new_multi_thread();
+            let mut runtime_builder = Builder::new_multi_thread();
             let workers_clone = Arc::clone(&workers);
             let workers_clone2 = Arc::clone(&workers);
             runtime_builder
