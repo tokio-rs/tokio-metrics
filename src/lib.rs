@@ -121,5 +121,5 @@ cfg_rt! {
 mod task;
 pub use task::{Instrumented, TaskMetrics, TaskMonitor};
 
-#[cfg(all(feature = "rt"))]
+#[cfg(feature = "rt")]
 pub mod detectors;
