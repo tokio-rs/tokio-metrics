@@ -152,7 +152,7 @@ fn probe(
 ///
 ///  ```
 ///    use std::sync::Arc;
-///    use tokio_metrics::lrtd::LongRunningTaskDetector;
+///    use tokio_metrics::detectors::LongRunningTaskDetector;
 ///
 ///    let (lrtd, mut builder) = LongRunningTaskDetector::new_multi_threaded(
 ///      std::time::Duration::from_millis(10),
@@ -250,7 +250,7 @@ impl LongRunningTaskDetector {
     /// # Example
     ///
     /// ```
-    /// use tokio_metrics::lrtd::LongRunningTaskDetector;
+    /// use tokio_metrics::detectors::LongRunningTaskDetector;
     /// use std::time::Duration;
     ///
     /// let (detector, builder) = LongRunningTaskDetector::new_single_threaded(Duration::from_secs(1), Duration::from_secs(5));
@@ -277,7 +277,7 @@ impl LongRunningTaskDetector {
     /// # Example
     ///
     /// ```
-    /// use tokio_metrics::lrtd::LongRunningTaskDetector;
+    /// use tokio_metrics::detectors::LongRunningTaskDetector;
     /// use std::time::Duration;
     ///
     /// let (detector, builder) = LongRunningTaskDetector::new_multi_threaded(Duration::from_secs(1), Duration::from_secs(5));
