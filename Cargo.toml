@@ -16,17 +16,18 @@ keywords = ["async", "futures", "metrics", "debugging"]
 
 [features]
 default = ["rt"]
-rt = ["tokio"]
+rt = ["tokio/rt", "tokio/time", "tokio/net"]
+detectors = ["tokio/rt", "tokio/time", "tokio/net", "tokio/rt-multi-thread", "rand", "libc"]
 
 [dependencies]
 tokio-stream = "0.1.11"
 futures-util = "0.3.19"
 pin-project-lite = "0.2.7"
 tokio = { version = "1.31.0", features = ["rt", "time", "net", "rt-multi-thread"], optional = true }
-rand = "0.8.5"
+rand = { version = "0.8.5", optional = true }
 
 [target.'cfg(unix)'.dependencies]
-libc = { version = "0.2.149" }
+libc = { version = "0.2.149", optional = true }
 
 [dev-dependencies]
 axum = "0.6"

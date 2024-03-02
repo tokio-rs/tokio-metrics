@@ -1,3 +1,4 @@
+#[cfg(feature = "detectors")]
 mod lrtd_tests {
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;
@@ -31,7 +32,7 @@ mod lrtd_tests {
 
     #[test]
     fn test_blocking_detection_current() {
-        let (lrtd, mut builder) = LongRunningTaskDetector::new_single_threaded(
+        let (lrtd, mut builder) = LongRunningTaskDetector::new_current_threaded(
             Duration::from_millis(10),
             Duration::from_millis(100),
         );
@@ -56,7 +57,7 @@ mod lrtd_tests {
 
     #[test]
     fn test_blocking_detection_lambda() {
-        let (lrtd, mut builder) = LongRunningTaskDetector::new_single_threaded(
+        let (lrtd, mut builder) = LongRunningTaskDetector::new_current_threaded(
             Duration::from_millis(10),
             Duration::from_millis(100),
         );
@@ -81,7 +82,7 @@ mod lrtd_tests {
     }
 }
 
-#[cfg(unix)]
+#[cfg(all(unix, feature = "detectors"))]
 mod unix_lrtd_tests {
 
     use std::backtrace::Backtrace;

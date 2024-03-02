@@ -1,5 +1,69 @@
-//! Utility to help with "really nice to add a warning for tasks that might be blocking"
-use libc;
+//! # Tokio runtime health monitoring detector(s).
+//!
+//! ## Detecting blocked tokio workers: [`LongRunningTaskDetector`].
+//!
+//! Blocking IO operations often end up in tokio workers negatively impacting the ability of tokio runtimes to process
+//! async requests. The simplest example of this is the use of [`std::thread::sleep`] instead of [`tokio::time::sleep`] which we use
+//! in the unit tests to test this utility.
+//!
+//! The aim of this utility is to detect these situations.
+//! [`LongRunningTaskDetector`] is designed to be very low overhead so that it can be safely be run in production.
+//! The overhead of this utility is vconfigurable via probing `interval` parameter.
+//!
+//! ### [`LongRunningTaskDetector`] Example:
+//!
+//! ```
+//! use std::sync::Arc;
+//! use tokio_metrics::detectors::LongRunningTaskDetector;
+//!
+//! let (lrtd, mut builder) = LongRunningTaskDetector::new_multi_threaded(
+//!   std::time::Duration::from_millis(10),
+//!   std::time::Duration::from_millis(100)
+//! );
+//! let runtime = builder.worker_threads(2).enable_all().build().unwrap();
+//! let runtime_ref = Arc::new(runtime);
+//! let lrtd_runtime_ref = runtime_ref.clone();
+//! lrtd.start(lrtd_runtime_ref);
+//! runtime_ref.block_on(async {
+//!   print!("my async code")
+//! });
+//!
+//! ```
+//!
+//! The above will allow you to get details on what is blocking your tokio worker threads for longer that 100ms.
+//! The detail with default action handler will look like:
+//!    
+//! ```text
+//! Detected blocking in worker threads: [
+//!  ThreadInfo { id: ThreadId(10), pthread_id: 123145381474304 },
+//!  ThreadInfo { id: ThreadId(11), pthread_id: 123145385693184 }
+//! ]
+//! ```
+//!   
+//! To get more details(like stack traces) start [`LongRunningTaskDetector`] with [`LongRunningTaskDetector::start_with_custom_action`]
+//! and provide a custom handler([`BlockingActionHandler`]) that can dump the thread stack traces. The [`LongRunningTaskDetector`] integration tests
+//! include an example implementation that is not signal safe as an example.
+//! More detailed blocking can look like:
+//!
+//! ```text
+//! Blocking detected with details: 123145387802624
+//! Stack trace for thread tokio-runtime-worker(123145387802624):
+//! ...
+//!   5: __sigtramp
+//!   6: ___semwait_signal
+//!   7: <unknown>
+//!   8: std::sys::pal::unix::thread::Thread::sleep
+//!             at /rustc/.../library/std/src/sys/pal/unix/thread.rs:243:20
+//!   9: std::thread::sleep
+//!             at /rustc/.../library/std/src/thread/mod.rs:869:5
+//!  10: detectors::unix_lrtd_tests::run_blocking_stuff::{{closure}}
+//!             at ./tests/detectors.rs:98:9
+//!  11: tokio::runtime::task::core::Core<T,S>::poll::{{closure}}
+//! ...
+//!
+//! which will help you easilly identify the blocking operation(s).
+//! ```
+
 use rand::thread_rng;
 use rand::Rng;
 use std::collections::HashSet;
@@ -32,6 +96,7 @@ pub struct ThreadInfo {
     pthread_id: libc::pthread_t,
 }
 
+/// A structure to hold information about a thread, including its platform-specific identifiers.
 impl ThreadInfo {
     fn new() -> Self {
         ThreadInfo {
@@ -41,13 +106,14 @@ impl ThreadInfo {
         }
     }
 
-    // Getter for the id field
+    /// Returns the id
     pub fn id(&self) -> &ThreadId {
         &self.id
     }
 
-    // Getter for the pthread_id field (only available on Unix)
+    /// Returns the `pthread_id` of this thread.
     #[cfg(unix)]
+    #[cfg_attr(docsrs, cfg(unix))]
     pub fn pthread_id(&self) -> &libc::pthread_t {
         &self.pthread_id
     }
@@ -113,7 +179,69 @@ impl WorkerSet {
     }
 }
 
-/// Utility to help with "really nice to add a warning for tasks that might be blocking"
+/// Worker health monitoring detector to help with detecting blocking in tokio workers.
+///
+/// Blocking IO operations often end up in tokio workers negatively impacting the ability of tokio runtimes to process
+/// async requests. The simplest example of this is the use of [`std::thread::sleep`] instead of [`tokio::time::sleep`] which we use
+/// in the unit tests to test this utility.
+///
+/// The aim of this utility is to detect these situations.
+/// [`LongRunningTaskDetector`] is designed to be very low overhead so that it can be safely be run in production.
+/// The overhead of this utility is vconfigurable via probing `interval` parameter.
+///
+/// # Example
+///
+/// ```
+/// use std::sync::Arc;
+/// use tokio_metrics::detectors::LongRunningTaskDetector;
+///
+/// let (lrtd, mut builder) = LongRunningTaskDetector::new_multi_threaded(
+///   std::time::Duration::from_millis(10),
+///   std::time::Duration::from_millis(100)
+/// );
+/// let runtime = builder.worker_threads(2).enable_all().build().unwrap();
+/// let runtime_ref = Arc::new(runtime);
+/// let lrtd_runtime_ref = runtime_ref.clone();
+/// lrtd.start(lrtd_runtime_ref);
+/// runtime_ref.block_on(async {
+///   print!("my async code")
+/// });
+///
+/// ```
+///
+/// The above will allow you to get details on what is blocking your tokio worker threads for longer that 100ms.
+/// The detail with default action handler will look like:
+///    
+/// ```text
+/// Detected blocking in worker threads: [
+///  ThreadInfo { id: ThreadId(10), pthread_id: 123145381474304 },
+///  ThreadInfo { id: ThreadId(11), pthread_id: 123145385693184 }
+/// ]
+/// ```
+///   
+/// To get more details(like stack traces) start [`LongRunningTaskDetector`] with [`LongRunningTaskDetector::start_with_custom_action`]
+/// and provide a custom handler([`BlockingActionHandler`]) that can dump the thread stack traces. The [`LongRunningTaskDetector`] integration tests
+/// include an example implementation that is not signal safe as an example.
+/// More detailed blocking can look like:
+///
+/// ```text
+/// Blocking detected with details: 123145387802624
+/// Stack trace for thread tokio-runtime-worker(123145387802624):
+/// ...
+///   5: __sigtramp
+///   6: ___semwait_signal
+///   7: <unknown>
+///   8: std::sys::pal::unix::thread::Thread::sleep
+///             at /rustc/.../library/std/src/sys/pal/unix/thread.rs:243:20
+///   9: std::thread::sleep
+///             at /rustc/.../library/std/src/thread/mod.rs:869:5
+///  10: detectors::unix_lrtd_tests::run_blocking_stuff::{{closure}}
+///             at ./tests/detectors.rs:98:9
+///  11: tokio::runtime::task::core::Core<T,S>::poll::{{closure}}
+/// ...
+///
+/// which will help you easilly identify the blocking operation(s).
+/// ```
 #[derive(Debug)]
 pub struct LongRunningTaskDetector {
     interval: Duration,
@@ -146,51 +274,17 @@ fn probe(
     }
 }
 
-/// Utility to help with detecting blocking in tokio workers.
-///
-/// # Example
-///
-///  ```
-///    use std::sync::Arc;
-///    use tokio_metrics::detectors::LongRunningTaskDetector;
-///
-///    let (lrtd, mut builder) = LongRunningTaskDetector::new_multi_threaded(
-///      std::time::Duration::from_millis(10),
-///      std::time::Duration::from_millis(100)
-///    );
-///    let runtime = builder.worker_threads(2).enable_all().build().unwrap();
-///    let arc_runtime = Arc::new(runtime);
-///    let arc_runtime2 = arc_runtime.clone();
-///    lrtd.start(arc_runtime);
-///    arc_runtime2.block_on(async {
-///     print!("my async code")
-///    });
-///
-/// ```
-///
-///    The above will allow you to get details on what is blocking your tokio worker threads for longer that 100ms.
-///    The detail with default action handler will look like:
-///    
-///  ```text
-///     Detected blocking in worker threads: [123145318232064, 123145320341504]
-///  ```
-///   
-///  To get more details(like stack traces) start LongRunningTaskDetector with start_with_custom_action and provide a custom handler that can dump the thread stack traces.
-///  (see poc in the tests)
-///
 impl LongRunningTaskDetector {
-    /// Creates a new `LongRunningTaskDetector` instance.
+    /// Creates [`LongRunningTaskDetector`] and a [`tokio::runtime::Builder`].
     ///
-    /// # Arguments
+    /// The `interval` argument determines the time interval between tokio runtime worker probing.
+    /// This interval is randomized.
     ///
-    /// * `interval` - The interval between probes. This interval is randomized.
-    /// * `detection_time` - The maximum time allowed for a probe to succeed.
-    ///                      A probe running for longer indicates something is blocking the worker threads.
-    /// * `current_threaded` - true for returning a curent thread tokio runtime Builder, flase for a multithreaded one.
+    /// The `detection_time` argument determines maximum time allowed for a probe to succeed.
+    /// A probe running for longer is considered a tokio worker health issue. (something is blocking the worker threads)
     ///
-    /// # Returns
-    ///
-    /// Returns a new `LongRunningTaskDetector` instance.    
+    /// The `current_threaded` argument if true will result in returning a curent thread tokio runtime Builder,
+    /// false for a multithreaded one.
     fn new(
         interval: Duration,
         detection_time: Duration,
@@ -232,20 +326,13 @@ impl LongRunningTaskDetector {
         }
     }
 
-    /// Creates a new instance of `LongRunningTaskDetector` linked to a single-threaded Tokio runtime.
+    /// Creates [`LongRunningTaskDetector`] and a current threaded [`tokio::runtime::Builder`].
     ///
-    /// This function takes the `interval` and `detection_time` parameters and initializes a
-    /// `LongRunningTaskDetector` with a single-threaded Tokio runtime.
+    /// The `interval` argument determines the time interval between tokio runtime worker probing.
+    /// This interval is randomized.
     ///
-    /// # Parameters
-    ///
-    /// - `interval`: The time interval between probes.
-    /// - `detection_time`: The maximum blocking time allowed for detecting a long-running task.
-    ///
-    /// # Returns
-    ///
-    /// Returns a tuple containing the created `LongRunningTaskDetector` instance and the Tokio
-    /// runtime `Builder` used for configuration.
+    /// The `detection_time` argument determines maximum time allowed for a probe to succeed.
+    /// A probe running for longer is considered a tokio worker health issue. (something is blocking the worker threads)
     ///
     /// # Example
     ///
@@ -253,26 +340,19 @@ impl LongRunningTaskDetector {
     /// use tokio_metrics::detectors::LongRunningTaskDetector;
     /// use std::time::Duration;
     ///
-    /// let (detector, builder) = LongRunningTaskDetector::new_single_threaded(Duration::from_secs(1), Duration::from_secs(5));
+    /// let (detector, builder) = LongRunningTaskDetector::new_current_threaded(Duration::from_secs(1), Duration::from_secs(5));
     /// ```
-    pub fn new_single_threaded(interval: Duration, detection_time: Duration) -> (Self, Builder) {
+    pub fn new_current_threaded(interval: Duration, detection_time: Duration) -> (Self, Builder) {
         LongRunningTaskDetector::new(interval, detection_time, true)
     }
 
-    /// Creates a new instance of `LongRunningTaskDetector` linked to a multi-threaded Tokio runtime.
+    /// Creates [`LongRunningTaskDetector`] and a multi threaded [`tokio::runtime::Builder`].
     ///
-    /// This function takes the `interval` and `detection_time` parameters and initializes a
-    /// `LongRunningTaskDetector` with a multi-threaded Tokio runtime.
+    /// The `interval` argument determines the time interval between tokio runtime worker probing.
+    /// This `interval`` is randomized.
     ///
-    /// # Parameters
-    ///
-    /// - `interval`: The time interval between probes.
-    /// - `detection_time`: The maximum blocking time allowed for detecting a long-running task.
-    ///
-    /// # Returns
-    ///
-    /// Returns a tuple containing the created `LongRunningTaskDetector` instance and the Tokio
-    /// runtime `Builder` used for configuration.
+    /// The `detection_time` argument determines maximum time allowed for a probe to succeed.
+    /// A probe running for longer is considered a tokio worker health issue. (something is blocking the worker threads)
     ///
     /// # Example
     ///
@@ -286,23 +366,13 @@ impl LongRunningTaskDetector {
         LongRunningTaskDetector::new(interval, detection_time, false)
     }
 
-    /// Starts the monitoring thread with default action handlers (that write details to std err).
-    ///
-    /// # Parameters
-    ///
-    /// - `runtime` - An `Arc` reference to a `tokio::runtime::Runtime`.    
+    /// Starts the monitoring thread with default action handlers (that write details to std err).   
     pub fn start(&self, runtime: Arc<Runtime>) {
         self.start_with_custom_action(runtime, Arc::new(StdErrBlockingActionHandler))
     }
 
     /// Starts the monitoring process with custom action handlers that
-    ///  allow you to customize what happens when blocking is detected.
-    ///
-    /// # Parameters
-    ///
-    /// - `runtime` - An `Arc` reference to a `tokio::runtime::Runtime`.
-    /// - `action` - An `Arc` reference to a custom `BlockingActionHandler`.
-    /// - `thread_action` - An `Arc` reference to a custom `ThreadStateHandler`.
+    /// allow you to customize what happens when blocking is detected.
     pub fn start_with_custom_action(
         &self,
         runtime: Arc<Runtime>,
@@ -324,7 +394,7 @@ impl LongRunningTaskDetector {
         });
     }
 
-    /// Stops the monitoring thread. Does nothing if LRTD is already stopped.
+    /// Stops the monitoring thread. Does nothing if monitoring thread is already stopped.
     pub fn stop(&self) {
         let mut sf = self.stop_flag.lock().unwrap();
         if !(*sf) {
