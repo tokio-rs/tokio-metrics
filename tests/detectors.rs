@@ -1,6 +1,63 @@
 #[cfg(feature = "detectors")]
-mod lrtd_tests {
+mod lrtd_tests_current {
     use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Arc;
+    use std::thread;
+    use std::time::Duration;
+    use tokio_metrics::detectors::LongRunningTaskDetector;
+
+    async fn run_blocking_stuff() {
+        println!("slow start");
+        thread::sleep(Duration::from_secs(1));
+        println!("slow done");
+    }
+
+    #[test]
+    fn test_blocking_detection_current() {
+        let (lrtd, mut builder) = LongRunningTaskDetector::new_current_threaded(
+            Duration::from_millis(10),
+            Duration::from_millis(100),
+        );
+        let runtime = builder.enable_all().build().unwrap();
+        let arc_runtime = Arc::new(runtime);
+        let arc_runtime2 = arc_runtime.clone();
+        lrtd.start(arc_runtime);
+        arc_runtime2.block_on(async {
+            run_blocking_stuff().await;
+            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+            println!("Done");
+        });
+    }
+
+    #[test]
+    fn test_blocking_detection_lambda() {
+        let (lrtd, mut builder) = LongRunningTaskDetector::new_current_threaded(
+            Duration::from_millis(10),
+            Duration::from_millis(100),
+        );
+        let runtime = builder.enable_all().build().unwrap();
+        let arc_runtime = Arc::new(runtime);
+        let arc_runtime2 = arc_runtime.clone();
+        let my_atomic_bool = Arc::new(AtomicBool::new(false));
+        let my_atomic_bool2 = my_atomic_bool.clone();
+        lrtd.start_with_custom_action(
+            arc_runtime,
+            Arc::new(move |workers: &_| {
+                eprintln!("Blocking: {:?}", workers);
+                my_atomic_bool.store(true, Ordering::SeqCst);
+            }),
+        );
+        arc_runtime2.block_on(async {
+            run_blocking_stuff().await;
+            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+            println!("Done");
+        });
+        assert!(my_atomic_bool2.load(Ordering::SeqCst));
+    }
+}
+
+#[cfg(feature = "detectors-multi-thread")]
+mod lrtd_tests_multi {
     use std::sync::Arc;
     use std::thread;
     use std::time::Duration;
@@ -31,58 +88,15 @@ mod lrtd_tests {
     }
 
     #[test]
-    fn test_blocking_detection_current() {
-        let (lrtd, mut builder) = LongRunningTaskDetector::new_current_threaded(
-            Duration::from_millis(10),
-            Duration::from_millis(100),
-        );
-        let runtime = builder.enable_all().build().unwrap();
-        let arc_runtime = Arc::new(runtime);
-        let arc_runtime2 = arc_runtime.clone();
-        lrtd.start(arc_runtime);
-        arc_runtime2.block_on(async {
-            run_blocking_stuff().await;
-            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-            println!("Done");
-        });
-    }
-
-    #[test]
     fn test_blocking_detection_stop_unstarted() {
         let (_lrtd, _builder) = LongRunningTaskDetector::new_multi_threaded(
             Duration::from_millis(10),
             Duration::from_millis(100),
         );
     }
-
-    #[test]
-    fn test_blocking_detection_lambda() {
-        let (lrtd, mut builder) = LongRunningTaskDetector::new_current_threaded(
-            Duration::from_millis(10),
-            Duration::from_millis(100),
-        );
-        let runtime = builder.enable_all().build().unwrap();
-        let arc_runtime = Arc::new(runtime);
-        let arc_runtime2 = arc_runtime.clone();
-        let my_atomic_bool = Arc::new(AtomicBool::new(false));
-        let my_atomic_bool2 = my_atomic_bool.clone();
-        lrtd.start_with_custom_action(
-            arc_runtime,
-            Arc::new(move |workers: &_| {
-                eprintln!("Blocking: {:?}", workers);
-                my_atomic_bool.store(true, Ordering::SeqCst);
-            }),
-        );
-        arc_runtime2.block_on(async {
-            run_blocking_stuff().await;
-            tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-            println!("Done");
-        });
-        assert!(my_atomic_bool2.load(Ordering::SeqCst));
-    }
 }
 
-#[cfg(all(unix, feature = "detectors"))]
+#[cfg(all(unix, feature = "detectors-multi-thread"))]
 mod unix_lrtd_tests {
 
     use std::backtrace::Backtrace;

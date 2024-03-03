@@ -113,7 +113,7 @@ impl ThreadInfo {
 
     /// Returns the `pthread_id` of this thread.
     #[cfg(unix)]
-    #[cfg_attr(docsrs, cfg(unix))]
+    #[cfg_attr(docsrs, doc(cfg(unix)))]
     pub fn pthread_id(&self) -> &libc::pthread_t {
         &self.pthread_id
     }
@@ -275,57 +275,6 @@ fn probe(
 }
 
 impl LongRunningTaskDetector {
-    /// Creates [`LongRunningTaskDetector`] and a [`tokio::runtime::Builder`].
-    ///
-    /// The `interval` argument determines the time interval between tokio runtime worker probing.
-    /// This interval is randomized.
-    ///
-    /// The `detection_time` argument determines maximum time allowed for a probe to succeed.
-    /// A probe running for longer is considered a tokio worker health issue. (something is blocking the worker threads)
-    ///
-    /// The `current_threaded` argument if true will result in returning a curent thread tokio runtime Builder,
-    /// false for a multithreaded one.
-    fn new(
-        interval: Duration,
-        detection_time: Duration,
-        current_threaded: bool,
-    ) -> (Self, Builder) {
-        let workers = Arc::new(WorkerSet::new());
-        if current_threaded {
-            workers.add(ThreadInfo::new());
-            let runtime_builder = Builder::new_current_thread();
-            (
-                LongRunningTaskDetector {
-                    interval,
-                    detection_time,
-                    stop_flag: Arc::new(Mutex::new(true)),
-                    workers,
-                },
-                runtime_builder,
-            )
-        } else {
-            let mut runtime_builder = Builder::new_multi_thread();
-            let workers_clone = Arc::clone(&workers);
-            let workers_clone2 = Arc::clone(&workers);
-            runtime_builder
-                .on_thread_start(move || {
-                    workers_clone.add(ThreadInfo::new());
-                })
-                .on_thread_stop(move || {
-                    workers_clone2.remove(ThreadInfo::new());
-                });
-            (
-                LongRunningTaskDetector {
-                    interval,
-                    detection_time,
-                    stop_flag: Arc::new(Mutex::new(true)),
-                    workers,
-                },
-                runtime_builder,
-            )
-        }
-    }
-
     /// Creates [`LongRunningTaskDetector`] and a current threaded [`tokio::runtime::Builder`].
     ///
     /// The `interval` argument determines the time interval between tokio runtime worker probing.
@@ -343,7 +292,18 @@ impl LongRunningTaskDetector {
     /// let (detector, builder) = LongRunningTaskDetector::new_current_threaded(Duration::from_secs(1), Duration::from_secs(5));
     /// ```
     pub fn new_current_threaded(interval: Duration, detection_time: Duration) -> (Self, Builder) {
-        LongRunningTaskDetector::new(interval, detection_time, true)
+        let workers = Arc::new(WorkerSet::new());
+        workers.add(ThreadInfo::new());
+        let runtime_builder = Builder::new_current_thread();
+        (
+            LongRunningTaskDetector {
+                interval,
+                detection_time,
+                stop_flag: Arc::new(Mutex::new(true)),
+                workers,
+            },
+            runtime_builder,
+        )
     }
 
     /// Creates [`LongRunningTaskDetector`] and a multi threaded [`tokio::runtime::Builder`].
@@ -361,9 +321,30 @@ impl LongRunningTaskDetector {
     /// use std::time::Duration;
     ///
     /// let (detector, builder) = LongRunningTaskDetector::new_multi_threaded(Duration::from_secs(1), Duration::from_secs(5));
-    /// ```    
+    /// ```
+    #[cfg(feature = "detectors-multi-thread")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "detectors-multi-thread")))]
     pub fn new_multi_threaded(interval: Duration, detection_time: Duration) -> (Self, Builder) {
-        LongRunningTaskDetector::new(interval, detection_time, false)
+        let workers = Arc::new(WorkerSet::new());
+        let mut runtime_builder = Builder::new_multi_thread();
+        let workers_clone = Arc::clone(&workers);
+        let workers_clone2 = Arc::clone(&workers);
+        runtime_builder
+            .on_thread_start(move || {
+                workers_clone.add(ThreadInfo::new());
+            })
+            .on_thread_stop(move || {
+                workers_clone2.remove(ThreadInfo::new());
+            });
+        (
+            LongRunningTaskDetector {
+                interval,
+                detection_time,
+                stop_flag: Arc::new(Mutex::new(true)),
+                workers,
+            },
+            runtime_builder,
+        )
     }
 
     /// Starts the monitoring thread with default action handlers (that write details to std err).   

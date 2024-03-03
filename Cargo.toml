@@ -17,7 +17,8 @@ keywords = ["async", "futures", "metrics", "debugging"]
 [features]
 default = ["rt"]
 rt = ["tokio/rt", "tokio/time", "tokio/net"]
-detectors = ["tokio/rt", "tokio/time", "tokio/net", "tokio/rt-multi-thread", "rand", "libc"]
+detectors = ["tokio/rt", "tokio/time", "tokio/net", "rand", "libc"]
+detectors-multi-thread = ["detectors", "tokio/rt-multi-thread"]
 
 [dependencies]
 tokio-stream = "0.1.11"
