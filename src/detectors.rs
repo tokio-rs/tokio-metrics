@@ -168,6 +168,7 @@ impl WorkerSet {
         set.insert(pid);
     }
 
+    #[cfg(feature = "detectors-multi-thread")]
     fn remove(&self, pid: ThreadInfo) {
         let mut set = self.inner.lock().unwrap();
         set.remove(&pid);
