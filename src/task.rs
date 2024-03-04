@@ -523,6 +523,7 @@ pub struct TaskMonitorBuilder {
 }
 
 impl TaskMonitorBuilder {
+    /// Creates a new [`TaskMonitorBuilder`].
     pub fn new() -> Self {
         Self {
             slow_poll_threshold: None,
@@ -2440,9 +2441,9 @@ impl<T: Stream> Stream for Instrumented<T> {
 }
 
 fn instrument_poll<T, Out>(
-    cx: &mut Context,
+    cx: &mut Context<'_>,
     instrumented: Pin<&mut Instrumented<T>>,
-    poll_fn: impl FnOnce(Pin<&mut T>, &mut Context) -> Poll<Out>,
+    poll_fn: impl FnOnce(Pin<&mut T>, &mut Context<'_>) -> Poll<Out>,
 ) -> Poll<Out> {
     let poll_start = Instant::now();
     let this = instrumented.project();
