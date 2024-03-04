@@ -1218,6 +1218,7 @@ impl Iterator for RuntimeIntervals {
 }
 
 impl RuntimeMonitor {
+    /// Creates a new [`RuntimeMonitor`].
     pub fn new(runtime: &runtime::Handle) -> RuntimeMonitor {
         let runtime = runtime.metrics();
 
@@ -1435,6 +1436,7 @@ impl Worker {
 }
 
 impl RuntimeMetrics {
+    /// Returns the ratio of the [`RuntimeMetrics::total_polls_count`] to the [`RuntimeMetrics::total_noop_count`].
     pub fn mean_polls_per_park(&self) -> f64 {
         let total_park_count = self.total_park_count - self.total_noop_count;
         if total_park_count == 0 {
@@ -1444,6 +1446,7 @@ impl RuntimeMetrics {
         }
     }
 
+    /// Returns the ratio of the [`RuntimeMetrics::total_busy_duration`] to the [`RuntimeMetrics::elapsed`].
     pub fn busy_ratio(&self) -> f64 {
         self.total_busy_duration.as_nanos() as f64 / self.elapsed.as_nanos() as f64
     }
