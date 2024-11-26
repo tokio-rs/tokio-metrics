@@ -896,7 +896,7 @@ pub struct TaskMetrics {
     ///
     /// ##### Definition
     /// This metric is equal to [`total_short_delay_duration`][TaskMetrics::total_short_delay_duration]
-    /// + [`total_long_delay_duration`][TaskMetrics::total_long_delay_duration].
+    /// \+ [`total_long_delay_duration`][TaskMetrics::total_long_delay_duration].
     ///
     /// ##### Derived metrics
     /// - **[`mean_scheduled_duration`][TaskMetrics::mean_scheduled_duration]**   
@@ -968,7 +968,7 @@ pub struct TaskMetrics {
     ///
     /// ##### Definition
     /// This metric is equal to [`total_short_delay_count`][TaskMetrics::total_short_delay_count]
-    /// + [`total_long_delay_count`][TaskMetrics::total_long_delay_count].
+    /// \+ [`total_long_delay_count`][TaskMetrics::total_long_delay_count].
     ///
     /// ##### Derived metrics
     /// - **[`mean_scheduled_duration`][TaskMetrics::mean_scheduled_duration]**   
@@ -1009,7 +1009,7 @@ pub struct TaskMetrics {
     ///
     /// ##### Definition
     /// This metric is equal to [`total_fast_poll_count`][TaskMetrics::total_fast_poll_count]
-    /// + [`total_slow_poll_count`][TaskMetrics::total_slow_poll_count].
+    /// \+ [`total_slow_poll_count`][TaskMetrics::total_slow_poll_count].
     ///
     /// ##### Derived metrics
     /// - **[`mean_poll_duration`][TaskMetrics::mean_poll_duration]**   
@@ -1076,7 +1076,7 @@ pub struct TaskMetrics {
     ///
     /// ##### Definition
     /// This metric is equal to [`total_fast_poll_duration`][TaskMetrics::total_fast_poll_duration]
-    /// + [`total_slow_poll_duration`][TaskMetrics::total_slow_poll_duration].
+    /// \+ [`total_slow_poll_duration`][TaskMetrics::total_slow_poll_duration].
     ///
     /// ##### Derived metrics
     /// - **[`mean_poll_duration`][TaskMetrics::mean_poll_duration]**   
