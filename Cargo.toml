@@ -2,7 +2,7 @@
 name = "tokio-metrics"
 version = "0.3.1"
 edition = "2021"
-rust-version = "1.56.0"
+rust-version = "1.70.0"
 authors = ["Tokio Contributors <team@tokio.rs>"]
 license = "MIT"
 readme = "README.md"
