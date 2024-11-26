@@ -243,6 +243,8 @@ tokio::spawn(do_work());
   The maximum number of tasks currently scheduled any worker's local queue.
 - **[`min_local_queue_depth`]**  
   The minimum number of tasks currently scheduled any worker's local queue.
+- **[`blocking_queue_depth`]**
+  The number of tasks currently waiting to be executed in the blocking threadpool.
 - **[`elapsed`]**  
   Total amount of time elapsed since observing runtime metrics.
 - **[`budget_forced_yield_count`]**
