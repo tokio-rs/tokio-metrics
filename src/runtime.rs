@@ -251,14 +251,14 @@ pub struct RuntimeMetrics {
     ///
     /// ##### Examples
     /// ```
-    /// use tokio::runtime::HistogramScale;
+    /// use tokio::runtime::HistogramConfiguration;
     /// use std::time::Duration;
+    ///
+    /// let config = HistogramConfiguration::linear(Duration::from_micros(50), 12);
     ///
     /// let rt = tokio::runtime::Builder::new_multi_thread()
     ///     .enable_metrics_poll_time_histogram()
-    ///     .metrics_poll_time_histogram_scale(HistogramScale::Linear)
-    ///     .metrics_poll_time_histogram_resolution(Duration::from_micros(50))
-    ///     .metrics_poll_time_histogram_buckets(12)
+    ///     .metrics_poll_time_histogram_configuration(config)
     ///     .build()
     ///     .unwrap();
     ///
