@@ -244,37 +244,35 @@ pub struct RuntimeMetrics {
     /// times.
     ///
     /// This metric must be explicitly enabled when creating the runtime with
-    /// [`enable_metrics_poll_count_histogram`][tokio::runtime::Builder::enable_metrics_poll_count_histogram].
+    /// [`enable_metrics_poll_time_histogram`][tokio::runtime::Builder::enable_metrics_poll_time_histogram].
     /// Bucket sizes are fixed and configured at the runtime level. See
     /// configuration options on
-    /// [`runtime::Builder`][tokio::runtime::Builder::enable_metrics_poll_count_histogram].
+    /// [`runtime::Builder`][tokio::runtime::Builder::enable_metrics_poll_time_histogram].
     ///
     /// ##### Examples
     /// ```
     /// use tokio::runtime::HistogramScale;
     /// use std::time::Duration;
     ///
-    /// fn main() {
-    ///     let rt = tokio::runtime::Builder::new_multi_thread()
-    ///         .enable_metrics_poll_count_histogram()
-    ///         .metrics_poll_count_histogram_scale(HistogramScale::Linear)
-    ///         .metrics_poll_count_histogram_resolution(Duration::from_micros(50))
-    ///         .metrics_poll_count_histogram_buckets(12)
-    ///         .build()
-    ///         .unwrap();
+    /// let rt = tokio::runtime::Builder::new_multi_thread()
+    ///     .enable_metrics_poll_time_histogram()
+    ///     .metrics_poll_time_histogram_scale(HistogramScale::Linear)
+    ///     .metrics_poll_time_histogram_resolution(Duration::from_micros(50))
+    ///     .metrics_poll_time_histogram_buckets(12)
+    ///     .build()
+    ///     .unwrap();
     ///
-    ///     rt.block_on(async {
-    ///         let handle = tokio::runtime::Handle::current();
-    ///         let monitor = tokio_metrics::RuntimeMonitor::new(&handle);
-    ///         let mut intervals = monitor.intervals();
-    ///         let mut next_interval = || intervals.next().unwrap();
+    /// rt.block_on(async {
+    ///     let handle = tokio::runtime::Handle::current();
+    ///     let monitor = tokio_metrics::RuntimeMonitor::new(&handle);
+    ///     let mut intervals = monitor.intervals();
+    ///     let mut next_interval = || intervals.next().unwrap();
     ///
-    ///         let interval = next_interval();
-    ///         println!("poll count histogram {:?}", interval.poll_count_histogram);
-    ///     });
-    /// }
+    ///     let interval = next_interval();
+    ///     println!("poll count histogram {:?}", interval.poll_time_histogram);
+    /// });
     /// ```
-    pub poll_count_histogram: Vec<u64>,
+    pub poll_time_histogram: Vec<u64>,
 
     /// The number of times worker threads unparked but performed no work before parking again.
     ///
@@ -527,7 +525,7 @@ pub struct RuntimeMetrics {
     ///
     /// The remote schedule count increases by one each time a task is woken from **outside** of
     /// the runtime. This usually means that a task is spawned or notified from a non-runtime
-    /// thread and must be queued using the Runtime's injection queue, which tends to be slower.
+    /// thread and must be queued using the Runtime's global queue, which tends to be slower.
     ///
     /// ##### Definition
     /// This metric is derived from [`tokio::runtime::RuntimeMetrics::remote_schedule_count`].
@@ -683,7 +681,7 @@ pub struct RuntimeMetrics {
     ///
     /// The worker steal count increases by one each time the worker attempts to schedule a task
     /// locally, but its local queue is full. When this happens, half of the
-    /// local queue is moved to the injection queue.
+    /// local queue is moved to the global queue.
     ///
     /// This metric only applies to the **multi-threaded** scheduler.
     ///
@@ -957,15 +955,15 @@ pub struct RuntimeMetrics {
     /// - [`RuntimeMetrics::max_busy_duration`]
     pub min_busy_duration: Duration,
 
-    /// The number of tasks currently scheduled in the runtime's injection queue.
+    /// The number of tasks currently scheduled in the runtime's global queue.
     ///
     /// Tasks that are spawned or notified from a non-runtime thread are scheduled using the
-    /// runtime's injection queue. This metric returns the **current** number of tasks pending in
-    /// the injection queue. As such, the returned value may increase or decrease as new tasks are
+    /// runtime's global queue. This metric returns the **current** number of tasks pending in
+    /// the global queue. As such, the returned value may increase or decrease as new tasks are
     /// scheduled and processed.
     ///
     /// ##### Definition
-    /// This metric is derived from [`tokio::runtime::RuntimeMetrics::injection_queue_depth`].
+    /// This metric is derived from [`tokio::runtime::RuntimeMetrics::global_queue_depth`].
     ///
     /// ##### Example
     /// ```
@@ -1003,7 +1001,7 @@ pub struct RuntimeMetrics {
     /// assert_eq!(interval.num_remote_schedules, 2);
     /// # }
     /// ```
-    pub injection_queue_depth: usize,
+    pub global_queue_depth: usize,
 
     /// The total number of tasks currently scheduled in workers' local queues.
     ///
@@ -1143,7 +1141,7 @@ struct Worker {
     total_overflow_count: u64,
     total_polls_count: u64,
     total_busy_duration: Duration,
-    poll_count_histogram: Vec<u64>,
+    poll_time_histogram: Vec<u64>,
 }
 
 /// Iterator returned by [`RuntimeMonitor::intervals`].
@@ -1172,7 +1170,7 @@ impl RuntimeIntervals {
         let mut metrics = RuntimeMetrics {
             workers_count: self.runtime.num_workers(),
             elapsed: now - self.started_at,
-            injection_queue_depth: self.runtime.injection_queue_depth(),
+            global_queue_depth: self.runtime.global_queue_depth(),
             num_remote_schedules: num_remote_schedules - self.num_remote_schedules,
             min_park_count: u64::MAX,
             min_noop_count: u64::MAX,
@@ -1183,7 +1181,7 @@ impl RuntimeIntervals {
             min_busy_duration: Duration::from_secs(1000000000),
             min_local_queue_depth: usize::MAX,
             mean_poll_duration_worker_min: Duration::MAX,
-            poll_count_histogram: vec![0; self.runtime.poll_count_histogram_num_buckets()],
+            poll_time_histogram: vec![0; self.runtime.poll_time_histogram_num_buckets()],
             budget_forced_yield_count: budget_forced_yields - self.budget_forced_yield_count,
             io_driver_ready_count: io_driver_ready_events - self.io_driver_ready_count,
             ..Default::default()
@@ -1292,8 +1290,8 @@ impl RuntimeMonitor {
 
 impl Worker {
     fn new(worker: usize, rt: &runtime::RuntimeMetrics) -> Worker {
-        let poll_count_histogram = if rt.poll_count_histogram_enabled() {
-            vec![0; rt.poll_count_histogram_num_buckets()]
+        let poll_time_histogram = if rt.poll_time_histogram_enabled() {
+            vec![0; rt.poll_time_histogram_num_buckets()]
         } else {
             vec![]
         };
@@ -1308,7 +1306,7 @@ impl Worker {
             total_overflow_count: rt.worker_overflow_count(worker),
             total_polls_count: rt.worker_poll_count(worker),
             total_busy_duration: rt.worker_total_busy_duration(worker),
-            poll_count_histogram,
+            poll_time_histogram,
         }
     }
 
@@ -1411,10 +1409,10 @@ impl Worker {
         
         // Update the histogram counts if there were polls since last count
         if worker_polls_count > 0 {
-            for (bucket, cell) in metrics.poll_count_histogram.iter_mut().enumerate() {
-                let new = rt.poll_count_histogram_bucket_count(self.worker, bucket);
-                let delta = new - self.poll_count_histogram[bucket];
-                self.poll_count_histogram[bucket] = new;
+            for (bucket, cell) in metrics.poll_time_histogram.iter_mut().enumerate() {
+                let new = rt.poll_time_histogram_bucket_count(self.worker, bucket);
+                let delta = new - self.poll_time_histogram[bucket];
+                self.poll_time_histogram[bucket] = new;
 
                 *cell += delta;
             }

@@ -14,6 +14,9 @@ Runtime and task level metrics for Tokio applications.
 categories = ["asynchronous", "network-programming"]
 keywords = ["async", "futures", "metrics", "debugging"]
 
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(tokio_unstable)'] }
+
 [features]
 default = ["rt"]
 rt = ["tokio"]
