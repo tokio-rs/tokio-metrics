@@ -1,3 +1,16 @@
+# 0.4.0 (November 26th, 2024)
+
+The core Tokio crate has renamed some of the metrics and this breaking release
+uses the new names. The minimum required Tokio is bumped to 1.41, and the MSRV
+is bumped to 1.70 to match.
+
+- runtime: use new names for poll time histogram ([#66])
+- runtime: rename injection queue to global queue ([#66])
+- doc: various doc fixes ([#66], [#65])
+
+[#65]: https://github.com/tokio-rs/tokio-metrics/pull/65
+[#66]: https://github.com/tokio-rs/tokio-metrics/pull/66
+
 # 0.3.1 (October 12th, 2023)
 
 ### Fixed
