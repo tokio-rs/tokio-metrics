@@ -34,7 +34,7 @@ futures = "0.3.21"
 num_cpus = "1.13.1"
 serde = { version = "1.0.136", features = ["derive"] }
 serde_json = "1.0.79"
-tokio = { version = "1.26.0", features = ["full", "rt", "time", "macros", "test-util"] }
+tokio = { version = "1.41.0", features = ["full", "rt", "time", "macros", "test-util"] }
 
 [[example]]
 name = "runtime"
