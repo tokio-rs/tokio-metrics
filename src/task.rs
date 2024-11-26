@@ -237,13 +237,13 @@ use std::time::{Duration, Instant};
 /// The culprit is likely some combination of:
 /// - **Your tasks are accidentally blocking.** Common culprits include:
 ///     1. Using the Rust standard library's [filesystem](https://doc.rust-lang.org/std/fs/) or
-///     [networking](https://doc.rust-lang.org/std/net/) APIs.   
+///        [networking](https://doc.rust-lang.org/std/net/) APIs.
 ///        These APIs are synchronous; use tokio's [filesystem](https://docs.rs/tokio/latest/tokio/fs/)
 ///        and [networking](https://docs.rs/tokio/latest/tokio/net/) APIs, instead.
 ///     3. Calling [`block_on`](https://docs.rs/tokio/latest/tokio/runtime/struct.Handle.html#method.block_on).
 ///     4. Invoking `println!` or other synchronous logging routines.   
-///     Invocations of `println!` involve acquiring an exclusive lock on stdout, followed by a
-///     synchronous write to stdout.
+///        Invocations of `println!` involve acquiring an exclusive lock on stdout, followed by a
+///        synchronous write to stdout.
 /// 2. **Your tasks are computationally expensive.** Common culprits include:
 ///     1. TLS/cryptographic routines
 ///     2. doing a lot of processing on bytes
@@ -253,7 +253,7 @@ use std::time::{Duration, Instant};
 /// You observed that [your tasks are spending more time waiting to be polled](#are-my-tasks-spending-more-time-waiting-to-be-polled)
 /// suggesting some combination of:
 /// - Your application is inflating the time elapsed between instrumentation and first poll.
-/// - Your tasks are being scheduled into tokio's injection queue.
+/// - Your tasks are being scheduled into tokio's global queue.
 /// - Other tasks are spending too long without yielding, thus backing up tokio's queues.
 ///
 /// Start by asking: [*Is time-to-first-poll unusually high?*](#is-time-to-first-poll-unusually-high)
@@ -307,9 +307,9 @@ use std::time::{Duration, Instant};
 /// ```
 ///
 /// Otherwise, [`mean_first_poll_delay`][TaskMetrics::mean_first_poll_delay] might be unusually high
-/// because [*your application is spawning key tasks into tokio's injection queue...*](#is-my-application-spawning-more-tasks-into-tokio’s-injection-queue)
+/// because [*your application is spawning key tasks into tokio's global queue...*](#is-my-application-spawning-more-tasks-into-tokio’s-global-queue)
 ///
-/// ##### Is my application spawning more tasks into tokio's injection queue?
+/// ##### Is my application spawning more tasks into tokio's global queue?
 /// Tasks awoken from threads *not* managed by the tokio runtime are scheduled with a slower,
 /// global "injection" queue.
 ///
