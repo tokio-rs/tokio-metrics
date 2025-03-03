@@ -18,7 +18,8 @@ keywords = ["async", "futures", "metrics", "debugging"]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(tokio_unstable)'] }
 
 [features]
-default = ["rt"]
+metrics-integration = ["dep:metrics"]
+default = ["rt", "metrics-integration"]
 rt = ["tokio"]
 
 [dependencies]
@@ -26,6 +27,7 @@ tokio-stream = "0.1.11"
 futures-util = "0.3.19"
 pin-project-lite = "0.2.7"
 tokio = { version = "1.41.0", features = ["rt", "time", "net"], optional = true }
+metrics = { version = "0.24", optional = true }
 
 [dev-dependencies]
 axum = "0.6"

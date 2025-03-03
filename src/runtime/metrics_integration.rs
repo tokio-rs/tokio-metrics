@@ -55,20 +55,29 @@ pub struct RuntimeMetricsReporter {
 }
 
 macro_rules! kind_to_type {
-    (Counter) => (metrics::Counter)
+    (Counter) => (metrics::Counter);
+    (Gauge) => (metrics::Gauge);
+    (Histogram) => (metrics::Histogram);
 }
+
 macro_rules! describe_metric_ref {
-    ($transform_fn:ident, $doc:expr, $name:ident: Counter<$unit:ident>) => (
-        metrics::describe_counter!($transform_fn(stringify!($name)).name().to_owned(), metrics::Unit::$unit, $doc)
-    )
+    ($transform_fn:ident, $doc:expr, $name:ident: Counter<$unit:ident> []) => (
+        metrics::describe_counter!($transform_fn(concat!("tokio_", stringify!($name))).name().to_owned(), metrics::Unit::$unit, $doc)
+    );
+    ($transform_fn:ident, $doc:expr, $name:ident: Gauge<$unit:ident> []) => (
+        metrics::describe_gauge!($transform_fn(concat!("tokio_", stringify!($name))).name().to_owned(), metrics::Unit::$unit, $doc)
+    );
+    ($transform_fn:ident, $doc:expr, $name:ident: Histogram<$unit:ident> []) => (
+        metrics::describe_histogram!($transform_fn(concat!("tokio_", stringify!($name))).name().to_owned(), metrics::Unit::$unit, $doc)
+    );
 }
 
 macro_rules! metric_refs {
     (
-        [$struct_name:ident] {
+        [$struct_name:ident] [$($ignore:ident),* $(,)?] {
         $(
             #[doc = $doc:tt]
-            $name:ident: $kind:tt <$unit:ident>
+            $name:ident: $kind:tt <$unit:ident> $opts:tt
         ),*
         $(,)?
         }
@@ -93,8 +102,8 @@ macro_rules! metric_refs {
 
             fn describe(transform_fn: &mut dyn FnMut(&'static str) -> metrics::Key) {
                 $(
-                    describe_metric_ref!(transform_fn, $doc, $name: $kind<$unit>);
-                ),*
+                    describe_metric_ref!(transform_fn, $doc, $name: $kind<$unit> $opts);
+                )*
             }
 
         }
@@ -102,8 +111,75 @@ macro_rules! metric_refs {
 }
 
 metric_refs! {
-    [RuntimeMetricRefs] {
-
+    [RuntimeMetricRefs] [elapsed] {
+        /// The number of worker threads used by the runtime
+        workers_count: Gauge<Count> [],
+        /// The number of times worker threads parked
+        max_park_count: Gauge<Count> [],
+        /// The minimum number of times any worker thread parked
+        min_park_count: Gauge<Count> [],
+        /// The average duration of a single invocation of poll on a task
+        mean_poll_duration: Gauge<Microseconds> [],
+        /// The average duration of a single invocation of poll on a task on the worker with the lowest value
+        mean_poll_duration_worker_min: Gauge<Microseconds> [],
+        /// The average duration of a single invocation of poll on a task on the worker with the highest value
+        mean_poll_duration_worker_max: Gauge<Microseconds> [],
+        /// A histogram of task polls since the previous probe grouped by poll times
+        poll_time_histogram: Histogram<Microseconds> [],
+        /// The number of times worker threads unparked but performed no work before parking again
+        total_noop_count: Counter<Count> [],
+        /// The maximum number of times any worker thread unparked but performed no work before parking again
+        max_noop_count: Counter<Count> [],
+        /// The minimum number of times any worker thread unparked but performed no work before parking again
+        min_noop_count: Counter<Count> [],
+        /// The number of tasks worker threads stole from another worker thread
+        total_steal_count: Counter<Count> [],
+        /// The maximum number of tasks any worker thread stole from another worker thread.
+        max_steal_count: Counter<Count> [],
+        /// The minimum number of tasks any worker thread stole from another worker thread
+        min_steal_count: Counter<Count> [],
+        /// The number of times worker threads stole tasks from another worker thread
+        total_steal_operations: Counter<Count> [],
+        /// The maximum number of times any worker thread stole tasks from another worker thread
+        max_steal_operations: Counter<Count> [],
+        /// The minimum number of times any worker thread stole tasks from another worker thread
+        min_steal_operations: Counter<Count> [],
+        /// The number of tasks scheduled from **outside** of the runtime
+        num_remote_schedules: Counter<Count> [],
+        /// The number of tasks scheduled from worker threads
+        total_local_schedule_count: Counter<Count> [],
+        /// The maximum number of tasks scheduled from any one worker thread
+        min_local_schedule_count: Counter<Count> [],
+        /// The number of times worker threads saturated their local queues
+        total_overflow_count: Counter<Count> [],
+        /// The maximum number of times any one worker saturated its local queue
+        max_overflow_count: Counter<Count> [],
+        /// The minimum number of times any one worker saturated its local queue
+        min_overflow_count: Counter<Count> [],
+        /// The number of tasks that have been polled across all worker threads
+        total_polls_count: Counter<Count> [],
+        /// The maximum number of tasks that have been polled in any worker thread
+        max_polls_count: Counter<Count> [],
+        /// The minimum number of tasks that have been polled in any worker thread
+        min_polls_count: Counter<Count> [],
+        /// The amount of time worker threads were busy
+        total_busy_duration: Counter<Microseconds> [],
+        /// The maximum amount of time a worker thread was busy
+        max_busy_duration: Counter<Microseconds> [],
+        /// The minimum amount of time a worker thread was busy
+        min_busy_duration: Counter<Microseconds> [],
+        /// The number of tasks currently scheduled in the runtime's global queue
+        global_queue_depth: Gauge<Count> [],
+        /// The total number of tasks currently scheduled in workers' local queues
+        total_local_queue_depth: Gauge<Count> [],
+        /// The maximum number of tasks currently scheduled any worker's local queue
+        max_local_queue_depth: Gauge<Count> [],
+        /// The minimum number of tasks currently scheduled any worker's local queue
+        min_local_queue_depth: Gauge<Count> [],
+        /// Returns the number of times that tasks have been forced to yield back to the scheduler after exhausting their task budgets
+        budget_forced_yield_count: Counter<Count> [],
+        /// Returns the number of ready events processed by the runtime’s I/O driver
+        io_driver_ready_count: Counter<Count> [],
     }
 }
 
