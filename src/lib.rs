@@ -122,6 +122,8 @@ cfg_rt! {
         RuntimeMetrics,
         RuntimeMonitor,
     };
+    #[cfg(feature = "metrics-integration")]
+    pub use runtime::metrics_integration::{RuntimeMetricsReporterBuilder, RuntimeMetricsReporter};
 }
 
 mod task;
