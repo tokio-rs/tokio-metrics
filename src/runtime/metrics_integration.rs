@@ -110,46 +110,6 @@ macro_rules! capture_metric_ref {
     );
 }
 
-trait MyMetricOp {
-    fn op(self);
-}
-
-impl MyMetricOp for (&metrics::Counter, Duration) {
-    fn op(self) {
-        self.0.increment(self.1.as_micros().try_into().unwrap_or(u64::MAX));
-    }
-}
-
-impl MyMetricOp for (&metrics::Counter, u64) {
-    fn op(self) {
-        self.0.increment(self.1);
-    }
-}
-
-impl MyMetricOp for (&metrics::Gauge, Duration) {
-    fn op(self) {
-        self.0.set(self.1.as_micros() as f64);
-    }
-}
-
-impl MyMetricOp for (&metrics::Gauge, u64) {
-    fn op(self) {
-        self.0.set(self.1 as f64);
-    }
-}
-
-impl MyMetricOp for (&metrics::Gauge, usize) {
-    fn op(self) {
-        self.0.set(self.1 as f64);
-    }
-}
-
-impl MyMetricOp for (&metrics::Histogram, Vec<u64>) {
-    fn op(self) {
-        // FIXME: buckets metadata
-    }
-}
-
 macro_rules! metric_refs {
     (
         [$struct_name:ident] [$($ignore:ident),* $(,)?] {
@@ -175,9 +135,9 @@ macro_rules! metric_refs {
                 }
             }
 
-            fn emit(&self, metrics: RuntimeMetrics) {
+            fn emit(&self, metrics: RuntimeMetrics, tokio: &tokio::runtime::RuntimeMetrics) {
                 $(
-                    MyMetricOp::op((&self.$name, metrics.$name));
+                    MyMetricOp::op((&self.$name, metrics.$name), tokio);
                 )*
             }
 
@@ -262,6 +222,48 @@ metric_refs! {
         io_driver_ready_count: Counter<Count> [],
     }
 }
+trait MyMetricOp {
+    fn op(self, tokio: &tokio::runtime::RuntimeMetrics);
+}
+
+impl MyMetricOp for (&metrics::Counter, Duration) {
+    fn op(self, _tokio: &tokio::runtime::RuntimeMetrics) {
+        self.0.increment(self.1.as_micros().try_into().unwrap_or(u64::MAX));
+    }
+}
+
+impl MyMetricOp for (&metrics::Counter, u64) {
+    fn op(self, _tokio: &tokio::runtime::RuntimeMetrics) {
+        self.0.increment(self.1);
+    }
+}
+
+impl MyMetricOp for (&metrics::Gauge, Duration) {
+    fn op(self, _tokio: &tokio::runtime::RuntimeMetrics) {
+        self.0.set(self.1.as_micros() as f64);
+    }
+}
+
+impl MyMetricOp for (&metrics::Gauge, u64) {
+    fn op(self, _tokio: &tokio::runtime::RuntimeMetrics) {
+        self.0.set(self.1 as f64);
+    }
+}
+
+impl MyMetricOp for (&metrics::Gauge, usize) {
+    fn op(self, _tokio: &tokio::runtime::RuntimeMetrics) {
+        self.0.set(self.1 as f64);
+    }
+}
+
+impl MyMetricOp for (&metrics::Histogram, Vec<u64>) {
+    fn op(self, tokio: &tokio::runtime::RuntimeMetrics) {
+        for (i, bucket) in self.1.iter().enumerate() {
+            let range = tokio.poll_time_histogram_bucket_range(i);
+            self.0.record_many(((range.start + range.end).as_micros() / 2) as f64, *bucket as usize);
+        }
+    }
+}
 
 impl fmt::Debug for RuntimeMetricsReporter {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -277,7 +279,7 @@ impl RuntimeMetricsReporter
     /// Collect and publish metrics once
     pub fn run_once(&mut self) {
         let metrics = self.intervals.next().expect("RuntimeIntervals::next never returns None");
-        self.emitter.emit(metrics);
+        self.emitter.emit(metrics, &self.intervals.runtime);
     }
 
     /// Collect and run metrics.
