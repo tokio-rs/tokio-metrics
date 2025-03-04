@@ -1,11 +1,13 @@
 use std::{fmt, time::Duration};
 
+use tokio::runtime::Handle;
+
 use super::{RuntimeIntervals, RuntimeMetrics, RuntimeMonitor};
 
 /// A reporter builder
 pub struct RuntimeMetricsReporterBuilder {
     interval: Duration,
-    metrics_transformer: Box<dyn FnMut(&'static str) -> metrics::Key>,
+    metrics_transformer: Box<dyn FnMut(&'static str) -> metrics::Key + Send>,
 }
 
 impl fmt::Debug for RuntimeMetricsReporterBuilder {
@@ -35,7 +37,12 @@ impl RuntimeMetricsReporterBuilder {
     }
 
     /// Build the reporter
-    pub fn build(mut self, monitor: RuntimeMonitor) -> RuntimeMetricsReporter {
+    pub fn build(self) -> RuntimeMetricsReporter {
+        self.build_with_monitor(RuntimeMonitor::new(&Handle::current()))
+    }
+
+    /// Build the reporter with a specific [`RuntimeMonitor`]
+    pub fn build_with_monitor(mut self, monitor: RuntimeMonitor) -> RuntimeMetricsReporter {
         RuntimeMetricsReporter {
             interval: self.interval,
             intervals: monitor.intervals(),
@@ -50,13 +57,13 @@ impl RuntimeMetricsReporterBuilder {
     }
 
     /// Run the reporter, describing the metrics beforehand
-    pub async fn describe_and_run(self, monitor: RuntimeMonitor) {
-        self.describe().build(monitor).run().await;
+    pub async fn describe_and_run(self) {
+        self.describe().build().run().await;
     }
 
     /// Run the reporter, not describing the metrics beforehand
-    pub async fn run_without_describing(self, monitor: RuntimeMonitor) {
-        self.build(monitor).run().await;
+    pub async fn run_without_describing(self) {
+        self.build().run().await;
     }
 }
 
@@ -77,15 +84,16 @@ macro_rules! metric_key {
     ($transform_fn:ident, $name:ident) => ($transform_fn(concat!("tokio_", stringify!($name))))
 }
 
+// calling `trim` since /// inserts spaces into docs
 macro_rules! describe_metric_ref {
     ($transform_fn:ident, $doc:expr, $name:ident: Counter<$unit:ident> []) => (
-        metrics::describe_counter!(metric_key!($transform_fn, $name).name().to_owned(), metrics::Unit::$unit, $doc)
+        metrics::describe_counter!(metric_key!($transform_fn, $name).name().to_owned(), metrics::Unit::$unit, $doc.trim())
     );
     ($transform_fn:ident, $doc:expr, $name:ident: Gauge<$unit:ident> []) => (
-        metrics::describe_gauge!(metric_key!($transform_fn, $name).name().to_owned(), metrics::Unit::$unit, $doc)
+        metrics::describe_gauge!(metric_key!($transform_fn, $name).name().to_owned(), metrics::Unit::$unit, $doc.trim())
     );
     ($transform_fn:ident, $doc:expr, $name:ident: Histogram<$unit:ident> []) => (
-        metrics::describe_histogram!(metric_key!($transform_fn, $name).name().to_owned(), metrics::Unit::$unit, $doc)
+        metrics::describe_histogram!(metric_key!($transform_fn, $name).name().to_owned(), metrics::Unit::$unit, $doc.trim())
     );
 }
 
@@ -260,7 +268,11 @@ impl MyMetricOp for (&metrics::Histogram, Vec<u64>) {
     fn op(self, tokio: &tokio::runtime::RuntimeMetrics) {
         for (i, bucket) in self.1.iter().enumerate() {
             let range = tokio.poll_time_histogram_bucket_range(i);
-            self.0.record_many(((range.start + range.end).as_micros() / 2) as f64, *bucket as usize);
+            if *bucket > 0 {
+                // emit using range.start to avoid very large numbers for open bucket
+                // FIXME: do we want to do something else here
+                self.0.record_many(range.start.as_micros() as f64, *bucket as usize);
+            }
         }
     }
 }
