@@ -2,7 +2,7 @@ use std::time::{Duration, Instant};
 use tokio::runtime;
 
 #[cfg(feature = "metrics-integration")]
-pub mod metrics_integration;
+pub(crate) mod metrics_integration;
 
 #[cfg(any(docsrs, all(tokio_unstable, feature = "rt")))]
 #[cfg_attr(docsrs, doc(cfg(all(tokio_unstable, feature = "rt"))))]

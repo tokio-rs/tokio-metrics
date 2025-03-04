@@ -35,15 +35,27 @@ impl RuntimeMetricsReporterBuilder {
     }
 
     /// Build the reporter
-    pub fn build(self, monitor: RuntimeMonitor) -> RuntimeMetricsReporter {
+    pub fn build(mut self, monitor: RuntimeMonitor) -> RuntimeMetricsReporter {
         RuntimeMetricsReporter {
             interval: self.interval,
             intervals: monitor.intervals(),
+            emitter: RuntimeMetricRefs::capture(&mut self.metrics_transformer),
         }
     }
 
-    /// Run the reporter3
-    pub async fn run(self, monitor: RuntimeMonitor) {
+    /// Describe the metrics. You might not want to run this more than once
+    pub fn describe(mut self) -> Self {
+        RuntimeMetricRefs::describe(&mut self.metrics_transformer);
+        self
+    }
+
+    /// Run the reporter, describing the metrics beforehand
+    pub async fn describe_and_run(self, monitor: RuntimeMonitor) {
+        self.describe().build(monitor).run().await;
+    }
+
+    /// Run the reporter, not describing the metrics beforehand
+    pub async fn run_without_describing(self, monitor: RuntimeMonitor) {
         self.build(monitor).run().await;
     }
 }
@@ -52,6 +64,7 @@ impl RuntimeMetricsReporterBuilder {
 pub struct RuntimeMetricsReporter {
     interval: Duration,
     intervals: RuntimeIntervals,
+    emitter: RuntimeMetricRefs,
 }
 
 macro_rules! kind_to_type {
@@ -60,16 +73,81 @@ macro_rules! kind_to_type {
     (Histogram) => (metrics::Histogram);
 }
 
+macro_rules! metric_key {
+    ($transform_fn:ident, $name:ident) => ($transform_fn(concat!("tokio_", stringify!($name))))
+}
+
 macro_rules! describe_metric_ref {
     ($transform_fn:ident, $doc:expr, $name:ident: Counter<$unit:ident> []) => (
-        metrics::describe_counter!($transform_fn(concat!("tokio_", stringify!($name))).name().to_owned(), metrics::Unit::$unit, $doc)
+        metrics::describe_counter!(metric_key!($transform_fn, $name).name().to_owned(), metrics::Unit::$unit, $doc)
     );
     ($transform_fn:ident, $doc:expr, $name:ident: Gauge<$unit:ident> []) => (
-        metrics::describe_gauge!($transform_fn(concat!("tokio_", stringify!($name))).name().to_owned(), metrics::Unit::$unit, $doc)
+        metrics::describe_gauge!(metric_key!($transform_fn, $name).name().to_owned(), metrics::Unit::$unit, $doc)
     );
     ($transform_fn:ident, $doc:expr, $name:ident: Histogram<$unit:ident> []) => (
-        metrics::describe_histogram!($transform_fn(concat!("tokio_", stringify!($name))).name().to_owned(), metrics::Unit::$unit, $doc)
+        metrics::describe_histogram!(metric_key!($transform_fn, $name).name().to_owned(), metrics::Unit::$unit, $doc)
     );
+}
+
+macro_rules! capture_metric_ref {
+    ($transform_fn:ident, $name:ident: Counter []) => (
+        {
+            let (name, labels) = metric_key!($transform_fn, $name).into_parts();
+            metrics::counter!(name, labels)
+        }
+    );
+    ($transform_fn:ident, $name:ident: Gauge []) => (
+        {
+            let (name, labels) = metric_key!($transform_fn, $name).into_parts();
+            metrics::gauge!(name, labels)
+        }
+    );
+    ($transform_fn:ident, $name:ident: Histogram []) => (
+        {
+            let (name, labels) = metric_key!($transform_fn, $name).into_parts();
+            metrics::histogram!(name, labels)
+        }
+    );
+}
+
+trait MyMetricOp {
+    fn op(self);
+}
+
+impl MyMetricOp for (&metrics::Counter, Duration) {
+    fn op(self) {
+        self.0.increment(self.1.as_micros().try_into().unwrap_or(u64::MAX));
+    }
+}
+
+impl MyMetricOp for (&metrics::Counter, u64) {
+    fn op(self) {
+        self.0.increment(self.1);
+    }
+}
+
+impl MyMetricOp for (&metrics::Gauge, Duration) {
+    fn op(self) {
+        self.0.set(self.1.as_micros() as f64);
+    }
+}
+
+impl MyMetricOp for (&metrics::Gauge, u64) {
+    fn op(self) {
+        self.0.set(self.1 as f64);
+    }
+}
+
+impl MyMetricOp for (&metrics::Gauge, usize) {
+    fn op(self) {
+        self.0.set(self.1 as f64);
+    }
+}
+
+impl MyMetricOp for (&metrics::Histogram, Vec<u64>) {
+    fn op(self) {
+        // FIXME: buckets metadata
+    }
 }
 
 macro_rules! metric_refs {
@@ -86,18 +164,21 @@ macro_rules! metric_refs {
             $(
                 $name: kind_to_type!($kind)
             ),*
-           
         }
 
         impl $struct_name {
             fn capture(transform_fn: &mut dyn FnMut(&'static str) -> metrics::Key) -> Self {
-                /*
                 Self {
                     $(
-                        $name: panic!(),
+                        $name: capture_metric_ref!(transform_fn, $name: $kind $opts)
                     ),*
-                } */
-               panic!()
+                }
+            }
+
+            fn emit(&self, metrics: RuntimeMetrics) {
+                $(
+                    MyMetricOp::op((&self.$name, metrics.$name));
+                )*
             }
 
             fn describe(transform_fn: &mut dyn FnMut(&'static str) -> metrics::Key) {
@@ -105,7 +186,6 @@ macro_rules! metric_refs {
                     describe_metric_ref!(transform_fn, $doc, $name: $kind<$unit> $opts);
                 )*
             }
-
         }
     }
 }
@@ -196,6 +276,8 @@ impl RuntimeMetricsReporter
 {
     /// Collect and publish metrics once
     pub fn run_once(&mut self) {
+        let metrics = self.intervals.next().expect("RuntimeIntervals::next never returns None");
+        self.emitter.emit(metrics);
     }
 
     /// Collect and run metrics.
