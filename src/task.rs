@@ -1686,7 +1686,7 @@ impl TaskMonitor {
     ///
     /// ##### See also
     /// - [`TaskMonitor::intervals`]:
-    ///     produces [`TaskMetrics`] for user-defined sampling intervals, instead of cumulatively
+    ///   produces [`TaskMetrics`] for user-defined sampling intervals, instead of cumulatively
     ///
     /// ##### Examples
     /// In the below example, 0 polls occur within the first sampling interval, 3 slow polls occur

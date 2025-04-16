@@ -24,7 +24,7 @@ impl Default for RuntimeMetricsReporterBuilder {
     fn default() -> Self {
         RuntimeMetricsReporterBuilder {
             interval: Duration::from_secs(30),
-            metrics_transformer: Box::new(|metric| metrics::Key::from_static_name(metric)),
+            metrics_transformer: Box::new(metrics::Key::from_static_name),
         }
     }
 }
