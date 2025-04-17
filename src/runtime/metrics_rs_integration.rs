@@ -422,6 +422,8 @@ metric_refs! {
         max_local_queue_depth: Gauge<Count> [],
         /// The minimum number of tasks currently scheduled any worker's local queue
         min_local_queue_depth: Gauge<Count> [],
+        /// The number of tasks currently waiting to be executed in the runtime's blocking threadpool.
+        blocking_queue_depth: Gauge<Count> [],
         /// Returns the number of times that tasks have been forced to yield back to the scheduler after exhausting their task budgets
         budget_forced_yield_count: Counter<Count> [],
         /// Returns the number of ready events processed by the runtime’s I/O driver
