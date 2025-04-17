@@ -323,6 +323,32 @@ macro_rules! metric_refs {
                 )*
             }
         }
+
+        #[test]
+        fn test_no_fields_missing() {
+            // test that no fields are missing. We can't use exhaustive matching here
+            // since RuntimeMetrics is #[non_exhaustive], so use a debug impl
+            let debug = format!("{:#?}", RuntimeMetrics::default());
+            for line in debug.lines() {
+                if line == "RuntimeMetrics {" || line == "}" {
+                    continue
+                }
+                $(
+                    let expected = format!("    {}:", stringify!($ignore));
+                    if line.contains(&expected) {
+                        continue
+                    }
+                );*
+                $(
+                    let expected = format!("    {}:", stringify!($name));
+                    eprintln!("{}", expected);
+                    if line.contains(&expected) {
+                        continue
+                    }
+                );*
+                panic!("missing metric {:?}", line);
+            }
+        }
     }
 }
 
@@ -334,6 +360,8 @@ metric_refs! {
         max_park_count: Gauge<Count> [],
         /// The minimum number of times any worker thread parked
         min_park_count: Gauge<Count> [],
+        /// The number of times worker threads parked
+        total_park_count: Gauge<Count> [],
         /// The average duration of a single invocation of poll on a task
         mean_poll_duration: Gauge<Microseconds> [],
         /// The average duration of a single invocation of poll on a task on the worker with the lowest value
@@ -365,6 +393,8 @@ metric_refs! {
         /// The number of tasks scheduled from worker threads
         total_local_schedule_count: Counter<Count> [],
         /// The maximum number of tasks scheduled from any one worker thread
+        max_local_schedule_count: Counter<Count> [],
+        /// The minimum number of tasks scheduled from any one worker thread
         min_local_schedule_count: Counter<Count> [],
         /// The number of times worker threads saturated their local queues
         total_overflow_count: Counter<Count> [],
