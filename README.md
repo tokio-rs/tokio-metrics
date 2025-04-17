@@ -245,6 +245,12 @@ tokio::spawn(do_work());
   The minimum number of tasks currently scheduled any worker's local queue.
 - **[`blocking_queue_depth`]**
   The number of tasks currently waiting to be executed in the blocking threadpool.
+- **[`live_tasks_count`]**
+  The current number of alive tasks in the runtime.
+- **[`blocking_threads_count`]**
+  The number of additional threads spawned by the runtime.
+- **[`idle_blocking_threads_count`]**
+  The number of idle threads, which have spawned by the runtime for `spawn_blocking` calls.
 - **[`elapsed`]**  
   Total amount of time elapsed since observing runtime metrics.
 - **[`budget_forced_yield_count`]**
@@ -285,6 +291,9 @@ tokio::spawn(do_work());
 [`injection_queue_depth`]: https://docs.rs/tokio-metrics/0.4.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.injection_queue_depth
 [`total_local_queue_depth`]: https://docs.rs/tokio-metrics/0.4.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.total_local_queue_depth
 [`blocking_queue_depth`]: https://docs.rs/tokio-metrics/0.4.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.blocking_queue_depth
+[`live_tasks_count`]: https://docs.rs/tokio-metrics/0.4.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.live_tasks_count
+[`blocking_threads_count`]: https://docs.rs/tokio-metrics/0.4.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.blocking_threads_count
+[`idle_blocking_threads_count`]: https://docs.rs/tokio-metrics/0.4.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.idle_blocking_threads_count
 [`max_local_queue_depth`]: https://docs.rs/tokio-metrics/0.4.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.max_local_queue_depth
 [`min_local_queue_depth`]: https://docs.rs/tokio-metrics/0.4.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.min_local_queue_depth
 [`elapsed`]: https://docs.rs/tokio-metrics/0.4.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.elapsed
