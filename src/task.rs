@@ -1476,6 +1476,7 @@ impl TaskMonitor {
     #[cfg(not(test))]
     pub const DEFAULT_SLOW_POLL_THRESHOLD: Duration = Duration::from_micros(50);
     #[cfg(test)]
+    #[allow(missing_docs)]
     pub const DEFAULT_SLOW_POLL_THRESHOLD: Duration = Duration::from_millis(500);
 
     /// The default duration at which schedules cross the threshold into being categorized as 'long'
@@ -1483,6 +1484,7 @@ impl TaskMonitor {
     #[cfg(not(test))]
     pub const DEFAULT_LONG_DELAY_THRESHOLD: Duration = Duration::from_micros(50);
     #[cfg(test)]
+    #[allow(missing_docs)]
     pub const DEFAULT_LONG_DELAY_THRESHOLD: Duration = Duration::from_millis(500);
 
     /// Constructs a new task monitor.
@@ -1684,7 +1686,7 @@ impl TaskMonitor {
     ///
     /// ##### See also
     /// - [`TaskMonitor::intervals`]:
-    ///     produces [`TaskMetrics`] for user-defined sampling intervals, instead of cumulatively
+    ///   produces [`TaskMetrics`] for user-defined sampling intervals, instead of cumulatively
     ///
     /// ##### Examples
     /// In the below example, 0 polls occur within the first sampling interval, 3 slow polls occur

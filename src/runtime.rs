@@ -1,6 +1,9 @@
 use std::time::{Duration, Instant};
 use tokio::runtime;
 
+#[cfg(feature = "metrics-rs-integration")]
+pub(crate) mod metrics_rs_integration;
+
 #[cfg(any(docsrs, all(tokio_unstable, feature = "rt")))]
 #[cfg_attr(docsrs, doc(cfg(all(tokio_unstable, feature = "rt"))))]
 /// Monitors key metrics of the tokio runtime.
