@@ -64,7 +64,7 @@ async fn create_user(
         username: payload.username,
     };
     // instrument inserting the user into the db:
-    let _ = monitors.insert.instrument(insert_user(user.clone())).await;
+    monitors.insert.instrument(insert_user(user.clone())).await;
     (axum::http::StatusCode::CREATED, axum::Json(user))
 }
 

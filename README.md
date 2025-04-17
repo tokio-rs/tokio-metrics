@@ -5,7 +5,7 @@ runtime and per-task metrics.
 
 ```toml
 [dependencies]
-tokio-metrics = "0.1"
+tokio-metrics = "0.4.0"
 ```
 
 ## Getting Started With Task Metrics
@@ -67,6 +67,14 @@ loop {
   The total number of times that polling tasks completed slowly.
 - **[`total_slow_poll_duration`]**
   The total duration of slow polls.
+- **[`total_short_delay_count`]**
+  The total count of short scheduling delays.
+- **[`total_short_delay_duration`]**
+  The total duration of short scheduling delays.
+- **[`total_long_delay_count`]**
+  The total count of long scheduling delays.
+- **[`total_long_delay_duration`]**
+  The total duration of long scheduling delays.
 
 #### Derived Metrics
 - **[`mean_first_poll_delay`]**  
@@ -83,28 +91,41 @@ loop {
   The mean duration of fast polls.
 - **[`mean_slow_poll_duration`]**  
   The mean duration of slow polls.
+- **[`long_delay_ratio`]**
+- The ratio between the number of long scheduling delays and the number of total schedules.
+- **[`mean_short_delay_duration`]**
+  The mean duration of short schedules.
+- **[`mean_long_delay_duration`]**
+  The mean duration of long schedules.
 
-[`instrumented_count`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.TaskMetrics.html#structfield.instrumented_count
-[`dropped_count`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.TaskMetrics.html#structfield.dropped_count
-[`first_poll_count`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.TaskMetrics.html#structfield.first_poll_count
-[`total_first_poll_delay`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.TaskMetrics.html#structfield.total_first_poll_delay 
-[`total_idled_count`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.TaskMetrics.html#structfield.total_idled_count
-[`total_idle_duration`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.TaskMetrics.html#structfield.total_idle_duration 
-[`total_scheduled_count`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.TaskMetrics.html#structfield.total_scheduled_count 
-[`total_scheduled_duration`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.TaskMetrics.html#structfield.total_scheduled_duration
-[`total_poll_count`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.TaskMetrics.html#structfield.total_poll_count
-[`total_poll_duration`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.TaskMetrics.html#structfield.total_poll_duration
-[`total_fast_poll_count`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.TaskMetrics.html#structfield.total_fast_poll_count 
-[`total_fast_poll_duration`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.TaskMetrics.html#structfield.total_fast_poll_duration 
-[`total_slow_poll_count`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.TaskMetrics.html#structfield.total_slow_poll_count
-[`total_slow_poll_duration`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.TaskMetrics.html#structfield.total_slow_poll_duration 
-[`mean_first_poll_delay`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.TaskMetrics.html#method.mean_first_poll_delay
-[`mean_idle_duration`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.TaskMetrics.html#method.mean_idle_duration
-[`mean_scheduled_duration`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.TaskMetrics.html#method.mean_scheduled_duration
-[`mean_poll_duration`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.TaskMetrics.html#method.mean_poll_duration
-[`slow_poll_ratio`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.TaskMetrics.html#method.slow_poll_ratio
-[`mean_fast_poll_duration`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.TaskMetrics.html#method.mean_fast_poll_duration
-[`mean_slow_poll_duration`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.TaskMetrics.html#method.mean_slow_poll_duration
+[`instrumented_count`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.TaskMetrics.html#structfield.instrumented_count
+[`dropped_count`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.TaskMetrics.html#structfield.dropped_count
+[`first_poll_count`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.TaskMetrics.html#structfield.first_poll_count
+[`total_first_poll_delay`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.TaskMetrics.html#structfield.total_first_poll_delay 
+[`total_idled_count`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.TaskMetrics.html#structfield.total_idled_count
+[`total_idle_duration`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.TaskMetrics.html#structfield.total_idle_duration 
+[`total_scheduled_count`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.TaskMetrics.html#structfield.total_scheduled_count 
+[`total_scheduled_duration`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.TaskMetrics.html#structfield.total_scheduled_duration
+[`total_poll_count`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.TaskMetrics.html#structfield.total_poll_count
+[`total_poll_duration`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.TaskMetrics.html#structfield.total_poll_duration
+[`total_fast_poll_count`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.TaskMetrics.html#structfield.total_fast_poll_count 
+[`total_fast_poll_duration`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.TaskMetrics.html#structfield.total_fast_poll_duration 
+[`total_slow_poll_count`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.TaskMetrics.html#structfield.total_slow_poll_count
+[`total_slow_poll_duration`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.TaskMetrics.html#structfield.total_slow_poll_duration 
+[`mean_first_poll_delay`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.TaskMetrics.html#method.mean_first_poll_delay
+[`mean_idle_duration`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.TaskMetrics.html#method.mean_idle_duration
+[`mean_scheduled_duration`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.TaskMetrics.html#method.mean_scheduled_duration
+[`mean_poll_duration`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.TaskMetrics.html#method.mean_poll_duration
+[`slow_poll_ratio`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.TaskMetrics.html#method.slow_poll_ratio
+[`mean_fast_poll_duration`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.TaskMetrics.html#method.mean_fast_poll_duration
+[`mean_slow_poll_duration`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.TaskMetrics.html#method.mean_slow_poll_duration
+[`total_short_delay_count`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.TaskMetrics.html#structfield.total_short_delay_count
+[`total_short_delay_duration`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.TaskMetrics.html#structfield.total_short_delay_duration
+[`total_long_delay_count`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.TaskMetrics.html#structfield.total_long_delay_count
+[`total_long_delay_duration`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.TaskMetrics.html#structfield.total_long_delay_duration
+[`long_delay_ratio`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.TaskMetrics.html#method.long_delay_ratio
+[`mean_short_delay_duration`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.TaskMetrics.html#method.mean_short_delay_duration
+[`mean_long_delay_duration`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.TaskMetrics.html#method.mean_long_delay_duration
 
 ## Getting Started With Runtime Metrics
 
@@ -136,7 +157,7 @@ The `rt` feature of `tokio-metrics` is on by default; simply check that you do
 not set `default-features = false` when declaring it as a dependency; e.g.:
 ```toml
 [dependencies]
-tokio-metrics = "0.1.0"
+tokio-metrics = "0.4.0"
 ```
 
 From within a Tokio runtime, use `RuntimeMonitor` to monitor key metrics of
@@ -177,10 +198,16 @@ tokio::spawn(do_work());
 - **[`min_noop_count`]**  
   The minimum number of times any worker thread unparked but performed no work before parking again.
 - **[`total_steal_count`]**  
-  The number of times worker threads stole tasks from another worker thread.
+  The number of tasks worker threads stole from another worker thread.
 - **[`max_steal_count`]**  
-  The maximum number of times any worker thread stole tasks from another worker thread.
+  The maximum number of tasks any worker thread stole from another worker thread.
 - **[`min_steal_count`]**  
+  The minimum number of tasks any worker thread stole from another worker thread.
+- **[`total_steal_operations`]**  
+  The number of times worker threads stole tasks from another worker thread.
+- **[`max_steal_operations`]**  
+  The maximum number of times any worker thread stole tasks from another worker thread.
+- **[`min_steal_operations`]**  
   The minimum number of times any worker thread stole tasks from another worker thread.
 - **[`num_remote_schedules`]**  
   The number of tasks scheduled from outside of the runtime.
@@ -218,41 +245,50 @@ tokio::spawn(do_work());
   The minimum number of tasks currently scheduled any worker's local queue.
 - **[`elapsed`]**  
   Total amount of time elapsed since observing runtime metrics.
+- **[`budget_forced_yield_count`]**
+  The number of times that a task was forced to yield because it exhausted its budget.
+- **[`io_driver_ready_count`]**
+  The number of ready events received from the I/O driver.
 
 #### Derived Metrics
 - **[`mean_polls_per_park`]**
 - **[`busy_ratio`]**
 
-[`workers_count`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.workers_count
-[`total_park_count`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.total_park_count
-[`max_park_count`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.max_park_count
-[`min_park_count`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.min_park_count
-[`total_noop_count`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.total_noop_count
-[`max_noop_count`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.max_noop_count
-[`min_noop_count`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.min_noop_count
-[`total_steal_count`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.total_steal_count
-[`max_steal_count`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.max_steal_count
-[`min_steal_count`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.min_steal_count
-[`num_remote_schedules`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.num_remote_schedules
-[`total_local_schedule_count`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.total_local_schedule_count
-[`max_local_schedule_count`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.max_local_schedule_count
-[`min_local_schedule_count`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.min_local_schedule_count
-[`total_overflow_count`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.total_overflow_count
-[`max_overflow_count`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.max_overflow_count
-[`min_overflow_count`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.min_overflow_count
-[`total_polls_count`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.total_polls_count
-[`max_polls_count`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.max_polls_count
-[`min_polls_count`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.min_polls_count
-[`total_busy_duration`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.total_busy_duration
-[`max_busy_duration`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.max_busy_duration
-[`min_busy_duration`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.min_busy_duration
-[`injection_queue_depth`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.injection_queue_depth
-[`total_local_queue_depth`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.total_local_queue_depth
-[`max_local_queue_depth`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.max_local_queue_depth
-[`min_local_queue_depth`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.min_local_queue_depth
-[`elapsed`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.elapsed
-[`mean_polls_per_park`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.RuntimeMetrics.html#method.mean_polls_per_park
-[`busy_ratio`]: https://docs.rs/tokio-metrics/0.1.*/tokio_metrics/struct.RuntimeMetrics.html#method.busy_ratio
+[`workers_count`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.workers_count
+[`total_park_count`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.total_park_count
+[`max_park_count`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.max_park_count
+[`min_park_count`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.min_park_count
+[`total_noop_count`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.total_noop_count
+[`max_noop_count`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.max_noop_count
+[`min_noop_count`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.min_noop_count
+[`total_steal_count`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.total_steal_count
+[`max_steal_count`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.max_steal_count
+[`min_steal_count`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.min_steal_count
+[`total_steal_operations`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.total_steal_operations
+[`max_steal_operations`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.max_steal_operations
+[`min_steal_operations`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.min_steal_operations
+[`num_remote_schedules`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.num_remote_schedules
+[`total_local_schedule_count`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.total_local_schedule_count
+[`max_local_schedule_count`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.max_local_schedule_count
+[`min_local_schedule_count`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.min_local_schedule_count
+[`total_overflow_count`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.total_overflow_count
+[`max_overflow_count`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.max_overflow_count
+[`min_overflow_count`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.min_overflow_count
+[`total_polls_count`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.total_polls_count
+[`max_polls_count`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.max_polls_count
+[`min_polls_count`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.min_polls_count
+[`total_busy_duration`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.total_busy_duration
+[`max_busy_duration`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.max_busy_duration
+[`min_busy_duration`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.min_busy_duration
+[`injection_queue_depth`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.injection_queue_depth
+[`total_local_queue_depth`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.total_local_queue_depth
+[`max_local_queue_depth`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.max_local_queue_depth
+[`min_local_queue_depth`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.min_local_queue_depth
+[`elapsed`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.elapsed
+[`mean_polls_per_park`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.RuntimeMetrics.html#method.mean_polls_per_park
+[`busy_ratio`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.RuntimeMetrics.html#method.busy_ratio
+[`budget_forced_yield_count`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.budget_forced_yield_count
+[`io_driver_ready_count`]: https://docs.rs/tokio-metrics/0.3.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.io_driver_ready_count
 
 
 ## Relation to Tokio Console

@@ -1,8 +1,8 @@
 [package]
 name = "tokio-metrics"
-version = "0.1.0"
+version = "0.4.0"
 edition = "2021"
-rust-version = "1.56.0"
+rust-version = "1.70.0"
 authors = ["Tokio Contributors <team@tokio.rs>"]
 license = "MIT"
 readme = "README.md"
@@ -14,23 +14,27 @@ Runtime and task level metrics for Tokio applications.
 categories = ["asynchronous", "network-programming"]
 keywords = ["async", "futures", "metrics", "debugging"]
 
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(tokio_unstable)'] }
+
 [features]
 default = ["rt"]
 rt = ["tokio"]
 
 [dependencies]
+tokio-stream = "0.1.11"
 futures-util = "0.3.19"
 pin-project-lite = "0.2.7"
-tokio = { version = "1.15.0", features = ["rt", "stats", "time"], optional = true }
+tokio = { version = "1.41.0", features = ["rt", "time", "net"], optional = true }
 
 [dev-dependencies]
-axum = "0.4.5"
+axum = "0.6"
 criterion = "0.3.4"
 futures = "0.3.21"
 num_cpus = "1.13.1"
 serde = { version = "1.0.136", features = ["derive"] }
 serde_json = "1.0.79"
-tokio = { version = "1.15.0", features = ["full", "rt", "time", "macros", "test-util"] }
+tokio = { version = "1.41.0", features = ["full", "rt", "time", "macros", "test-util"] }
 
 [[example]]
 name = "runtime"
