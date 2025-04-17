@@ -1046,7 +1046,7 @@ pub struct RuntimeMetrics {
     /// }
     /// ```
     ///
-    /// ###### With `multi_thread runtime
+    /// ###### With `multi_thread` runtime
     /// The below example spawns 100 tasks:
     /// ```
     /// #[tokio::main(flavor = "multi_thread", worker_threads = 2)]
@@ -1117,6 +1117,24 @@ pub struct RuntimeMetrics {
     /// ##### Definition
     /// This metric is derived from [`tokio::runtime::RuntimeMetrics::blocking_queue_depth`].
     pub blocking_queue_depth: usize,
+
+    /// The current number of alive tasks in the runtime.
+    ///
+    /// ##### Definition
+    /// This metric is derived from [`tokio::runtime::RuntimeMetrics::num_alive_tasks`].
+    pub live_tasks_count: usize,
+
+    /// The number of additional threads spawned by the runtime.
+    ///
+    /// ##### Definition
+    /// This metric is derived from [`tokio::runtime::RuntimeMetrics::num_blocking_threads`].
+    pub blocking_threads_count: usize,
+
+    /// The number of idle threads, which have spawned by the runtime for `spawn_blocking` calls.
+    ///
+    /// ##### Definition
+    /// This metric is derived from [`tokio::runtime::RuntimeMetrics::num_idle_blocking_threads`].
+    pub idle_blocking_threads_count: usize,
 
     /// Total amount of time elapsed since observing runtime metrics.
     pub elapsed: Duration,
@@ -1441,6 +1459,15 @@ impl Worker {
 
         // Blocking queue depth is an absolute value too
         metrics.blocking_queue_depth = rt.blocking_queue_depth();
+
+        #[allow(deprecated)]
+        {
+            // use the deprecated active_tasks_count here to support slightly older versions of Tokio,
+            // it's the same.
+            metrics.live_tasks_count = rt.active_tasks_count();
+        }
+        metrics.blocking_threads_count = rt.num_blocking_threads();
+        metrics.idle_blocking_threads_count = rt.num_idle_blocking_threads();
     }
 }
 
