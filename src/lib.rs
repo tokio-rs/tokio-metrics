@@ -102,7 +102,54 @@ async fn do_work() {
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
 }
-```"##
+```
+
+### Monitoring and publishing runtime metrics (unstable)
+
+If the `metrics-rs-integration` feature is additionally enabled, this crate allows
+publishing runtime metrics externally via [metrics-rs](metrics) exporters.
+
+For example, you can use [metrics_exporter_prometheus] to make metrics visible
+to Prometheus. You can see the [metrics_exporter_prometheus] and [metrics-rs](metrics)
+docs for guidance on configuring exporters.
+
+The published metrics are the same as the fields of [RuntimeMetrics], but with
+a "tokio_" prefix added, for example `tokio_workers_count`.
+
+[metrics_exporter_prometheus]: https://docs.rs/metrics_exporter_prometheus
+[RuntimeMetrics]: crate::RuntimeMetrics
+
+This example exports Prometheus metrics by listening on a local Unix socket
+called `prometheus.sock`, which you can access for debugging by
+`curl --unix-socket prometheus.sock localhost`.
+
+```
+use std::time::Duration;
+
+#[tokio::main]
+async fn main() {
+    metrics_exporter_prometheus::PrometheusBuilder::new()
+        .with_http_uds_listener("prometheus.sock")
+        .install()
+        .unwrap();
+    tokio::task::spawn(
+        tokio_metrics::RuntimeMetricsReporterBuilder::default()
+            // the default metric sampling interval is 30 seconds, which is
+            // too long for quick tests, so have it be 1 second.
+            .with_interval(std::time::Duration::from_secs(1))
+            .describe_and_run(),
+    );
+    // Run some code
+    tokio::task::spawn(async move {
+        for _ in 0..1000 {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+}
+```
+"##
 )]
 
 macro_rules! cfg_rt {
@@ -122,8 +169,8 @@ cfg_rt! {
         RuntimeMetrics,
         RuntimeMonitor,
     };
-    #[cfg(feature = "metrics-integration")]
-    pub use runtime::metrics_integration::{RuntimeMetricsReporterBuilder, RuntimeMetricsReporter};
+    #[cfg(feature = "metrics-rs-integration")]
+    pub use runtime::metrics_rs_integration::{RuntimeMetricsReporterBuilder, RuntimeMetricsReporter};
 }
 
 mod task;

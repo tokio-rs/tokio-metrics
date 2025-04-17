@@ -9,7 +9,7 @@ macro_rules! cfg_rt {
 }
 
 cfg_rt! {
-    #[cfg(feature = "metrics-integration")]
+    #[cfg(feature = "metrics-rs-integration")]
     #[test]
     fn main() {
         use metrics_util::debugging::DebugValue;
