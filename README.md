@@ -5,7 +5,7 @@ runtime and per-task metrics.
 
 ```toml
 [dependencies]
-tokio-metrics = { version = "0.4.0", default-features = false }
+tokio-metrics = "0.4.0"
 ```
 
 ## Getting Started With Task Metrics
