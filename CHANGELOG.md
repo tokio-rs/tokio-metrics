@@ -1,3 +1,14 @@
+# 0.4.1 (April 20th, 2025)
+
+### Added
+ - rt: add support for `blocking_queue_depth`, `live_task_count`, `blocking_threads_count`,
+   `idle_blocking_threads_count` ([#49], [#74])
+ - rt: add integration with metrics.rs ([#68])
+
+[#49]: https://github.com/tokio-rs/tokio-metrics/pull/49
+[#68]: https://github.com/tokio-rs/tokio-metrics/pull/68
+[#74]: https://github.com/tokio-rs/tokio-metrics/pull/74
+
 # 0.4.0 (November 26th, 2024)
 
 The core Tokio crate has renamed some of the metrics and this breaking release
