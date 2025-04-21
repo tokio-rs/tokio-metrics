@@ -153,6 +153,8 @@ More information about where cargo looks for configuration files can be found
 Missing this configuration file during compilation will cause tokio-metrics to not work, and alternating
 between building with and without this configuration file included will cause full rebuilds of your project.
 
+### Collecting Runtime Metrics directly
+
 The `rt` feature of `tokio-metrics` is on by default; simply check that you do
 not set `default-features = false` when declaring it as a dependency; e.g.:
 ```toml
@@ -180,6 +182,50 @@ tokio::spawn(do_work());
 tokio::spawn(do_work());
 tokio::spawn(do_work());
 ```
+
+### Collecting Runtime Metrics via metrics.rs
+
+If you also enable the `metrics-rs-integration` feature, you can use [metrics.rs] exporters to export metrics outside of your process. `metrics.rs` supports a variety of exporters, including [Prometheus].
+
+The exported metrics by default will be exported with their name, preceded by `tokio_`. For example, `tokio_workers_count` for the [`workers_count`] metric. This can be customized by using the `with_metrics_tranformer` function.
+
+If you want to use [Prometheus], you could have this `Cargo.toml`:
+
+```toml
+[dependencies]
+tokio-metrics = { version = "0.4.1", features = ["metrics-rs-integration"] }
+metrics = "0.24"
+# You don't actually need to use the Prometheus exporter with uds-listener enabled,
+# it's just here as an example.
+metrics-exporter-prometheus = { version = "0.16", features = ["uds-listener"] }
+```
+
+Then, you can launch a metrics exporter:
+```rust
+// This makes metrics visible via a local Unix socket with name prometheus.sock
+// You probably want to do it differently.
+//
+// If you use this exporter, you can access the metrics for debugging
+// by running `curl --unix-socket prometheus.sock localhost`.
+metrics_exporter_prometheus::PrometheusBuilder::new()
+    .with_http_uds_listener("prometheus.sock")
+    .install()
+    .unwrap();
+
+// This line launches the reporter that monitors the Tokio runtime and exports the metrics.
+tokio::task::spawn(
+    tokio_metrics::RuntimeMetricsReporterBuilder::default().describe_and_run(),
+);
+
+// run some tasks
+tokio::spawn(do_work());
+tokio::spawn(do_work());
+tokio::spawn(do_work());
+```
+
+Of course, it will work with any other [metrics.rs] exporter.
+
+[metrics.rs]: https://docs.rs/metrics
 
 ### Runtime Metrics
 #### Base Metrics
