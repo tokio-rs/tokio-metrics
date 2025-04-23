@@ -169,9 +169,14 @@ cfg_rt! {
         RuntimeMetrics,
         RuntimeMonitor,
     };
-    #[cfg(feature = "metrics-rs-integration")]
-    pub use runtime::metrics_rs_integration::{RuntimeMetricsReporterBuilder, RuntimeMetricsReporter};
 }
+
+#[cfg(all(tokio_unstable, feature = "rt", feature = "metrics-rs-integration"))]
+#[cfg_attr(
+    docsrs,
+    doc(cfg(all(tokio_unstable, feature = "rt", feature = "metrics-rs-integration")))
+)]
+pub use runtime::metrics_rs_integration::{RuntimeMetricsReporter, RuntimeMetricsReporterBuilder};
 
 mod task;
 pub use task::{Instrumented, TaskMetrics, TaskMonitor};
