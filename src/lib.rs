@@ -110,7 +110,7 @@ If the `metrics-rs-integration` feature is additionally enabled, this crate allo
 publishing runtime metrics externally via [metrics-rs](metrics) exporters.
 
 For example, you can use [metrics_exporter_prometheus] to make metrics visible
-to Prometheus. You can see the [metrics_exporter_prometheus] and [metrics-rs](metrics)
+to [Prometheus]. You can see the [metrics_exporter_prometheus] and [metrics-rs](metrics)
 docs for guidance on configuring exporters.
 
 The published metrics are the same as the fields of [RuntimeMetrics], but with
@@ -118,8 +118,9 @@ a "tokio_" prefix added, for example `tokio_workers_count`.
 
 [metrics_exporter_prometheus]: https://docs.rs/metrics_exporter_prometheus
 [RuntimeMetrics]: crate::RuntimeMetrics
+[Prometheus]: https://prometheus.io
 
-This example exports Prometheus metrics by listening on a local Unix socket
+This example exports [Prometheus] metrics by listening on a local Unix socket
 called `prometheus.sock`, which you can access for debugging by
 `curl --unix-socket prometheus.sock localhost`.
 

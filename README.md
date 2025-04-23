@@ -187,9 +187,12 @@ tokio::spawn(do_work());
 
 If you also enable the `metrics-rs-integration` feature, you can use [metrics.rs] exporters to export metrics outside of your process. `metrics.rs` supports a variety of exporters, including [Prometheus].
 
-The exported metrics by default will be exported with their name, preceded by `tokio_`. For example, `tokio_workers_count` for the [`workers_count`] metric. This can be customized by using the `with_metrics_tranformer` function.
+The exported metrics by default will be exported with their name, preceded by `tokio_`. For example, `tokio_workers_count` for the [`workers_count`] metric. This can be customized by using the [`with_metrics_tranformer`] function.
 
 If you want to use [Prometheus], you could have this `Cargo.toml`:
+
+[Prometheus]: https://prometheus.io
+[`with_metrics_tranformer`]: https://docs.rs/tokio-metrics/0.4.*/tokio_metrics/struct.RuntimeMetricsReporterBuilder.html#method.with_metrics_transformer
 
 ```toml
 [dependencies]
