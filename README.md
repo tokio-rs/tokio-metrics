@@ -1,5 +1,19 @@
 # Tokio Metrics
 
+[![Crates.io][crates-badge]][crates-url]
+[![MIT licensed][mit-badge]][mit-url]
+[![Build Status][actions-badge]][actions-url]
+[![Discord chat][discord-badge]][discord-url]
+
+[crates-badge]: https://img.shields.io/crates/v/tokio-metrics.svg
+[crates-url]: https://crates.io/crates/tokio-metrics
+[mit-badge]: https://img.shields.io/badge/license-MIT-blue.svg
+[mit-url]: https://github.com/tokio-rs/tokio-metrics/blob/master/LICENSE
+[actions-badge]: https://github.com/tokio-rs/tokio-metrics/workflows/CI/badge.svg
+[actions-url]: https://github.com/tokio-rs/tokio-metrics/actions?query=workflow%3ACI+branch%3Amain
+[discord-badge]: https://img.shields.io/discord/500028886025895936.svg?logo=discord&style=flat-square
+[discord-url]: https://discord.gg/tokio
+
 Provides utilities for collecting metrics from a Tokio application, including
 runtime and per-task metrics.
 
