@@ -112,3 +112,24 @@ jobs:
       env:
         RUSTDOCFLAGS: --cfg tokio_unstable
         RUSTFLAGS: --cfg tokio_unstable -Dwarnings
+
+  semver:
+    name: semver
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check `tokio-metrics` semver with only default features
+        uses: obi1kenobi/cargo-semver-checks-action@v2
+        with:
+          rust-toolchain: ${{ env.rust_stable }}
+          package: tokio-metrics
+          feature-group: default-features
+      - name: Check `tokio-metrics` semver with all features & tokio_unstable RUSTFLAG
+        uses: obi1kenobi/cargo-semver-checks-action@v2
+        with:
+          rust-toolchain: ${{ env.rust_stable }}
+          package: tokio-metrics
+          feature-group: all-features
+        env:
+          RUSTFLAGS: --cfg tokio_unstable -Dwarnings
