@@ -1,3 +1,12 @@
+# 0.4.2 (April 30th, 2025)
+
+### Fixed
+ - docs: specify metrics-rs-integration feature dependency for relevant APIs ([#78])
+ - docs: fix links ([#79])
+
+[#78]: https://github.com/tokio-rs/tokio-metrics/pull/78
+[#79]: https://github.com/tokio-rs/tokio-metrics/pull/79
+
 # 0.4.1 (April 20th, 2025)
 
 ### Added
