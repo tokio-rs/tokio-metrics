@@ -195,6 +195,7 @@ pub struct RuntimeMetrics {
     ///     println!("mean task poll duration is {:?}", interval.mean_poll_duration);
     /// }
     /// ```
+    #[cfg(tokio_unstable)]
     pub mean_poll_duration: Duration,
 
     /// The average duration of a single invocation of poll on a task on the
@@ -216,6 +217,7 @@ pub struct RuntimeMetrics {
     ///     println!("min mean task poll duration is {:?}", interval.mean_poll_duration_worker_min);
     /// }
     /// ```
+    #[cfg(tokio_unstable)]
     pub mean_poll_duration_worker_min: Duration,
 
     /// The average duration of a single invocation of poll on a task on the
@@ -237,6 +239,7 @@ pub struct RuntimeMetrics {
     ///     println!("max mean task poll duration is {:?}", interval.mean_poll_duration_worker_max);
     /// }
     /// ```
+    #[cfg(tokio_unstable)]
     pub mean_poll_duration_worker_max: Duration,
 
     /// A histogram of task polls since the previous probe grouped by poll
@@ -271,6 +274,7 @@ pub struct RuntimeMetrics {
     ///     println!("poll count histogram {:?}", interval.poll_time_histogram);
     /// });
     /// ```
+    #[cfg(tokio_unstable)]
     pub poll_time_histogram: Vec<u64>,
 
     /// The number of times worker threads unparked but performed no work before parking again.
@@ -323,6 +327,7 @@ pub struct RuntimeMetrics {
     ///     assert!(next_interval().total_noop_count > 0);
     /// }
     /// ```
+    #[cfg(tokio_unstable)]
     pub total_noop_count: u64,
 
     /// The maximum number of times any worker thread unparked but performed no work before parking
@@ -335,6 +340,7 @@ pub struct RuntimeMetrics {
     /// ##### See also
     /// - [`RuntimeMetrics::total_noop_count`]
     /// - [`RuntimeMetrics::min_noop_count`]
+    #[cfg(tokio_unstable)]
     pub max_noop_count: u64,
 
     /// The minimum number of times any worker thread unparked but performed no work before parking
@@ -347,6 +353,7 @@ pub struct RuntimeMetrics {
     /// ##### See also
     /// - [`RuntimeMetrics::total_noop_count`]
     /// - [`RuntimeMetrics::max_noop_count`]
+    #[cfg(tokio_unstable)]
     pub min_noop_count: u64,
 
     /// The number of tasks worker threads stole from another worker thread.
@@ -411,6 +418,7 @@ pub struct RuntimeMetrics {
     ///     let _ = tokio::time::sleep(std::time::Duration::ZERO).await;
     /// }
     /// ```
+    #[cfg(tokio_unstable)]
     pub total_steal_count: u64,
 
     /// The maximum number of tasks any worker thread stole from another worker thread.
@@ -422,6 +430,7 @@ pub struct RuntimeMetrics {
     /// ##### See also
     /// - [`RuntimeMetrics::total_steal_count`]
     /// - [`RuntimeMetrics::min_steal_count`]
+    #[cfg(tokio_unstable)]
     pub max_steal_count: u64,
 
     /// The minimum number of tasks any worker thread stole from another worker thread.
@@ -433,6 +442,7 @@ pub struct RuntimeMetrics {
     /// ##### See also
     /// - [`RuntimeMetrics::total_steal_count`]
     /// - [`RuntimeMetrics::max_steal_count`]
+    #[cfg(tokio_unstable)]
     pub min_steal_count: u64,
 
     /// The number of times worker threads stole tasks from another worker thread.
@@ -496,6 +506,7 @@ pub struct RuntimeMetrics {
     ///     let _ = tokio::time::sleep(std::time::Duration::ZERO).await;
     /// }
     /// ```
+    #[cfg(tokio_unstable)]
     pub total_steal_operations: u64,
 
     /// The maximum number of times any worker thread stole tasks from another worker thread.
@@ -507,6 +518,7 @@ pub struct RuntimeMetrics {
     /// ##### See also
     /// - [`RuntimeMetrics::total_steal_operations`]
     /// - [`RuntimeMetrics::min_steal_operations`]
+    #[cfg(tokio_unstable)]
     pub max_steal_operations: u64,
 
     /// The minimum number of times any worker thread stole tasks from another worker thread.
@@ -518,6 +530,7 @@ pub struct RuntimeMetrics {
     /// ##### See also
     /// - [`RuntimeMetrics::total_steal_operations`]
     /// - [`RuntimeMetrics::max_steal_operations`]
+    #[cfg(tokio_unstable)]
     pub min_steal_operations: u64,
 
     /// The number of tasks scheduled from **outside** of the runtime.
@@ -559,6 +572,7 @@ pub struct RuntimeMetrics {
     ///     assert_eq!(interval.num_remote_schedules, 0);
     /// }
     /// ```
+    #[cfg(tokio_unstable)]
     pub num_remote_schedules: u64,
 
     /// The number of tasks scheduled from worker threads.
@@ -652,6 +666,7 @@ pub struct RuntimeMetrics {
     ///     let _ = tokio::time::sleep(std::time::Duration::ZERO).await;
     /// }
     /// ```
+    #[cfg(tokio_unstable)]
     pub total_local_schedule_count: u64,
 
     /// The maximum number of tasks scheduled from any one worker thread.
@@ -663,6 +678,7 @@ pub struct RuntimeMetrics {
     /// ##### See also
     /// - [`RuntimeMetrics::total_local_schedule_count`]
     /// - [`RuntimeMetrics::min_local_schedule_count`]
+    #[cfg(tokio_unstable)]
     pub max_local_schedule_count: u64,
 
     /// The minimum number of tasks scheduled from any one worker thread.
@@ -674,6 +690,7 @@ pub struct RuntimeMetrics {
     /// ##### See also
     /// - [`RuntimeMetrics::total_local_schedule_count`]
     /// - [`RuntimeMetrics::max_local_schedule_count`]
+    #[cfg(tokio_unstable)]
     pub min_local_schedule_count: u64,
 
     /// The number of times worker threads saturated their local queues.
@@ -723,6 +740,7 @@ pub struct RuntimeMetrics {
     ///     let _ = tokio::time::sleep(std::time::Duration::from_millis(1)).await;
     /// }
     /// ```
+    #[cfg(tokio_unstable)]
     pub total_overflow_count: u64,
 
     /// The maximum number of times any one worker saturated its local queue.
@@ -734,6 +752,7 @@ pub struct RuntimeMetrics {
     /// ##### See also
     /// - [`RuntimeMetrics::total_overflow_count`]
     /// - [`RuntimeMetrics::min_overflow_count`]
+    #[cfg(tokio_unstable)]
     pub max_overflow_count: u64,
 
     /// The minimum number of times any one worker saturated its local queue.
@@ -745,6 +764,7 @@ pub struct RuntimeMetrics {
     /// ##### See also
     /// - [`RuntimeMetrics::total_overflow_count`]
     /// - [`RuntimeMetrics::max_overflow_count`]
+    #[cfg(tokio_unstable)]
     pub min_overflow_count: u64,
 
     /// The number of tasks that have been polled across all worker threads.
@@ -790,6 +810,7 @@ pub struct RuntimeMetrics {
     ///     let _ = tokio::task::yield_now().await;
     /// }
     /// ```
+    #[cfg(tokio_unstable)]
     pub total_polls_count: u64,
 
     /// The maximum number of tasks that have been polled in any worker thread.
@@ -801,6 +822,7 @@ pub struct RuntimeMetrics {
     /// ##### See also
     /// - [`RuntimeMetrics::total_polls_count`]
     /// - [`RuntimeMetrics::min_polls_count`]
+    #[cfg(tokio_unstable)]
     pub max_polls_count: u64,
 
     /// The minimum number of tasks that have been polled in any worker thread.
@@ -812,6 +834,7 @@ pub struct RuntimeMetrics {
     /// ##### See also
     /// - [`RuntimeMetrics::total_polls_count`]
     /// - [`RuntimeMetrics::max_polls_count`]
+    #[cfg(tokio_unstable)]
     pub min_polls_count: u64,
 
     /// The amount of time worker threads were busy.
@@ -1084,6 +1107,7 @@ pub struct RuntimeMetrics {
     ///     SPINLOCK_B.store(false, Ordering::SeqCst);
     /// }
     /// ```
+    #[cfg(tokio_unstable)]
     pub total_local_queue_depth: usize,
 
     /// The maximum number of tasks currently scheduled any worker's local queue.
@@ -1095,6 +1119,7 @@ pub struct RuntimeMetrics {
     /// ##### See also
     /// - [`RuntimeMetrics::total_local_queue_depth`]
     /// - [`RuntimeMetrics::min_local_queue_depth`]
+    #[cfg(tokio_unstable)]
     pub max_local_queue_depth: usize,
 
     /// The minimum number of tasks currently scheduled any worker's local queue.
@@ -1106,30 +1131,35 @@ pub struct RuntimeMetrics {
     /// ##### See also
     /// - [`RuntimeMetrics::total_local_queue_depth`]
     /// - [`RuntimeMetrics::max_local_queue_depth`]
+    #[cfg(tokio_unstable)]
     pub min_local_queue_depth: usize,
 
     /// The number of tasks currently waiting to be executed in the runtime's blocking threadpool.
     ///
     /// ##### Definition
     /// This metric is derived from [`tokio::runtime::RuntimeMetrics::blocking_queue_depth`].
+    #[cfg(tokio_unstable)]
     pub blocking_queue_depth: usize,
 
     /// The current number of alive tasks in the runtime.
     ///
     /// ##### Definition
     /// This metric is derived from [`tokio::runtime::RuntimeMetrics::num_alive_tasks`].
+    #[cfg(tokio_unstable)]
     pub live_tasks_count: usize,
 
     /// The number of additional threads spawned by the runtime.
     ///
     /// ##### Definition
     /// This metric is derived from [`tokio::runtime::RuntimeMetrics::num_blocking_threads`].
+    #[cfg(tokio_unstable)]
     pub blocking_threads_count: usize,
 
     /// The number of idle threads, which have spawned by the runtime for `spawn_blocking` calls.
     ///
     /// ##### Definition
     /// This metric is derived from [`tokio::runtime::RuntimeMetrics::num_idle_blocking_threads`].
+    #[cfg(tokio_unstable)]
     pub idle_blocking_threads_count: usize,
 
     /// Total amount of time elapsed since observing runtime metrics.
@@ -1143,12 +1173,14 @@ pub struct RuntimeMetrics {
     ///
     /// ##### Definition
     /// This metric is derived from [`tokio::runtime::RuntimeMetrics::budget_forced_yield_count`].
+    #[cfg(tokio_unstable)]
     pub budget_forced_yield_count: u64,
 
     /// Returns the number of ready events processed by the runtime’s I/O driver.
     ///
     /// ##### Definition
     /// This metric is derived from [`tokio::runtime::RuntimeMetrics::io_driver_ready_count`].
+    #[cfg(tokio_unstable)]
     pub io_driver_ready_count: u64,
 }
 
@@ -1157,13 +1189,20 @@ pub struct RuntimeMetrics {
 struct Worker {
     worker: usize,
     total_park_count: u64,
+    #[cfg(tokio_unstable)]
     total_noop_count: u64,
+    #[cfg(tokio_unstable)]
     total_steal_count: u64,
+    #[cfg(tokio_unstable)]
     total_steal_operations: u64,
+    #[cfg(tokio_unstable)]
     total_local_schedule_count: u64,
+    #[cfg(tokio_unstable)]
     total_overflow_count: u64,
+    #[cfg(tokio_unstable)]
     total_polls_count: u64,
     total_busy_duration: Duration,
+    #[cfg(tokio_unstable)]
     poll_time_histogram: Vec<u64>,
 }
 
@@ -1177,8 +1216,11 @@ pub struct RuntimeIntervals {
     workers: Vec<Worker>,
 
     // Number of tasks scheduled from *outside* of the runtime
+    #[cfg(tokio_unstable)]
     num_remote_schedules: u64,
+    #[cfg(tokio_unstable)]
     budget_forced_yield_count: u64,
+    #[cfg(tokio_unstable)]
     io_driver_ready_count: u64,
 }
 
@@ -1186,44 +1228,64 @@ impl RuntimeIntervals {
     fn probe(&mut self) -> RuntimeMetrics {
         let now = Instant::now();
 
+        #[cfg(tokio_unstable)]
         let num_remote_schedules = self.runtime.remote_schedule_count();
+        #[cfg(tokio_unstable)]
         let budget_forced_yields = self.runtime.budget_forced_yield_count();
+        #[cfg(tokio_unstable)]
         let io_driver_ready_events = self.runtime.io_driver_ready_count();
 
         let mut metrics = RuntimeMetrics {
             workers_count: self.runtime.num_workers(),
             elapsed: now - self.started_at,
             global_queue_depth: self.runtime.global_queue_depth(),
+            #[cfg(tokio_unstable)]
             num_remote_schedules: num_remote_schedules - self.num_remote_schedules,
             min_park_count: u64::MAX,
+            #[cfg(tokio_unstable)]
             min_noop_count: u64::MAX,
+            #[cfg(tokio_unstable)]
             min_steal_count: u64::MAX,
+            #[cfg(tokio_unstable)]
             min_local_schedule_count: u64::MAX,
+            #[cfg(tokio_unstable)]
             min_overflow_count: u64::MAX,
+            #[cfg(tokio_unstable)]
             min_polls_count: u64::MAX,
             min_busy_duration: Duration::from_secs(1000000000),
+            #[cfg(tokio_unstable)]
             min_local_queue_depth: usize::MAX,
+            #[cfg(tokio_unstable)]
             mean_poll_duration_worker_min: Duration::MAX,
+            #[cfg(tokio_unstable)]
             poll_time_histogram: vec![0; self.runtime.poll_time_histogram_num_buckets()],
+            #[cfg(tokio_unstable)]
             budget_forced_yield_count: budget_forced_yields - self.budget_forced_yield_count,
+            #[cfg(tokio_unstable)]
             io_driver_ready_count: io_driver_ready_events - self.io_driver_ready_count,
             ..Default::default()
         };
 
-        self.num_remote_schedules = num_remote_schedules;
+        #[cfg(tokio_unstable)]
+        {
+            self.num_remote_schedules = num_remote_schedules;
+            self.budget_forced_yield_count = budget_forced_yields;
+            self.io_driver_ready_count = io_driver_ready_events;
+        }
         self.started_at = now;
-        self.budget_forced_yield_count = budget_forced_yields;
-        self.io_driver_ready_count = io_driver_ready_events;
 
         for worker in &mut self.workers {
             worker.probe(&self.runtime, &mut metrics);
         }
 
-        if metrics.total_polls_count == 0 {
-            debug_assert_eq!(metrics.mean_poll_duration, Duration::default());
+        #[cfg(tokio_unstable)]
+        {
+            if metrics.total_polls_count == 0 {
+                debug_assert_eq!(metrics.mean_poll_duration, Duration::default());
 
-            metrics.mean_poll_duration_worker_max = Duration::default();
-            metrics.mean_poll_duration_worker_min = Duration::default();
+                metrics.mean_poll_duration_worker_max = Duration::default();
+                metrics.mean_poll_duration_worker_min = Duration::default();
+            }
         }
 
         metrics
@@ -1304,8 +1366,12 @@ impl RuntimeMonitor {
             runtime: self.runtime.clone(),
             started_at,
             workers,
+
+            #[cfg(tokio_unstable)]
             num_remote_schedules: self.runtime.remote_schedule_count(),
+            #[cfg(tokio_unstable)]
             budget_forced_yield_count: self.runtime.budget_forced_yield_count(),
+            #[cfg(tokio_unstable)]
             io_driver_ready_count: self.runtime.io_driver_ready_count(),
         }
     }
@@ -1313,6 +1379,7 @@ impl RuntimeMonitor {
 
 impl Worker {
     fn new(worker: usize, rt: &runtime::RuntimeMetrics) -> Worker {
+        #[cfg(tokio_unstable)]
         let poll_time_histogram = if rt.poll_time_histogram_enabled() {
             vec![0; rt.poll_time_histogram_num_buckets()]
         } else {
@@ -1322,13 +1389,20 @@ impl Worker {
         Worker {
             worker,
             total_park_count: rt.worker_park_count(worker),
+            #[cfg(tokio_unstable)]
             total_noop_count: rt.worker_noop_count(worker),
+            #[cfg(tokio_unstable)]
             total_steal_count: rt.worker_steal_count(worker),
+            #[cfg(tokio_unstable)]
             total_steal_operations: rt.worker_steal_operations(worker),
+            #[cfg(tokio_unstable)]
             total_local_schedule_count: rt.worker_local_schedule_count(worker),
+            #[cfg(tokio_unstable)]
             total_overflow_count: rt.worker_overflow_count(worker),
+            #[cfg(tokio_unstable)]
             total_polls_count: rt.worker_poll_count(worker),
             total_busy_duration: rt.worker_total_busy_duration(worker),
+            #[cfg(tokio_unstable)]
             poll_time_histogram,
         }
     }
@@ -1352,7 +1426,9 @@ impl Worker {
             }};
         }
 
+        #[cfg(tokio_unstable)]
         let mut worker_polls_count = self.total_polls_count;
+        #[cfg(tokio_unstable)]
         let total_polls_count = metrics.total_polls_count;
 
         metric!(
@@ -1361,42 +1437,45 @@ impl Worker {
             min_park_count,
             worker_park_count
         );
-        metric!(
-            total_noop_count,
-            max_noop_count,
-            min_noop_count,
-            worker_noop_count
-        );
-        metric!(
-            total_steal_count,
-            max_steal_count,
-            min_steal_count,
-            worker_steal_count
-        );
-        metric!(
-            total_steal_operations,
-            max_steal_operations,
-            min_steal_operations,
-            worker_steal_operations
-        );
-        metric!(
-            total_local_schedule_count,
-            max_local_schedule_count,
-            min_local_schedule_count,
-            worker_local_schedule_count
-        );
-        metric!(
-            total_overflow_count,
-            max_overflow_count,
-            min_overflow_count,
-            worker_overflow_count
-        );
-        metric!(
-            total_polls_count,
-            max_polls_count,
-            min_polls_count,
-            worker_poll_count
-        );
+        #[cfg(tokio_unstable)]
+        {
+            metric!(
+                total_noop_count,
+                max_noop_count,
+                min_noop_count,
+                worker_noop_count
+            );
+            metric!(
+                total_steal_count,
+                max_steal_count,
+                min_steal_count,
+                worker_steal_count
+            );
+            metric!(
+                total_steal_operations,
+                max_steal_operations,
+                min_steal_operations,
+                worker_steal_operations
+            );
+            metric!(
+                total_local_schedule_count,
+                max_local_schedule_count,
+                min_local_schedule_count,
+                worker_local_schedule_count
+            );
+            metric!(
+                total_overflow_count,
+                max_overflow_count,
+                min_overflow_count,
+                worker_overflow_count
+            );
+            metric!(
+                total_polls_count,
+                max_polls_count,
+                min_polls_count,
+                worker_poll_count
+            );
+        }
         metric!(
             total_busy_duration,
             max_busy_duration,
@@ -1404,71 +1483,78 @@ impl Worker {
             worker_total_busy_duration
         );
 
-        // Get the number of polls since last probe
-        worker_polls_count = self.total_polls_count - worker_polls_count;
-
-        // Update the mean task poll duration if there were polls
-        if worker_polls_count > 0 {
-            let val = rt.worker_mean_poll_time(self.worker);
-
-            if val > metrics.mean_poll_duration_worker_max {
-                metrics.mean_poll_duration_worker_max = val;
-            }
-
-            if val < metrics.mean_poll_duration_worker_min {
-                metrics.mean_poll_duration_worker_min = val;
-            }
-
-            // First, scale the current value down
-            let ratio = total_polls_count as f64 / metrics.total_polls_count as f64;
-            let mut mean = metrics.mean_poll_duration.as_nanos() as f64 * ratio;
-
-            // Add the scaled current worker's mean poll duration
-            let ratio = worker_polls_count as f64 / metrics.total_polls_count as f64;
-            mean += val.as_nanos() as f64 * ratio;
-
-            metrics.mean_poll_duration = Duration::from_nanos(mean as u64);
-        }
-        
-        // Update the histogram counts if there were polls since last count
-        if worker_polls_count > 0 {
-            for (bucket, cell) in metrics.poll_time_histogram.iter_mut().enumerate() {
-                let new = rt.poll_time_histogram_bucket_count(self.worker, bucket);
-                let delta = new - self.poll_time_histogram[bucket];
-                self.poll_time_histogram[bucket] = new;
-
-                *cell += delta;
-            }
-        }
-
-        // Local scheduled tasks is an absolute value
-        let local_scheduled_tasks = rt.worker_local_queue_depth(self.worker);
-        metrics.total_local_queue_depth += local_scheduled_tasks;
-
-        if local_scheduled_tasks > metrics.max_local_queue_depth {
-            metrics.max_local_queue_depth = local_scheduled_tasks;
-        }
-
-        if local_scheduled_tasks < metrics.min_local_queue_depth {
-            metrics.min_local_queue_depth = local_scheduled_tasks;
-        }
-
-        // Blocking queue depth is an absolute value too
-        metrics.blocking_queue_depth = rt.blocking_queue_depth();
-
-        #[allow(deprecated)]
+        #[cfg(tokio_unstable)]
         {
-            // use the deprecated active_tasks_count here to support slightly older versions of Tokio,
-            // it's the same.
-            metrics.live_tasks_count = rt.active_tasks_count();
+            // Get the number of polls since last probe
+            worker_polls_count = self.total_polls_count - worker_polls_count;
+
+            // Update the mean task poll duration if there were polls
+            if worker_polls_count > 0 {
+                let val = rt.worker_mean_poll_time(self.worker);
+
+                if val > metrics.mean_poll_duration_worker_max {
+                    metrics.mean_poll_duration_worker_max = val;
+                }
+
+                if val < metrics.mean_poll_duration_worker_min {
+                    metrics.mean_poll_duration_worker_min = val;
+                }
+
+                // First, scale the current value down
+                let ratio = total_polls_count as f64 / metrics.total_polls_count as f64;
+                let mut mean = metrics.mean_poll_duration.as_nanos() as f64 * ratio;
+
+                // Add the scaled current worker's mean poll duration
+                let ratio = worker_polls_count as f64 / metrics.total_polls_count as f64;
+                mean += val.as_nanos() as f64 * ratio;
+
+                metrics.mean_poll_duration = Duration::from_nanos(mean as u64);
+            }
+
+            // Update the histogram counts if there were polls since last count
+            if worker_polls_count > 0 {
+                for (bucket, cell) in metrics.poll_time_histogram.iter_mut().enumerate() {
+                    let new = rt.poll_time_histogram_bucket_count(self.worker, bucket);
+                    let delta = new - self.poll_time_histogram[bucket];
+                    self.poll_time_histogram[bucket] = new;
+
+                    *cell += delta;
+                }
+            }
         }
-        metrics.blocking_threads_count = rt.num_blocking_threads();
-        metrics.idle_blocking_threads_count = rt.num_idle_blocking_threads();
+
+        #[cfg(tokio_unstable)]
+        {
+            // Local scheduled tasks is an absolute value
+            let local_scheduled_tasks = rt.worker_local_queue_depth(self.worker);
+            metrics.total_local_queue_depth += local_scheduled_tasks;
+
+            if local_scheduled_tasks > metrics.max_local_queue_depth {
+                metrics.max_local_queue_depth = local_scheduled_tasks;
+            }
+
+            if local_scheduled_tasks < metrics.min_local_queue_depth {
+                metrics.min_local_queue_depth = local_scheduled_tasks;
+            }
+
+            // Blocking queue depth is an absolute value too
+            metrics.blocking_queue_depth = rt.blocking_queue_depth();
+
+            #[allow(deprecated)]
+            {
+                // use the deprecated active_tasks_count here to support slightly older versions of Tokio,
+                // it's the same.
+                metrics.live_tasks_count = rt.active_tasks_count();
+            }
+            metrics.blocking_threads_count = rt.num_blocking_threads();
+            metrics.idle_blocking_threads_count = rt.num_idle_blocking_threads();
+        }
     }
 }
 
 impl RuntimeMetrics {
     /// Returns the ratio of the [`RuntimeMetrics::total_polls_count`] to the [`RuntimeMetrics::total_noop_count`].
+    #[cfg(tokio_unstable)]
     pub fn mean_polls_per_park(&self) -> f64 {
         let total_park_count = self.total_park_count - self.total_noop_count;
         if total_park_count == 0 {
