@@ -1007,6 +1007,7 @@ pub struct RuntimeMetrics {
     /// let mut next_interval = || intervals.next().unwrap();
     ///
     /// let interval = next_interval(); // end of interval 1
+    /// # #[cfg(tokio_unstable)]
     /// assert_eq!(interval.num_remote_schedules, 0);
     ///
     /// // spawn a system thread outside of the runtime
@@ -1020,6 +1021,7 @@ pub struct RuntimeMetrics {
     /// drop(runtime);
     ///
     /// let interval = next_interval(); // end of interval 2
+    /// # #[cfg(tokio_unstable)]
     /// assert_eq!(interval.num_remote_schedules, 2);
     /// # }
     /// ```
