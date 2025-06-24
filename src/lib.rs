@@ -172,10 +172,10 @@ cfg_rt! {
     };
 }
 
-#[cfg(all(tokio_unstable, feature = "rt", feature = "metrics-rs-integration"))]
+#[cfg(all(feature = "rt", feature = "metrics-rs-integration"))]
 #[cfg_attr(
     docsrs,
-    doc(cfg(all(tokio_unstable, feature = "rt", feature = "metrics-rs-integration")))
+    doc(cfg(all(feature = "rt", feature = "metrics-rs-integration")))
 )]
 pub use runtime::metrics_rs_integration::{RuntimeMetricsReporter, RuntimeMetricsReporterBuilder};
 
