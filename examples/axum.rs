@@ -40,9 +40,9 @@ async fn main() {
 
         let intervals = root_intervals.zip(create_user_intervals);
         for (root_route, (create_user_route, create_user_insert)) in intervals {
-            println!("root_route = {:#?}", root_route);
-            println!("create_user_route = {:#?}", create_user_route);
-            println!("create_user_insert = {:#?}", create_user_insert);
+            println!("root_route = {root_route:#?}");
+            println!("create_user_route = {create_user_route:#?}");
+            println!("create_user_insert = {create_user_insert:#?}");
             tokio::time::sleep(metrics_frequency).await;
         }
     });
