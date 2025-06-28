@@ -1463,6 +1463,13 @@ impl Worker {
             min_park_count,
             worker_park_count
         );
+        metric!(
+            total_busy_duration,
+            max_busy_duration,
+            min_busy_duration,
+            worker_total_busy_duration
+        );
+
         #[cfg(tokio_unstable)]
         {
             metric!(
@@ -1501,16 +1508,7 @@ impl Worker {
                 min_polls_count,
                 worker_poll_count
             );
-        }
-        metric!(
-            total_busy_duration,
-            max_busy_duration,
-            min_busy_duration,
-            worker_total_busy_duration
-        );
 
-        #[cfg(tokio_unstable)]
-        {
             // Get the number of polls since last probe
             worker_polls_count = self.total_polls_count - worker_polls_count;
 
@@ -1547,10 +1545,7 @@ impl Worker {
                     *cell += delta;
                 }
             }
-        }
 
-        #[cfg(tokio_unstable)]
-        {
             // Local scheduled tasks is an absolute value
             let local_scheduled_tasks = rt.worker_local_queue_depth(self.worker);
             metrics.total_local_queue_depth += local_scheduled_tasks;
