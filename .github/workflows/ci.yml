@@ -75,10 +75,18 @@ jobs:
       run: cargo hack check --each-feature --no-dev-deps --all
 
   test-versions:
+    name: test-version (${{ matrix.name }})
     needs: check
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - rustflags: "--cfg tokio_unstable -Dwarnings"
+            name: "tokio-unstable"
+          - rustflags: "-Dwarnings"
+            name: "stable"
     env:
-      RUSTFLAGS: --cfg tokio_unstable -Dwarnings
+      RUSTFLAGS: ${{ matrix.rustflags }}
     steps:
     - uses: actions/checkout@master
     - uses: actions-rs/toolchain@v1

@@ -56,11 +56,11 @@
 //! ```
 
 #![cfg_attr(
-    all(tokio_unstable, feature = "rt"),
+    feature = "rt",
     doc = r##"
-### Monitoring runtime metrics (unstable)
+### Monitoring runtime metrics
 [Monitor][RuntimeMonitor] key [metrics][RuntimeMetrics] of a tokio runtime.
-**This functionality requires `tokio_unstable` and the crate feature `rt`.**
+**This functionality requires crate feature `rt` and some metrics require `tokio_unstable`.**
 
 In the below example, a [`RuntimeMonitor`] is [constructed][RuntimeMonitor::new] and
 three tasks are spawned and awaited; meanwhile, a fourth task prints [metrics][RuntimeMetrics]
@@ -104,7 +104,7 @@ async fn do_work() {
 }
 ```
 
-### Monitoring and publishing runtime metrics (unstable)
+### Monitoring and publishing runtime metrics
 
 If the `metrics-rs-integration` feature is additionally enabled, this crate allows
 publishing runtime metrics externally via [metrics-rs](metrics) exporters.
@@ -156,8 +156,8 @@ async fn main() {
 macro_rules! cfg_rt {
     ($($item:item)*) => {
         $(
-            #[cfg(all(tokio_unstable, feature = "rt"))]
-            #[cfg_attr(docsrs, doc(cfg(all(tokio_unstable, feature = "rt"))))]
+            #[cfg(feature = "rt")]
+            #[cfg_attr(docsrs, doc(cfg(feature = "rt")))]
             $item
         )*
     };
@@ -172,10 +172,10 @@ cfg_rt! {
     };
 }
 
-#[cfg(all(tokio_unstable, feature = "rt", feature = "metrics-rs-integration"))]
+#[cfg(all(feature = "rt", feature = "metrics-rs-integration"))]
 #[cfg_attr(
     docsrs,
-    doc(cfg(all(tokio_unstable, feature = "rt", feature = "metrics-rs-integration")))
+    doc(cfg(all(feature = "rt", feature = "metrics-rs-integration")))
 )]
 pub use runtime::metrics_rs_integration::{RuntimeMetricsReporter, RuntimeMetricsReporterBuilder};
 

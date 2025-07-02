@@ -146,7 +146,7 @@ loop {
 
 ## Getting Started With Runtime Metrics
 
-This unstable functionality requires `tokio_unstable`, and the  `rt` crate
+Not all runtime metrics are stable. Using unstable metrics requires `tokio_unstable`, and the  `rt` crate
 feature. To enable `tokio_unstable`, the `--cfg` `tokio_unstable` must be passed
 to `rustc` when compiling. You can do this by setting the `RUSTFLAGS`
 environment variable before compiling your application; e.g.:
@@ -169,6 +169,17 @@ More information about where cargo looks for configuration files can be found
 
 Missing this configuration file during compilation will cause tokio-metrics to not work, and alternating
 between building with and without this configuration file included will cause full rebuilds of your project.
+
+### Stable Runtime Metrics
+
+- **[`workers_count`]**
+- **[`total_park_count`]**
+- **[`max_park_count`]**
+- **[`min_park_count`]**
+- **[`total_busy_duration`]**
+- **[`max_busy_duration`]**
+- **[`min_busy_duration`]**
+- **[`global_queue_depth`]**
 
 ### Collecting Runtime Metrics directly
 
