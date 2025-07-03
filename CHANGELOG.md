@@ -1,3 +1,10 @@
+# 0.4.3 (July 3rd, 2025)
+
+### Added
+ - rt: partially stabilize `RuntimeMonitor` and related metrics ([#87])
+
+[#87]: https://github.com/tokio-rs/tokio-metrics/pull/87
+
 # 0.4.2 (April 30th, 2025)
 
 ### Fixed
