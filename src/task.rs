@@ -1798,83 +1798,11 @@ impl TaskMonitor {
     ///     tokio::task::yield_now()
     /// }
     /// ```
-    pub fn intervals(&self) -> impl Iterator<Item = TaskMetrics> {
-        let latest = self.metrics.clone();
-        let mut previous: Option<TaskMetrics> = None;
-
-        std::iter::from_fn(move || {
-            let latest: TaskMetrics = latest.metrics();
-            let next = if let Some(previous) = previous {
-                TaskMetrics {
-                    instrumented_count: latest
-                        .instrumented_count
-                        .wrapping_sub(previous.instrumented_count),
-                    dropped_count: latest.dropped_count.wrapping_sub(previous.dropped_count),
-                    total_poll_count: latest
-                        .total_poll_count
-                        .wrapping_sub(previous.total_poll_count),
-                    total_poll_duration: sub(
-                        latest.total_poll_duration,
-                        previous.total_poll_duration,
-                    ),
-                    first_poll_count: latest
-                        .first_poll_count
-                        .wrapping_sub(previous.first_poll_count),
-                    total_idled_count: latest
-                        .total_idled_count
-                        .wrapping_sub(previous.total_idled_count),
-                    total_scheduled_count: latest
-                        .total_scheduled_count
-                        .wrapping_sub(previous.total_scheduled_count),
-                    total_fast_poll_count: latest
-                        .total_fast_poll_count
-                        .wrapping_sub(previous.total_fast_poll_count),
-                    total_short_delay_count: latest
-                        .total_short_delay_count
-                        .wrapping_sub(previous.total_short_delay_count),
-                    total_slow_poll_count: latest
-                        .total_slow_poll_count
-                        .wrapping_sub(previous.total_slow_poll_count),
-                    total_long_delay_count: latest
-                        .total_long_delay_count
-                        .wrapping_sub(previous.total_long_delay_count),
-                    total_first_poll_delay: sub(
-                        latest.total_first_poll_delay,
-                        previous.total_first_poll_delay,
-                    ),
-                    total_idle_duration: sub(
-                        latest.total_idle_duration,
-                        previous.total_idle_duration,
-                    ),
-                    total_scheduled_duration: sub(
-                        latest.total_scheduled_duration,
-                        previous.total_scheduled_duration,
-                    ),
-                    total_fast_poll_duration: sub(
-                        latest.total_fast_poll_duration,
-                        previous.total_fast_poll_duration,
-                    ),
-                    total_short_delay_duration: sub(
-                        latest.total_short_delay_duration,
-                        previous.total_short_delay_duration,
-                    ),
-                    total_slow_poll_duration: sub(
-                        latest.total_slow_poll_duration,
-                        previous.total_slow_poll_duration,
-                    ),
-                    total_long_delay_duration: sub(
-                        latest.total_long_delay_duration,
-                        previous.total_long_delay_duration,
-                    ),
-                }
-            } else {
-                latest
-            };
-
-            previous = Some(latest);
-
-            Some(next)
-        })
+    pub fn intervals(&self) -> TaskIntervals {
+        TaskIntervals {
+            metrics: self.metrics.clone(),
+            previous: None,
+        }
     }
 }
 
@@ -2579,6 +2507,93 @@ impl ArcWake for State {
     fn wake(self: Arc<State>) {
         self.on_wake();
         self.waker.wake();
+    }
+}
+
+/// Iterator returned by [`TaskMonitor::intervals`].
+///
+/// See that method's documentation for more details.
+#[derive(Debug)]
+pub struct TaskIntervals {
+    metrics: Arc<RawMetrics>,
+    previous: Option<TaskMetrics>,
+}
+
+impl TaskIntervals {
+    fn probe(&mut self) -> TaskMetrics {
+        let latest = self.metrics.metrics();
+        let next = if let Some(previous) = self.previous {
+            TaskMetrics {
+                instrumented_count: latest
+                    .instrumented_count
+                    .wrapping_sub(previous.instrumented_count),
+                dropped_count: latest.dropped_count.wrapping_sub(previous.dropped_count),
+                total_poll_count: latest
+                    .total_poll_count
+                    .wrapping_sub(previous.total_poll_count),
+                total_poll_duration: sub(latest.total_poll_duration, previous.total_poll_duration),
+                first_poll_count: latest
+                    .first_poll_count
+                    .wrapping_sub(previous.first_poll_count),
+                total_idled_count: latest
+                    .total_idled_count
+                    .wrapping_sub(previous.total_idled_count),
+                total_scheduled_count: latest
+                    .total_scheduled_count
+                    .wrapping_sub(previous.total_scheduled_count),
+                total_fast_poll_count: latest
+                    .total_fast_poll_count
+                    .wrapping_sub(previous.total_fast_poll_count),
+                total_short_delay_count: latest
+                    .total_short_delay_count
+                    .wrapping_sub(previous.total_short_delay_count),
+                total_slow_poll_count: latest
+                    .total_slow_poll_count
+                    .wrapping_sub(previous.total_slow_poll_count),
+                total_long_delay_count: latest
+                    .total_long_delay_count
+                    .wrapping_sub(previous.total_long_delay_count),
+                total_first_poll_delay: sub(
+                    latest.total_first_poll_delay,
+                    previous.total_first_poll_delay,
+                ),
+                total_idle_duration: sub(latest.total_idle_duration, previous.total_idle_duration),
+                total_scheduled_duration: sub(
+                    latest.total_scheduled_duration,
+                    previous.total_scheduled_duration,
+                ),
+                total_fast_poll_duration: sub(
+                    latest.total_fast_poll_duration,
+                    previous.total_fast_poll_duration,
+                ),
+                total_short_delay_duration: sub(
+                    latest.total_short_delay_duration,
+                    previous.total_short_delay_duration,
+                ),
+                total_slow_poll_duration: sub(
+                    latest.total_slow_poll_duration,
+                    previous.total_slow_poll_duration,
+                ),
+                total_long_delay_duration: sub(
+                    latest.total_long_delay_duration,
+                    previous.total_long_delay_duration,
+                ),
+            }
+        } else {
+            latest
+        };
+
+        self.previous = Some(latest);
+
+        next
+    }
+}
+
+impl Iterator for TaskIntervals {
+    type Item = TaskMetrics;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        Some(self.probe())
     }
 }
 
