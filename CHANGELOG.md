@@ -1,3 +1,12 @@
+# 0.4.4 (August 5th, 2025)
+
+### Added
+ - fix: Add TaskIntervals struct ([#91])
+ - chore: update dev-dependencies ([#92])
+
+[#91]: https://github.com/tokio-rs/tokio-metrics/pull/91
+[#92]: https://github.com/tokio-rs/tokio-metrics/pull/92
+
 # 0.4.3 (July 3rd, 2025)
 
 ### Added
