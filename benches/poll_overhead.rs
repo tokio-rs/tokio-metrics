@@ -1,6 +1,7 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion};
 use futures::task;
 use std::future::Future;
+use std::hint::black_box;
 use std::iter;
 use std::pin::Pin;
 use std::sync::{Arc, Barrier};
