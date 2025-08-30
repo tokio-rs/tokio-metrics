@@ -891,6 +891,52 @@ pub struct TaskMetrics {
     /// ```
     pub total_idle_duration: Duration,
 
+    /// The maximum idle duration that a task took.
+    ///
+    /// An idle is recorded as occurring if a non-zero duration elapses between the instant a
+    /// task completes a poll, and the instant that it is next awoken.
+    ///
+    /// ##### Derived metrics
+    /// - **[`max_idle_duration`][TaskMetrics::max_idle_duration]**   
+    ///   The longest duration a task spent idle.
+    ///
+    /// ##### Examples
+    /// ```
+    /// #[tokio::main(flavor = "current_thread", start_paused = true)]
+    /// async fn main() {
+    ///     let monitor = tokio_metrics::TaskMonitor::new();
+    ///     let mut interval = monitor.intervals();
+    ///     let mut next_interval = move || interval.next().unwrap();
+    ///     let one_sec = std::time::Duration::from_secs(1);
+    ///     let two_sec = std::time::Duration::from_secs(2);
+    ///
+    ///     assert_eq!(next_interval().max_idle_duration.as_nanos(), 0);
+    ///     assert_eq!(monitor.cumulative().max_idle_duration.as_nanos(), 0);
+    ///
+    ///     monitor.instrument(async move {
+    ///         tokio::time::sleep(one_sec).await;
+    ///     }).await;
+    ///
+    ///     assert_eq!(next_interval().max_idle_duration, one_sec);
+    ///     assert_eq!(monitor.cumulative().max_idle_duration, one_sec);
+    ///
+    ///     monitor.instrument(async move {
+    ///         tokio::time::sleep(two_sec).await;
+    ///     }).await;
+    ///
+    ///     assert_eq!(next_interval().max_idle_duration, two_sec);
+    ///     assert_eq!(monitor.cumulative().max_idle_duration, two_sec);
+    ///
+    ///     monitor.instrument(async move {
+    ///         tokio::time::sleep(one_sec).await;
+    ///     }).await;
+    ///
+    ///     assert_eq!(next_interval().max_idle_duration, one_sec);
+    ///     assert_eq!(monitor.cumulative().max_idle_duration, two_sec);
+    /// }
+    /// ```
+    pub max_idle_duration: Duration,
+
     /// The total number of times that tasks were awoken (and then, presumably, scheduled for
     /// execution).
     ///
@@ -1438,6 +1484,14 @@ struct RawMetrics {
     /// Total amount of time tasks spent in the `idle` state.
     total_idle_duration_ns: AtomicU64,
 
+    /// The longest time tasks spent in the `idle` state locally.
+    /// This will be used to track the local max between interval
+    /// metric snapshots.
+    local_max_idle_duration_ns: AtomicU64,
+
+    /// The longest time tasks spent in the `idle` state.
+    global_max_idle_duration_ns: AtomicU64,
+
     /// Total amount of time tasks spent in the waking state.
     total_scheduled_duration_ns: AtomicU64,
 
@@ -1566,6 +1620,8 @@ impl TaskMonitor {
                 dropped_count: AtomicU64::new(0),
                 total_first_poll_delay_ns: AtomicU64::new(0),
                 total_scheduled_duration_ns: AtomicU64::new(0),
+                local_max_idle_duration_ns: AtomicU64::new(0),
+                global_max_idle_duration_ns: AtomicU64::new(0),
                 total_idle_duration_ns: AtomicU64::new(0),
                 total_fast_poll_duration_ns: AtomicU64::new(0),
                 total_slow_poll_duration: AtomicU64::new(0),
@@ -1807,6 +1863,10 @@ impl TaskMonitor {
 }
 
 impl RawMetrics {
+    fn get_and_reset_local_max_idle_duration(&self) -> Duration {
+        Duration::from_nanos(self.local_max_idle_duration_ns.swap(0, SeqCst))
+    }
+
     fn metrics(&self) -> TaskMetrics {
         let total_fast_poll_count = self.total_fast_poll_count.load(SeqCst);
         let total_slow_poll_count = self.total_slow_poll_count.load(SeqCst);
@@ -1835,6 +1895,7 @@ impl RawMetrics {
             total_first_poll_delay: Duration::from_nanos(
                 self.total_first_poll_delay_ns.load(SeqCst),
             ),
+            max_idle_duration: Duration::from_nanos(self.global_max_idle_duration_ns.load(SeqCst)),
             total_idle_duration: Duration::from_nanos(self.total_idle_duration_ns.load(SeqCst)),
             total_scheduled_duration: Duration::from_nanos(
                 self.total_scheduled_duration_ns.load(SeqCst),
@@ -2413,6 +2474,14 @@ fn instrument_poll<T, Out>(
         // compute the duration of the idle
         let idle_ns = woke_at - *idled_at;
 
+        // update the max time tasks spent idling, both locally and
+        // globally.
+        metrics
+            .local_max_idle_duration_ns
+            .fetch_max(idle_ns, SeqCst);
+        metrics
+            .global_max_idle_duration_ns
+            .fetch_max(idle_ns, SeqCst);
         // adjust the total elapsed time monitored tasks spent idling
         metrics.total_idle_duration_ns.fetch_add(idle_ns, SeqCst);
     }
@@ -2522,6 +2591,8 @@ pub struct TaskIntervals {
 impl TaskIntervals {
     fn probe(&mut self) -> TaskMetrics {
         let latest = self.metrics.metrics();
+        let local_max_idle_duration = self.metrics.get_and_reset_local_max_idle_duration();
+
         let next = if let Some(previous) = self.previous {
             TaskMetrics {
                 instrumented_count: latest
@@ -2557,6 +2628,7 @@ impl TaskIntervals {
                     latest.total_first_poll_delay,
                     previous.total_first_poll_delay,
                 ),
+                max_idle_duration: local_max_idle_duration,
                 total_idle_duration: sub(latest.total_idle_duration, previous.total_idle_duration),
                 total_scheduled_duration: sub(
                     latest.total_scheduled_duration,
