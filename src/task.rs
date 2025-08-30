@@ -123,8 +123,8 @@ use std::time::{Duration, Instant};
 ///
 ///     // run the server
 ///     let addr = std::net::SocketAddr::from(([127, 0, 0, 1], 3000));
-///     axum::Server::bind(&addr)
-///         .serve(app.into_make_service())
+///     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+///     axum::serve(listener, app)
 ///         .await
 ///         .unwrap();
 /// }
@@ -891,6 +891,52 @@ pub struct TaskMetrics {
     /// ```
     pub total_idle_duration: Duration,
 
+    /// The maximum idle duration that a task took.
+    ///
+    /// An idle is recorded as occurring if a non-zero duration elapses between the instant a
+    /// task completes a poll, and the instant that it is next awoken.
+    ///
+    /// ##### Derived metrics
+    /// - **[`max_idle_duration`][TaskMetrics::max_idle_duration]**   
+    ///   The longest duration a task spent idle.
+    ///
+    /// ##### Examples
+    /// ```
+    /// #[tokio::main(flavor = "current_thread", start_paused = true)]
+    /// async fn main() {
+    ///     let monitor = tokio_metrics::TaskMonitor::new();
+    ///     let mut interval = monitor.intervals();
+    ///     let mut next_interval = move || interval.next().unwrap();
+    ///     let one_sec = std::time::Duration::from_secs(1);
+    ///     let two_sec = std::time::Duration::from_secs(2);
+    ///
+    ///     assert_eq!(next_interval().max_idle_duration.as_nanos(), 0);
+    ///     assert_eq!(monitor.cumulative().max_idle_duration.as_nanos(), 0);
+    ///
+    ///     monitor.instrument(async move {
+    ///         tokio::time::sleep(one_sec).await;
+    ///     }).await;
+    ///
+    ///     assert_eq!(next_interval().max_idle_duration, one_sec);
+    ///     assert_eq!(monitor.cumulative().max_idle_duration, one_sec);
+    ///
+    ///     monitor.instrument(async move {
+    ///         tokio::time::sleep(two_sec).await;
+    ///     }).await;
+    ///
+    ///     assert_eq!(next_interval().max_idle_duration, two_sec);
+    ///     assert_eq!(monitor.cumulative().max_idle_duration, two_sec);
+    ///
+    ///     monitor.instrument(async move {
+    ///         tokio::time::sleep(one_sec).await;
+    ///     }).await;
+    ///
+    ///     assert_eq!(next_interval().max_idle_duration, one_sec);
+    ///     assert_eq!(monitor.cumulative().max_idle_duration, two_sec);
+    /// }
+    /// ```
+    pub max_idle_duration: Duration,
+
     /// The total number of times that tasks were awoken (and then, presumably, scheduled for
     /// execution).
     ///
@@ -1438,6 +1484,14 @@ struct RawMetrics {
     /// Total amount of time tasks spent in the `idle` state.
     total_idle_duration_ns: AtomicU64,
 
+    /// The longest time tasks spent in the `idle` state locally.
+    /// This will be used to track the local max between interval
+    /// metric snapshots.
+    local_max_idle_duration_ns: AtomicU64,
+
+    /// The longest time tasks spent in the `idle` state.
+    global_max_idle_duration_ns: AtomicU64,
+
     /// Total amount of time tasks spent in the waking state.
     total_scheduled_duration_ns: AtomicU64,
 
@@ -1476,6 +1530,7 @@ impl TaskMonitor {
     #[cfg(not(test))]
     pub const DEFAULT_SLOW_POLL_THRESHOLD: Duration = Duration::from_micros(50);
     #[cfg(test)]
+    #[allow(missing_docs)]
     pub const DEFAULT_SLOW_POLL_THRESHOLD: Duration = Duration::from_millis(500);
 
     /// The default duration at which schedules cross the threshold into being categorized as 'long'
@@ -1483,6 +1538,7 @@ impl TaskMonitor {
     #[cfg(not(test))]
     pub const DEFAULT_LONG_DELAY_THRESHOLD: Duration = Duration::from_micros(50);
     #[cfg(test)]
+    #[allow(missing_docs)]
     pub const DEFAULT_LONG_DELAY_THRESHOLD: Duration = Duration::from_millis(500);
 
     /// Constructs a new task monitor.
@@ -1564,6 +1620,8 @@ impl TaskMonitor {
                 dropped_count: AtomicU64::new(0),
                 total_first_poll_delay_ns: AtomicU64::new(0),
                 total_scheduled_duration_ns: AtomicU64::new(0),
+                local_max_idle_duration_ns: AtomicU64::new(0),
+                global_max_idle_duration_ns: AtomicU64::new(0),
                 total_idle_duration_ns: AtomicU64::new(0),
                 total_fast_poll_duration_ns: AtomicU64::new(0),
                 total_slow_poll_duration: AtomicU64::new(0),
@@ -1684,7 +1742,7 @@ impl TaskMonitor {
     ///
     /// ##### See also
     /// - [`TaskMonitor::intervals`]:
-    ///     produces [`TaskMetrics`] for user-defined sampling intervals, instead of cumulatively
+    ///   produces [`TaskMetrics`] for user-defined sampling intervals, instead of cumulatively
     ///
     /// ##### Examples
     /// In the below example, 0 polls occur within the first sampling interval, 3 slow polls occur
@@ -1796,87 +1854,19 @@ impl TaskMonitor {
     ///     tokio::task::yield_now()
     /// }
     /// ```
-    pub fn intervals(&self) -> impl Iterator<Item = TaskMetrics> {
-        let latest = self.metrics.clone();
-        let mut previous: Option<TaskMetrics> = None;
-
-        std::iter::from_fn(move || {
-            let latest: TaskMetrics = latest.metrics();
-            let next = if let Some(previous) = previous {
-                TaskMetrics {
-                    instrumented_count: latest
-                        .instrumented_count
-                        .wrapping_sub(previous.instrumented_count),
-                    dropped_count: latest.dropped_count.wrapping_sub(previous.dropped_count),
-                    total_poll_count: latest
-                        .total_poll_count
-                        .wrapping_sub(previous.total_poll_count),
-                    total_poll_duration: sub(
-                        latest.total_poll_duration,
-                        previous.total_poll_duration,
-                    ),
-                    first_poll_count: latest
-                        .first_poll_count
-                        .wrapping_sub(previous.first_poll_count),
-                    total_idled_count: latest
-                        .total_idled_count
-                        .wrapping_sub(previous.total_idled_count),
-                    total_scheduled_count: latest
-                        .total_scheduled_count
-                        .wrapping_sub(previous.total_scheduled_count),
-                    total_fast_poll_count: latest
-                        .total_fast_poll_count
-                        .wrapping_sub(previous.total_fast_poll_count),
-                    total_short_delay_count: latest
-                        .total_short_delay_count
-                        .wrapping_sub(previous.total_short_delay_count),
-                    total_slow_poll_count: latest
-                        .total_slow_poll_count
-                        .wrapping_sub(previous.total_slow_poll_count),
-                    total_long_delay_count: latest
-                        .total_long_delay_count
-                        .wrapping_sub(previous.total_long_delay_count),
-                    total_first_poll_delay: sub(
-                        latest.total_first_poll_delay,
-                        previous.total_first_poll_delay,
-                    ),
-                    total_idle_duration: sub(
-                        latest.total_idle_duration,
-                        previous.total_idle_duration,
-                    ),
-                    total_scheduled_duration: sub(
-                        latest.total_scheduled_duration,
-                        previous.total_scheduled_duration,
-                    ),
-                    total_fast_poll_duration: sub(
-                        latest.total_fast_poll_duration,
-                        previous.total_fast_poll_duration,
-                    ),
-                    total_short_delay_duration: sub(
-                        latest.total_short_delay_duration,
-                        previous.total_short_delay_duration,
-                    ),
-                    total_slow_poll_duration: sub(
-                        latest.total_slow_poll_duration,
-                        previous.total_slow_poll_duration,
-                    ),
-                    total_long_delay_duration: sub(
-                        latest.total_long_delay_duration,
-                        previous.total_long_delay_duration,
-                    ),
-                }
-            } else {
-                latest
-            };
-
-            previous = Some(latest);
-
-            Some(next)
-        })
+    pub fn intervals(&self) -> TaskIntervals {
+        TaskIntervals {
+            metrics: self.metrics.clone(),
+            previous: None,
+        }
     }
 }
 
 impl RawMetrics {
+    fn get_and_reset_local_max_idle_duration(&self) -> Duration {
+        Duration::from_nanos(self.local_max_idle_duration_ns.swap(0, SeqCst))
+    }
+
     fn metrics(&self) -> TaskMetrics {
         let total_fast_poll_count = self.total_fast_poll_count.load(SeqCst);
         let total_slow_poll_count = self.total_slow_poll_count.load(SeqCst);
@@ -1905,6 +1895,7 @@ impl RawMetrics {
             total_first_poll_delay: Duration::from_nanos(
                 self.total_first_poll_delay_ns.load(SeqCst),
             ),
+            max_idle_duration: Duration::from_nanos(self.global_max_idle_duration_ns.load(SeqCst)),
             total_idle_duration: Duration::from_nanos(self.total_idle_duration_ns.load(SeqCst)),
             total_scheduled_duration: Duration::from_nanos(
                 self.total_scheduled_duration_ns.load(SeqCst),
@@ -2483,6 +2474,14 @@ fn instrument_poll<T, Out>(
         // compute the duration of the idle
         let idle_ns = woke_at - *idled_at;
 
+        // update the max time tasks spent idling, both locally and
+        // globally.
+        metrics
+            .local_max_idle_duration_ns
+            .fetch_max(idle_ns, SeqCst);
+        metrics
+            .global_max_idle_duration_ns
+            .fetch_max(idle_ns, SeqCst);
         // adjust the total elapsed time monitored tasks spent idling
         metrics.total_idle_duration_ns.fetch_add(idle_ns, SeqCst);
     }
@@ -2577,6 +2576,96 @@ impl ArcWake for State {
     fn wake(self: Arc<State>) {
         self.on_wake();
         self.waker.wake();
+    }
+}
+
+/// Iterator returned by [`TaskMonitor::intervals`].
+///
+/// See that method's documentation for more details.
+#[derive(Debug)]
+pub struct TaskIntervals {
+    metrics: Arc<RawMetrics>,
+    previous: Option<TaskMetrics>,
+}
+
+impl TaskIntervals {
+    fn probe(&mut self) -> TaskMetrics {
+        let latest = self.metrics.metrics();
+        let local_max_idle_duration = self.metrics.get_and_reset_local_max_idle_duration();
+
+        let next = if let Some(previous) = self.previous {
+            TaskMetrics {
+                instrumented_count: latest
+                    .instrumented_count
+                    .wrapping_sub(previous.instrumented_count),
+                dropped_count: latest.dropped_count.wrapping_sub(previous.dropped_count),
+                total_poll_count: latest
+                    .total_poll_count
+                    .wrapping_sub(previous.total_poll_count),
+                total_poll_duration: sub(latest.total_poll_duration, previous.total_poll_duration),
+                first_poll_count: latest
+                    .first_poll_count
+                    .wrapping_sub(previous.first_poll_count),
+                total_idled_count: latest
+                    .total_idled_count
+                    .wrapping_sub(previous.total_idled_count),
+                total_scheduled_count: latest
+                    .total_scheduled_count
+                    .wrapping_sub(previous.total_scheduled_count),
+                total_fast_poll_count: latest
+                    .total_fast_poll_count
+                    .wrapping_sub(previous.total_fast_poll_count),
+                total_short_delay_count: latest
+                    .total_short_delay_count
+                    .wrapping_sub(previous.total_short_delay_count),
+                total_slow_poll_count: latest
+                    .total_slow_poll_count
+                    .wrapping_sub(previous.total_slow_poll_count),
+                total_long_delay_count: latest
+                    .total_long_delay_count
+                    .wrapping_sub(previous.total_long_delay_count),
+                total_first_poll_delay: sub(
+                    latest.total_first_poll_delay,
+                    previous.total_first_poll_delay,
+                ),
+                max_idle_duration: local_max_idle_duration,
+                total_idle_duration: sub(latest.total_idle_duration, previous.total_idle_duration),
+                total_scheduled_duration: sub(
+                    latest.total_scheduled_duration,
+                    previous.total_scheduled_duration,
+                ),
+                total_fast_poll_duration: sub(
+                    latest.total_fast_poll_duration,
+                    previous.total_fast_poll_duration,
+                ),
+                total_short_delay_duration: sub(
+                    latest.total_short_delay_duration,
+                    previous.total_short_delay_duration,
+                ),
+                total_slow_poll_duration: sub(
+                    latest.total_slow_poll_duration,
+                    previous.total_slow_poll_duration,
+                ),
+                total_long_delay_duration: sub(
+                    latest.total_long_delay_duration,
+                    previous.total_long_delay_duration,
+                ),
+            }
+        } else {
+            latest
+        };
+
+        self.previous = Some(latest);
+
+        next
+    }
+}
+
+impl Iterator for TaskIntervals {
+    type Item = TaskMetrics;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        Some(self.probe())
     }
 }
 

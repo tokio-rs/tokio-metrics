@@ -40,19 +40,17 @@ async fn main() {
 
         let intervals = root_intervals.zip(create_user_intervals);
         for (root_route, (create_user_route, create_user_insert)) in intervals {
-            println!("root_route = {:#?}", root_route);
-            println!("create_user_route = {:#?}", create_user_route);
-            println!("create_user_insert = {:#?}", create_user_insert);
+            println!("root_route = {root_route:#?}");
+            println!("create_user_route = {create_user_route:#?}");
+            println!("create_user_insert = {create_user_insert:#?}");
             tokio::time::sleep(metrics_frequency).await;
         }
     });
 
     // run the server
     let addr = std::net::SocketAddr::from(([127, 0, 0, 1], 3000));
-    axum::Server::bind(&addr)
-        .serve(app.into_make_service())
-        .await
-        .unwrap();
+    let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
+    axum::serve(listener, app).await.unwrap();
 }
 
 async fn create_user(

@@ -1,3 +1,39 @@
+# 0.4.4 (August 5th, 2025)
+
+### Added
+ - fix: Add TaskIntervals struct ([#91])
+ - chore: update dev-dependencies ([#92])
+
+[#91]: https://github.com/tokio-rs/tokio-metrics/pull/91
+[#92]: https://github.com/tokio-rs/tokio-metrics/pull/92
+
+# 0.4.3 (July 3rd, 2025)
+
+### Added
+ - rt: partially stabilize `RuntimeMonitor` and related metrics ([#87])
+
+[#87]: https://github.com/tokio-rs/tokio-metrics/pull/87
+
+# 0.4.2 (April 30th, 2025)
+
+### Fixed
+ - docs: specify metrics-rs-integration feature dependency for relevant APIs ([#78])
+ - docs: fix links ([#79])
+
+[#78]: https://github.com/tokio-rs/tokio-metrics/pull/78
+[#79]: https://github.com/tokio-rs/tokio-metrics/pull/79
+
+# 0.4.1 (April 20th, 2025)
+
+### Added
+ - rt: add support for `blocking_queue_depth`, `live_task_count`, `blocking_threads_count`,
+   `idle_blocking_threads_count` ([#49], [#74])
+ - rt: add integration with metrics.rs ([#68])
+
+[#49]: https://github.com/tokio-rs/tokio-metrics/pull/49
+[#68]: https://github.com/tokio-rs/tokio-metrics/pull/68
+[#74]: https://github.com/tokio-rs/tokio-metrics/pull/74
+
 # 0.4.0 (November 26th, 2024)
 
 The core Tokio crate has renamed some of the metrics and this breaking release

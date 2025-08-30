@@ -11,7 +11,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         tokio::spawn(async move {
             for interval in runtime_monitor.intervals() {
                 // pretty-print the metric interval
-                println!("{:?}", interval);
+                println!("{interval:?}");
                 // wait 500ms
                 tokio::time::sleep(Duration::from_millis(500)).await;
             }

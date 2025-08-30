@@ -12,7 +12,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         tokio::spawn(async move {
             for deltas in metrics_monitor.intervals() {
                 // pretty-print the metric deltas
-                println!("{:?}", deltas);
+                println!("{deltas:?}");
                 // wait 500ms
                 tokio::time::sleep(Duration::from_millis(500)).await;
             }
