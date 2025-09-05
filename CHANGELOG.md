@@ -1,3 +1,8 @@
+# 0.4.5 (September 4th, 2025)
+- Add max_idle_duration ([#95])
+
+[#95]: https://github.com/tokio-rs/tokio-metrics/pull/95
+
 # 0.4.4 (August 5th, 2025)
 
 ### Added
