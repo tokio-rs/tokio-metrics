@@ -57,12 +57,14 @@ loop {
 
 ### Task Metrics
 #### Base Metrics
-- **[`instrumented_count`]**  
-  The number of tasks instrumented.
 - **[`dropped_count`]**  
   The number of tasks dropped.
 - **[`first_poll_count`]**  
   The number of tasks polled for the first time.
+- **[`instrumented_count`]**  
+  The number of tasks instrumented.
+- **[`max_idle_duration`]**  
+  The maximum idle duration that a task took.
 - **[`total_first_poll_delay`]**  
   The total duration elapsed between the instant tasks are instrumented, and the instant they are first polled.
 - **[`total_idled_count`]**  
@@ -116,9 +118,10 @@ loop {
 - **[`mean_long_delay_duration`]**
   The mean duration of long schedules.
 
-[`instrumented_count`]: https://docs.rs/tokio-metrics/0.4.*/tokio_metrics/struct.TaskMetrics.html#structfield.instrumented_count
 [`dropped_count`]: https://docs.rs/tokio-metrics/0.4.*/tokio_metrics/struct.TaskMetrics.html#structfield.dropped_count
 [`first_poll_count`]: https://docs.rs/tokio-metrics/0.4.*/tokio_metrics/struct.TaskMetrics.html#structfield.first_poll_count
+[`instrumented_count`]: https://docs.rs/tokio-metrics/0.4.*/tokio_metrics/struct.TaskMetrics.html#structfield.instrumented_count
+[`max_idle_duration`]: https://docs.rs/tokio-metrics/0.4.*/tokio_metrics/struct.TaskMetrics.html#structfield.max_idle_duration
 [`total_first_poll_delay`]: https://docs.rs/tokio-metrics/0.4.*/tokio_metrics/struct.TaskMetrics.html#structfield.total_first_poll_delay 
 [`total_idled_count`]: https://docs.rs/tokio-metrics/0.4.*/tokio_metrics/struct.TaskMetrics.html#structfield.total_idled_count
 [`total_idle_duration`]: https://docs.rs/tokio-metrics/0.4.*/tokio_metrics/struct.TaskMetrics.html#structfield.total_idle_duration 
