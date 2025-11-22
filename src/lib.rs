@@ -179,5 +179,7 @@ cfg_rt! {
 )]
 pub use runtime::metrics_rs_integration::{RuntimeMetricsReporter, RuntimeMetricsReporterBuilder};
 
+mod metrics_rs;
 mod task;
+
 pub use task::{Instrumented, TaskMetrics, TaskMonitor};
