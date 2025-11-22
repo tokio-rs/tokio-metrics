@@ -3,7 +3,7 @@ use std::{fmt, time::Duration};
 use tokio::runtime::Handle;
 
 use super::{RuntimeIntervals, RuntimeMetrics, RuntimeMonitor};
-use crate::metrics_rs::{metric_refs, DEFAULT_METRIC_SAMPLING_INTERVAL, MyMetricOp};
+use crate::metrics_rs::{metric_refs, DEFAULT_METRIC_SAMPLING_INTERVAL};
 
 /// A builder for the [`RuntimeMetricsReporter`] that wraps the RuntimeMonitor, periodically
 /// reporting RuntimeMetrics to any configured [metrics-rs] recorder.
@@ -245,7 +245,7 @@ pub struct RuntimeMetricsReporter {
 }
 
 metric_refs! {
-    [RuntimeMetricRefs] [elapsed] {
+    [RuntimeMetricRefs] [elapsed] [RuntimeMetrics] [&tokio::runtime::RuntimeMetrics] {
         stable {
             /// The number of worker threads used by the runtime
             workers_count: Gauge<Count> [],

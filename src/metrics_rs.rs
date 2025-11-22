@@ -68,7 +68,7 @@ macro_rules! capture_metric_ref {
 
 macro_rules! metric_refs {
     (
-        [$struct_name:ident] [$($ignore:ident),* $(,)?] {
+        [$struct_name:ident] [$($ignore:ident),* $(,)?] [$metrics_name:ty] [$emit_arg_type:ty] {
          stable {
             $(
                 #[doc = $doc:tt]
@@ -108,13 +108,13 @@ macro_rules! metric_refs {
                 }
             }
 
-            fn emit(&self, metrics: RuntimeMetrics, tokio: &tokio::runtime::RuntimeMetrics) {
+            fn emit(&self, metrics: $metrics_name, emit_arg: $emit_arg_type) {
                 $(
-                    MyMetricOp::op((&self.$name, metrics.$name), tokio);
+                    crate::metrics_rs::MyMetricOp::op((&self.$name, metrics.$name), emit_arg);
                 )*
                 $(
                     #[cfg(tokio_unstable)]
-                    MyMetricOp::op((&self.$unstable_name, metrics.$unstable_name), tokio);
+                    crate::metrics_rs::MyMetricOp::op((&self.$unstable_name, metrics.$unstable_name), emit_arg);
                 )*
             }
 
@@ -132,10 +132,10 @@ macro_rules! metric_refs {
         #[test]
         fn test_no_fields_missing() {
             // test that no fields are missing. We can't use exhaustive matching here
-            // since RuntimeMetrics is #[non_exhaustive], so use a debug impl
-            let debug = format!("{:#?}", RuntimeMetrics::default());
+            // since the metrics structs are #[non_exhaustive], so use a debug impl
+            let debug = format!("{:#?}", <$metrics_name>::default());
             for line in debug.lines() {
-                if line == "RuntimeMetrics {" || line == "}" {
+                if line == format!("{} {{", stringify!($metrics_name)) || line == "}" {
                     continue
                 }
                 $(
@@ -170,43 +170,43 @@ pub(crate) use kind_to_type;
 pub(crate) use metric_key;
 pub(crate) use metric_refs;
 
-pub(crate) trait MyMetricOp {
-    fn op(self, tokio: &tokio::runtime::RuntimeMetrics);
+pub(crate) trait MyMetricOp<T> {
+    fn op(self, t: T);
 }
 
-impl MyMetricOp for (&metrics::Counter, Duration) {
-    fn op(self, _tokio: &tokio::runtime::RuntimeMetrics) {
+impl<T> MyMetricOp<T> for (&metrics::Counter, Duration) {
+    fn op(self, _: T) {
         self.0
             .increment(self.1.as_micros().try_into().unwrap_or(u64::MAX));
     }
 }
 
-impl MyMetricOp for (&metrics::Counter, u64) {
-    fn op(self, _tokio: &tokio::runtime::RuntimeMetrics) {
+impl<T> MyMetricOp<T> for (&metrics::Counter, u64) {
+    fn op(self, _t: T) {
         self.0.increment(self.1);
     }
 }
 
-impl MyMetricOp for (&metrics::Gauge, Duration) {
-    fn op(self, _tokio: &tokio::runtime::RuntimeMetrics) {
+impl<T> MyMetricOp<T> for (&metrics::Gauge, Duration) {
+    fn op(self, _t: T) {
         self.0.set(self.1.as_micros() as f64);
     }
 }
 
-impl MyMetricOp for (&metrics::Gauge, u64) {
-    fn op(self, _tokio: &tokio::runtime::RuntimeMetrics) {
+impl<T> MyMetricOp<T> for (&metrics::Gauge, u64) {
+    fn op(self, _: T) {
         self.0.set(self.1 as f64);
     }
 }
 
-impl MyMetricOp for (&metrics::Gauge, usize) {
-    fn op(self, _tokio: &tokio::runtime::RuntimeMetrics) {
+impl<T> MyMetricOp<T> for (&metrics::Gauge, usize) {
+    fn op(self, _t: T) {
         self.0.set(self.1 as f64);
     }
 }
 
 #[cfg(tokio_unstable)]
-impl MyMetricOp for (&metrics::Histogram, Vec<u64>) {
+impl MyMetricOp<&tokio::runtime::RuntimeMetrics> for (&metrics::Histogram, Vec<u64>) {
     fn op(self, tokio: &tokio::runtime::RuntimeMetrics) {
         for (i, bucket) in self.1.iter().enumerate() {
             let range = tokio.poll_time_histogram_bucket_range(i);

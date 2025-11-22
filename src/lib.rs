@@ -182,4 +182,10 @@ pub use runtime::metrics_rs_integration::{RuntimeMetricsReporter, RuntimeMetrics
 mod metrics_rs;
 mod task;
 
+#[cfg(all(feature = "rt", feature = "metrics-rs-integration"))]
+#[cfg_attr(
+    docsrs,
+    doc(cfg(all(feature = "rt", feature = "metrics-rs-integration")))
+)]
+pub use task::metrics_rs_integration::{TaskMetricsReporter, TaskMetricsReporterBuilder};
 pub use task::{Instrumented, TaskMetrics, TaskMonitor};
