@@ -13,7 +13,7 @@ use tokio::time::{Duration, Instant};
 #[cfg(not(feature = "rt"))]
 use std::time::{Duration, Instant};
 
-#[cfg(feature = "metrics-rs-integration")]
+#[cfg(all(feature = "rt", feature = "metrics-rs-integration"))]
 pub(crate) mod metrics_rs_integration;
 
 /// Monitors key metrics of instrumented tasks.

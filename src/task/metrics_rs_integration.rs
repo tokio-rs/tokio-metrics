@@ -30,6 +30,8 @@ use crate::metrics_rs::{metric_refs, DEFAULT_METRIC_SAMPLING_INTERVAL};
 /// ```
 /// use std::time::Duration;
 ///
+/// use metrics::Key;
+///
 /// #[tokio::main]
 /// async fn main() {
 ///     metrics_exporter_prometheus::PrometheusBuilder::new()
@@ -59,7 +61,6 @@ use crate::metrics_rs::{metric_refs, DEFAULT_METRIC_SAMPLING_INTERVAL};
 /// ```
 ///
 /// [`describe_and_run`]: TaskMetricsReporterBuilder::describe_and_run
-/// [`with_metrics_transformer`]: TaskMetricsReporterBuilder::with_metrics_transformer
 /// [metrics-rs]: metrics
 /// [metrics_exporter_prometheus]: https://docs.rs/metrics_exporter_prometheus
 pub struct TaskMetricsReporterBuilder {
@@ -93,12 +94,13 @@ impl TaskMetricsReporterBuilder {
     ///         .with_http_uds_listener("prometheus.sock")
     ///         .install()
     ///         .unwrap();
+    ///     let monitor = tokio_metrics::TaskMonitor::new();
     ///     tokio::task::spawn(
-    ///         tokio_metrics::RuntimeMetricsReporterBuilder::new(|name| {
+    ///         tokio_metrics::TaskMetricsReporterBuilder::new(|name| {
     ///             let name = name.replacen("tokio_", "my_task_", 1);
     ///             Key::from_parts(name, &[("application", "my_app")])
     ///         })
-    ///         .describe_and_run()
+    ///         .describe_and_run(monitor)
     ///     );
     /// }
     /// ```
