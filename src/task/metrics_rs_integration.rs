@@ -76,15 +76,6 @@ impl fmt::Debug for TaskMetricsReporterBuilder {
     }
 }
 
-impl Default for TaskMetricsReporterBuilder {
-    fn default() -> Self {
-        TaskMetricsReporterBuilder {
-            interval: DEFAULT_METRIC_SAMPLING_INTERVAL,
-            metrics_transformer: Box::new(metrics::Key::from_static_name),
-        }
-    }
-}
-
 impl TaskMetricsReporterBuilder {
     /// Creates a new [`TaskMetricsReporterBuilder`] with a custom "metrics transformer". The custom
     /// transformer is used during `build` to transform the metric names into metric keys, for
