@@ -9,7 +9,7 @@ macro_rules! kind_to_type {
     (Gauge) => {
         metrics::Gauge
     };
-    (Histogram) => {
+    (PollTimeHistogram) => {
         metrics::Histogram
     };
 }
@@ -40,7 +40,7 @@ macro_rules! describe_metric_ref {
             $doc.trim()
         )
     };
-    ($transform_fn:ident, $doc:expr, $name:ident: Histogram<$unit:ident> []) => {
+    ($transform_fn:ident, $doc:expr, $name:ident: PollTimeHistogram<$unit:ident> []) => {
         metrics::describe_histogram!(
             crate::metrics_rs::metric_key!($transform_fn, $name)
                 .name()
@@ -60,7 +60,7 @@ macro_rules! capture_metric_ref {
         let (name, labels) = crate::metrics_rs::metric_key!($transform_fn, $name).into_parts();
         metrics::gauge!(name, labels)
     }};
-    ($transform_fn:ident, $name:ident: Histogram []) => {{
+    ($transform_fn:ident, $name:ident: PollTimeHistogram []) => {{
         let (name, labels) = crate::metrics_rs::metric_key!($transform_fn, $name).into_parts();
         metrics::histogram!(name, labels)
     }};

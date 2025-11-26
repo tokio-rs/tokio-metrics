@@ -101,8 +101,7 @@ cfg_rt! {
             // test task metrics
             let task_monitor = TaskMonitor::new();
             tokio::task::spawn(
-                TaskMetricsReporterBuilder::default()
-                .with_metrics_transformer(|name| {
+                TaskMetricsReporterBuilder::new(|name| {
                     let name = name.replacen("tokio_", "task_", 1);
                     Key::from_parts::<_, &[(&str, &str)]>(name, &[])
                 })

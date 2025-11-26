@@ -9,9 +9,9 @@ use crate::metrics_rs::{metric_refs, DEFAULT_METRIC_SAMPLING_INTERVAL};
 /// ### Published Metrics
 ///
 /// The published metrics are the fields of [`TaskMetrics`], but with the
-/// `tokio_` prefix added, for example, `instrumented_count`. If you have multiple [`TaskMonitor`]s
-/// then it is strongly recommended to use [`with_metrics_transformer`] to give each [`TaskMonitor`]
-/// a unique metric name.
+/// `tokio_` prefix added, for example, `tokio_instrumented_count`. If you have multiple
+/// [`TaskMonitor`]s then it is strongly recommended to give each [`TaskMonitor`] a unique metric
+/// name or dimension value.
 ///
 /// ### Usage
 ///
@@ -38,11 +38,14 @@ use crate::metrics_rs::{metric_refs, DEFAULT_METRIC_SAMPLING_INTERVAL};
 ///         .unwrap();
 ///     let monitor = tokio_metrics::TaskMonitor::new();
 ///     tokio::task::spawn(
-///         tokio_metrics::TaskMetricsReporterBuilder::default()
-///             // the default metric sampling interval is 30 seconds, which is
-///             // too long for quick tests, so have it be 1 second.
-///             .with_interval(std::time::Duration::from_secs(1))
-///             .describe_and_run(monitor.clone()),
+///         tokio_metrics::TaskMetricsReporterBuilder::new(|name| {
+///             let name = name.replacen("tokio_", "my_task_", 1);
+///             Key::from_parts(name, &[("application", "my_app")])
+///         })
+///         // the default metric sampling interval is 30 seconds, which is
+///         // too long for quick tests, so have it be 1 second.
+///         .with_interval(std::time::Duration::from_secs(1))
+///         .describe_and_run(monitor.clone()),
 ///     );
 ///     // Run some code
 ///     tokio::task::spawn(monitor.instrument(async move {
@@ -83,6 +86,38 @@ impl Default for TaskMetricsReporterBuilder {
 }
 
 impl TaskMetricsReporterBuilder {
+    /// Creates a new [`TaskMetricsReporterBuilder`] with a custom "metrics transformer". The custom
+    /// transformer is used during `build` to transform the metric names into metric keys, for
+    /// example to add dimensions. The string metric names used by this reporter all start with
+    /// `tokio_`. The default transformer is just [`metrics::Key::from_static_name`]
+    ///
+    /// For example, to attach a dimension named "application" with value "my_app", and to replace
+    /// `tokio_` with `my_task_`
+    /// ```
+    /// # use metrics::Key;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     metrics_exporter_prometheus::PrometheusBuilder::new()
+    ///         .with_http_uds_listener("prometheus.sock")
+    ///         .install()
+    ///         .unwrap();
+    ///     tokio::task::spawn(
+    ///         tokio_metrics::RuntimeMetricsReporterBuilder::new(|name| {
+    ///             let name = name.replacen("tokio_", "my_task_", 1);
+    ///             Key::from_parts(name, &[("application", "my_app")])
+    ///         })
+    ///         .describe_and_run()
+    ///     );
+    /// }
+    /// ```
+    pub fn new(transformer: impl FnMut(&'static str) -> metrics::Key + Send + 'static) -> Self {
+        TaskMetricsReporterBuilder {
+            interval: DEFAULT_METRIC_SAMPLING_INTERVAL,
+            metrics_transformer: Box::new(transformer),
+        }
+    }
+
     /// Set the metric sampling interval, default: 30 seconds.
     ///
     /// Note that this is the interval on which metrics are *sampled* from
@@ -101,40 +136,8 @@ impl TaskMetricsReporterBuilder {
         self
     }
 
-    /// Set a custom "metrics transformer", which is used during `build` to transform the metric
-    /// names into metric keys, for example to add dimensions. The string metric names used by this reporter
-    /// all start with `tokio_`. The default transformer is just [`metrics::Key::from_static_name`]
-    ///
-    /// For example, to attach a dimension named "application" with value "my_app", and to replace
-    /// `tokio_` with `my_task_`
-    /// ```
-    /// # use metrics::Key;
-    ///
-    /// #[tokio::main]
-    /// async fn main() {
-    ///     metrics_exporter_prometheus::PrometheusBuilder::new()
-    ///         .with_http_uds_listener("prometheus.sock")
-    ///         .install()
-    ///         .unwrap();
-    ///     tokio::task::spawn(
-    ///         tokio_metrics::RuntimeMetricsReporterBuilder::default().with_metrics_transformer(|name| {
-    ///             let name = name.replacen("tokio_", "my_task_", 1);
-    ///             Key::from_parts(name, &[("application", "my_app")])
-    ///         })
-    ///         .describe_and_run()
-    ///     );
-    /// }
-    /// ```
-    pub fn with_metrics_transformer(
-        mut self,
-        transformer: impl FnMut(&'static str) -> metrics::Key + Send + 'static,
-    ) -> Self {
-        self.metrics_transformer = Box::new(transformer);
-        self
-    }
-
     /// Build the [`TaskMetricsReporter`] with a specific [`TaskMonitor`]. This function will capture
-    /// the [`Counter`]s, [`Gauge`]s and [`Histogram`]s from the current [metrics-rs] reporter,
+    /// the [`Counter`]s and [`Gauge`]s from the current [metrics-rs] reporter,
     /// so if you are using [`with_local_recorder`], you should wrap this function and [`describe`]
     /// with it.
     ///
