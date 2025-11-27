@@ -12,10 +12,11 @@ cfg_rt! {
     #[cfg(feature = "metrics-rs-integration")]
     #[test]
     fn main() {
+        use metrics::Key;
         use metrics_util::debugging::DebugValue;
         use std::{sync::Arc, time::Duration};
         use tokio::runtime::{HistogramConfiguration, LogHistogram};
-        use tokio_metrics::RuntimeMetricsReporterBuilder;
+        use tokio_metrics::{RuntimeMetricsReporterBuilder,TaskMetricsReporterBuilder,TaskMonitor};
 
         let worker_threads = 10;
 
@@ -30,6 +31,7 @@ cfg_rt! {
             .unwrap();
 
         rt.block_on(async {
+            // test runtime metrics
             let recorder = Arc::new(metrics_util::debugging::DebuggingRecorder::new());
             metrics::set_global_recorder(recorder.clone()).unwrap();
             tokio::task::spawn(RuntimeMetricsReporterBuilder::default().with_interval(Duration::from_millis(100)).describe_and_run());
@@ -95,6 +97,40 @@ cfg_rt! {
             }
             // check that we found exactly 1 poll in the 100ms region
             assert_eq!(long_polls_found, 1);
+
+            // test task metrics
+            let task_monitor = TaskMonitor::new();
+            tokio::task::spawn(
+                TaskMetricsReporterBuilder::new(|name| {
+                    let name = name.replacen("tokio_", "task_", 1);
+                    Key::from_parts::<_, &[(&str, &str)]>(name, &[])
+                })
+                .with_interval(Duration::from_millis(100))
+                .describe_and_run(task_monitor.clone())
+            );
+            task_monitor.instrument(async {}).await;
+
+            let mut done = false;
+            for _ in 0..100 {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+                let snapshot = recorder.snapshotter().snapshot().into_vec();
+                if let Some(metric) = snapshot.iter().find(|metrics| {
+                    metrics.0.key().name() == "task_first_poll_count"
+                }) {
+                    match metric {
+                        (_, Some(metrics::Unit::Count), Some(s), DebugValue::Gauge(count))
+                            if &s[..] == "The number of tasks polled for the first time." =>
+                        {
+                            if count.into_inner() == 1.0 {
+                                done = true;
+                                break;
+                            }
+                        }
+                        _ => panic!("bad {metric:?}"),
+                    }
+                }
+            }
+            assert!(done, "metric not found");
         });
     }
 }
