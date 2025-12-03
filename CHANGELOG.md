@@ -1,3 +1,12 @@
+# 0.4.6 (December 3rd, 2025)
+- add metrics_rs integration to task metrics ([#100])
+- readme: add max_idle_duration to readme ([#98])
+- readme: keep default features ([#29])
+
+[#29]: https://github.com/tokio-rs/tokio-metrics/pull/29
+[#98]: https://github.com/tokio-rs/tokio-metrics/pull/98
+[#100]: https://github.com/tokio-rs/tokio-metrics/pull/100
+
 # 0.4.5 (September 4th, 2025)
 - Add max_idle_duration ([#95])
 
