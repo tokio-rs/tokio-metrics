@@ -251,7 +251,30 @@ metric_refs! {
             /// The total number of times that a task had a long scheduling duration.
             total_long_delay_duration: Counter<Microseconds> [],
         }
+        stable_derived {
+            /// The mean duration elapsed between the instant tasks are instrumented, and the instant they are first polled.
+            mean_first_poll_delay: Counter<Microseconds> [],
+            /// The mean duration of idles.
+            mean_idle_duration: Counter<Microseconds> [],
+            /// The mean duration that tasks spent waiting to be executed after awakening.
+            mean_scheduled_duration: Counter<Microseconds> [],
+            /// The mean duration of polls.
+            mean_poll_duration: Counter<Microseconds> [],
+            /// The ratio between the number polls categorized as slow and fast.
+            slow_poll_ratio: Gauge<Percent> [],
+            /// The ratio of tasks exceeding [`long_delay_threshold`][TaskMonitor::long_delay_threshold].
+            long_delay_ratio: Gauge<Percent> [],
+            /// The mean duration of fast polls.
+            mean_fast_poll_duration: Counter<Microseconds> [],
+            /// The average time taken for a task with a short scheduling delay to be executed after being scheduled.
+            mean_short_delay_duration: Counter<Microseconds> [],
+            /// The mean duration of slow polls.
+            mean_slow_poll_duration: Counter<Microseconds> [],
+            /// The average scheduling delay for a task which takes a long time to start executing after being scheduled.
+            mean_long_delay_duration: Counter<Microseconds> [],
+        }
         unstable {}
+        unstable_derived {}
     }
 }
 

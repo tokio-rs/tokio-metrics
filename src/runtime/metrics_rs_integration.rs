@@ -264,6 +264,10 @@ metric_refs! {
             /// The number of tasks currently scheduled in the runtime's global queue
             global_queue_depth: Gauge<Count> [],
         }
+        stable_derived {
+            /// The ratio of the [`RuntimeMetrics::total_busy_duration`] to the [`RuntimeMetrics::elapsed`].
+            busy_ratio: Gauge<Percent> [],
+        }
         unstable {
             /// The average duration of a single invocation of poll on a task
             mean_poll_duration: Gauge<Microseconds> [],
@@ -329,6 +333,10 @@ metric_refs! {
             budget_forced_yield_count: Counter<Count> [],
             /// Returns the number of ready events processed by the runtime’s I/O driver
             io_driver_ready_count: Counter<Count> [],
+        }
+        unstable_derived {
+            /// The ratio of the [`RuntimeMetrics::total_polls_count`] to the [`RuntimeMetrics::total_noop_count`].
+            mean_polls_per_park: Gauge<Percent> [],
         }
     }
 }
