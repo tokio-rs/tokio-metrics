@@ -899,10 +899,6 @@ pub struct TaskMetrics {
     /// An idle is recorded as occurring if a non-zero duration elapses between the instant a
     /// task completes a poll, and the instant that it is next awoken.
     ///
-    /// ##### Derived metrics
-    /// - **[`max_idle_duration`][TaskMetrics::max_idle_duration]**   
-    ///   The longest duration a task spent idle.
-    ///
     /// ##### Examples
     /// ```
     /// #[tokio::main(flavor = "current_thread", start_paused = true)]
@@ -944,8 +940,8 @@ pub struct TaskMetrics {
     /// execution).
     ///
     /// ##### Definition
-    /// This metric is equal to [`total_short_delay_duration`][TaskMetrics::total_short_delay_duration]
-    /// \+ [`total_long_delay_duration`][TaskMetrics::total_long_delay_duration].
+    /// This metric is equal to [`total_short_delay_count`][TaskMetrics::total_short_delay_count]
+    /// \+ [`total_long_delay_count`][TaskMetrics::total_long_delay_count].
     ///
     /// ##### Derived metrics
     /// - **[`mean_scheduled_duration`][TaskMetrics::mean_scheduled_duration]**   
@@ -1016,8 +1012,8 @@ pub struct TaskMetrics {
     /// The total duration that tasks spent waiting to be polled after awakening.
     ///
     /// ##### Definition
-    /// This metric is equal to [`total_short_delay_count`][TaskMetrics::total_short_delay_count]
-    /// \+ [`total_long_delay_count`][TaskMetrics::total_long_delay_count].
+    /// This metric is equal to [`total_short_delay_duration`][TaskMetrics::total_short_delay_duration]
+    /// \+ [`total_long_delay_duration`][TaskMetrics::total_long_delay_duration].
     ///
     /// ##### Derived metrics
     /// - **[`mean_scheduled_duration`][TaskMetrics::mean_scheduled_duration]**   
@@ -1434,10 +1430,11 @@ pub struct TaskMetrics {
     ///   The mean duration of short scheduling delays.
     pub total_short_delay_duration: Duration,
 
-    /// The total number of times that a task had a long scheduling duration.
+    /// The total duration of tasks with long scheduling delays.
     ///
-    /// Here, a long scheduling duration is defined as taking longer to start execution after
-    /// scheduling than [`long_delay_threshold`][TaskMonitor::long_delay_threshold].
+    /// This is defined as tasks taking
+    /// [`long_delay_threshold`][TaskMonitor::long_delay_threshold] or longer to be executed
+    /// after being scheduled.
     ///
     /// ##### Derived metrics
     /// - **[`mean_long_delay_duration`][TaskMetrics::mean_long_delay_duration]**   
