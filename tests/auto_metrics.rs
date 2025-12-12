@@ -35,6 +35,7 @@ cfg_rt! {
             let recorder = Arc::new(metrics_util::debugging::DebuggingRecorder::new());
             metrics::set_global_recorder(recorder.clone()).unwrap();
             tokio::task::spawn(RuntimeMetricsReporterBuilder::default().with_interval(Duration::from_millis(100)).describe_and_run());
+
             let mut done = false;
             for _ in 0..1000 {
                 tokio::time::sleep(Duration::from_millis(10)).await;
@@ -55,6 +56,7 @@ cfg_rt! {
                 }
             }
             assert!(done, "metric not found");
+
             tokio::task::spawn(async {
                 // spawn a thread with a long poll time, let's see we can find it
                 std::thread::sleep(std::time::Duration::from_millis(100));
@@ -98,6 +100,22 @@ cfg_rt! {
             // check that we found exactly 1 poll in the 100ms region
             assert_eq!(long_polls_found, 1);
 
+            {
+                let snapshot = recorder.snapshotter().snapshot().into_vec();
+                if let Some(metric) = snapshot.iter().find(|metrics| {
+                    metrics.0.key().name() == "mean_polls_per_park"
+                }) {
+                    match metric {
+                        (_, Some(metrics::Unit::Percent), Some(s), DebugValue::Gauge(ratio))
+                            if &s[..] == "The ratio of the [`RuntimeMetrics::total_polls_count`] to the [`RuntimeMetrics::total_noop_count`]." =>
+                        {
+                            assert!(ratio.0 > 0.0);
+                        }
+                        _ => panic!("bad {metric:?}"),
+                    }
+                }
+            }
+
             // test task metrics
             let task_monitor = TaskMonitor::new();
             tokio::task::spawn(
@@ -131,6 +149,22 @@ cfg_rt! {
                 }
             }
             assert!(done, "metric not found");
+
+            {
+                let snapshot = recorder.snapshotter().snapshot().into_vec();
+                if let Some(metric) = snapshot.iter().find(|metrics| {
+                    metrics.0.key().name() == "mean_first_poll_delay"
+                }) {
+                    match metric {
+                        (_, Some(metrics::Unit::Percent), Some(s), DebugValue::Gauge(ratio))
+                            if &s[..] == "/// The mean duration elapsed between the instant tasks are instrumented, and the instant they are first polled." =>
+                        {
+                            assert!(ratio.0 > 0.0);
+                        }
+                        _ => panic!("bad {metric:?}"),
+                    }
+                }
+            }
         });
     }
 }

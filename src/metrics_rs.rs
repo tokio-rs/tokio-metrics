@@ -76,10 +76,24 @@ macro_rules! metric_refs {
             ),*
             $(,)?
          }
+         stable_derived {
+             $(
+                #[doc = $derived_doc:tt]
+                $derived_name:ident: $derived_kind:tt <$derived_unit:ident> $derived_opts:tt
+            ),*
+            $(,)?
+         }
          unstable {
             $(
                 #[doc = $unstable_doc:tt]
                 $unstable_name:ident: $unstable_kind:tt <$unstable_unit:ident> $unstable_opts:tt
+            ),*
+            $(,)?
+         }
+         unstable_derived {
+             $(
+                #[doc = $unstable_derived_doc:tt]
+                $unstable_derived_name:ident: $unstable_derived_kind:tt <$unstable_derived_unit:ident> $unstable_derived_opts:tt
             ),*
             $(,)?
          }
@@ -90,8 +104,15 @@ macro_rules! metric_refs {
                 $name: crate::metrics_rs::kind_to_type!($kind),
             )*
             $(
+                $derived_name: crate::metrics_rs::kind_to_type!($derived_kind),
+            )*
+            $(
                 #[cfg(tokio_unstable)]
                 $unstable_name: crate::metrics_rs::kind_to_type!($unstable_kind),
+            )*
+            $(
+                #[cfg(tokio_unstable)]
+                $unstable_derived_name: crate::metrics_rs::kind_to_type!($unstable_derived_kind),
             )*
         }
 
@@ -102,13 +123,29 @@ macro_rules! metric_refs {
                         $name: crate::metrics_rs::capture_metric_ref!(transform_fn, $name: $kind $opts),
                     )*
                     $(
+                        $derived_name: crate::metrics_rs::capture_metric_ref!(transform_fn, $derived_name: $derived_kind $derived_opts),
+                    )*
+                    $(
                         #[cfg(tokio_unstable)]
                         $unstable_name: crate::metrics_rs::capture_metric_ref!(transform_fn, $unstable_name: $unstable_kind $unstable_opts),
+                    )*
+                    $(
+                        #[cfg(tokio_unstable)]
+                        $unstable_derived_name: crate::metrics_rs::capture_metric_ref!(transform_fn, $unstable_derived_name: $unstable_derived_kind $unstable_derived_opts),
                     )*
                 }
             }
 
             fn emit(&self, metrics: $metrics_name, emit_arg: $emit_arg_type) {
+                // Emit derived metrics before base metrics because emitting base metrics may move
+                // out of `$metrics`.
+                $(
+                    crate::metrics_rs::MyMetricOp::op((&self.$derived_name, metrics.$derived_name()), emit_arg);
+                )*
+                $(
+                    #[cfg(tokio_unstable)]
+                    crate::metrics_rs::MyMetricOp::op((&self.$unstable_derived_name, metrics.$unstable_derived_name()), emit_arg);
+                )*
                 $(
                     crate::metrics_rs::MyMetricOp::op((&self.$name, metrics.$name), emit_arg);
                 )*
@@ -123,8 +160,15 @@ macro_rules! metric_refs {
                     crate::metrics_rs::describe_metric_ref!(transform_fn, $doc, $name: $kind<$unit> $opts);
                 )*
                 $(
+                    crate::metrics_rs::describe_metric_ref!(transform_fn, $derived_doc, $derived_name: $derived_kind<$derived_unit> $derived_opts);
+                )*
+                $(
                     #[cfg(tokio_unstable)]
                     crate::metrics_rs::describe_metric_ref!(transform_fn, $unstable_doc, $unstable_name: $unstable_kind<$unstable_unit> $unstable_opts);
+                )*
+                $(
+                    #[cfg(tokio_unstable)]
+                    crate::metrics_rs::describe_metric_ref!(transform_fn, $unstable_derived_doc, $unstable_derived_name: $unstable_derived_kind<$unstable_derived_unit> $unstable_derived_opts);
                 )*
             }
         }
@@ -159,6 +203,28 @@ macro_rules! metric_refs {
                     }
                 );*
                 panic!("missing metric {:?}", line);
+            }
+        }
+
+        #[test]
+        fn test_no_derived_metrics_missing() {
+            // test that no derived metrics are missing.
+            for derived_metric in <$metrics_name>::DERIVED_METRICS {
+                $(
+                    if *derived_metric == stringify!($derived_name) {
+                        continue
+                    }
+                );*
+                panic!("missing metric {:?}", derived_metric);
+            }
+            #[cfg(tokio_unstable)]
+            for unstable_derived_metric in <$metrics_name>::UNSTABLE_DERIVED_METRICS {
+                $(
+                    if *unstable_derived_metric == stringify!($unstable_derived_name) {
+                        continue
+                    }
+                );*
+                panic!("missing metric {:?}", unstable_derived_metric);
             }
         }
     }
@@ -202,6 +268,12 @@ impl<T> MyMetricOp<T> for (&metrics::Gauge, u64) {
 impl<T> MyMetricOp<T> for (&metrics::Gauge, usize) {
     fn op(self, _t: T) {
         self.0.set(self.1 as f64);
+    }
+}
+
+impl<T> MyMetricOp<T> for (&metrics::Gauge, f64) {
+    fn op(self, _t: T) {
+        self.0.set(self.1);
     }
 }
 
