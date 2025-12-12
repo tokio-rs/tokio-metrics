@@ -205,6 +205,28 @@ macro_rules! metric_refs {
                 panic!("missing metric {:?}", line);
             }
         }
+
+        #[test]
+        fn test_no_derived_metrics_missing() {
+            // test that no derived metrics are missing.
+            for derived_metric in <$metrics_name>::DERIVED_METRICS {
+                $(
+                    if *derived_metric == stringify!($derived_name) {
+                        continue
+                    }
+                );*
+                panic!("missing metric {:?}", derived_metric);
+            }
+            #[cfg(tokio_unstable)]
+            for unstable_derived_metric in <$metrics_name>::UNSTABLE_DERIVED_METRICS {
+                $(
+                    if *unstable_derived_metric == stringify!($unstable_derived_name) {
+                        continue
+                    }
+                );*
+                panic!("missing metric {:?}", unstable_derived_metric);
+            }
+        }
     }
 }
 

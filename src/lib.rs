@@ -179,6 +179,7 @@ cfg_rt! {
 )]
 pub use runtime::metrics_rs_integration::{RuntimeMetricsReporter, RuntimeMetricsReporterBuilder};
 
+mod derived_metrics;
 #[cfg(all(feature = "rt", feature = "metrics-rs-integration"))]
 mod metrics_rs;
 mod task;

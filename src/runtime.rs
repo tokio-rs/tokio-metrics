@@ -1,5 +1,6 @@
 use std::time::{Duration, Instant};
 use tokio::runtime;
+use crate::derived_metrics::derived_metrics;
 
 #[cfg(feature = "metrics-rs-integration")]
 pub(crate) mod metrics_rs_integration;
@@ -1567,20 +1568,24 @@ impl Worker {
     }
 }
 
-impl RuntimeMetrics {
-    /// Returns the ratio of the [`RuntimeMetrics::total_polls_count`] to the [`RuntimeMetrics::total_noop_count`].
-    #[cfg(tokio_unstable)]
-    pub fn mean_polls_per_park(&self) -> f64 {
-        let total_park_count = self.total_park_count - self.total_noop_count;
-        if total_park_count == 0 {
-            0.0
-        } else {
-            self.total_polls_count as f64 / total_park_count as f64
+derived_metrics!(
+    [RuntimeMetrics] {
+        stable {
+            /// Returns the ratio of the [`RuntimeMetrics::total_busy_duration`] to the [`RuntimeMetrics::elapsed`].
+            pub fn busy_ratio(&self) -> f64 {
+                self.total_busy_duration.as_nanos() as f64 / self.elapsed.as_nanos() as f64
+            }
+        }
+        unstable {
+            /// Returns the ratio of the [`RuntimeMetrics::total_polls_count`] to the [`RuntimeMetrics::total_noop_count`].
+            pub fn mean_polls_per_park(&self) -> f64 {
+                let total_park_count = self.total_park_count - self.total_noop_count;
+                if total_park_count == 0 {
+                    0.0
+                } else {
+                    self.total_polls_count as f64 / total_park_count as f64
+                }
+            }
         }
     }
-
-    /// Returns the ratio of the [`RuntimeMetrics::total_busy_duration`] to the [`RuntimeMetrics::elapsed`].
-    pub fn busy_ratio(&self) -> f64 {
-        self.total_busy_duration.as_nanos() as f64 / self.elapsed.as_nanos() as f64
-    }
-}
+);
