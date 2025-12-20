@@ -54,6 +54,59 @@
 //!     }
 //! }
 //! ```
+//!
+//! ### Monitoring and publishing task metrics
+//!
+//! If the `metrics-rs-integration` feature is enabled, this crate allows
+//! publishing task metrics externally via [metrics-rs](metrics) exporters.
+//!
+//! For example, you can use [metrics_exporter_prometheus] to make metrics visible
+//! to [Prometheus]. You can see the [metrics_exporter_prometheus] and [metrics-rs](metrics)
+//! docs for guidance on configuring exporters.
+//!
+//! The published metrics are the same as the fields and methods of [TaskMetrics], but with
+//! a "tokio_" prefix added, for example `tokio_instrumented_count`.
+//!
+//! [metrics_exporter_prometheus]: https://docs.rs/metrics_exporter_prometheus
+//! [TaskMetrics]: crate::TaskMetrics
+//! [Prometheus]: https://prometheus.io
+//!
+//! This example exports [Prometheus] metrics by listening on a local Unix socket
+//! called `prometheus.sock`, which you can access for debugging by
+//! `curl --unix-socket prometheus.sock localhost`.
+//!
+//! ```
+//! use std::time::Duration;
+//!
+//! use metrics::Key;
+//!
+//! #[tokio::main]
+//! async fn main() {
+//!     metrics_exporter_prometheus::PrometheusBuilder::new()
+//!         .with_http_uds_listener("prometheus.sock")
+//!         .install()
+//!         .unwrap();
+//!     let monitor = tokio_metrics::TaskMonitor::new();
+//!     tokio::task::spawn(
+//!         tokio_metrics::TaskMetricsReporterBuilder::new(|name| {
+//!             let name = name.replacen("tokio_", "my_task_", 1);
+//!             Key::from_parts(name, &[("application", "my_app")])
+//!         })
+//!         // the default metric sampling interval is 30 seconds, which is
+//!         // too long for quick tests, so have it be 1 second.
+//!         .with_interval(std::time::Duration::from_secs(1))
+//!         .describe_and_run(monitor.clone()),
+//!     );
+//!     // Run some code
+//!     tokio::task::spawn(monitor.instrument(async move {
+//!         for _ in 0..1000 {
+//!             tokio::time::sleep(Duration::from_millis(10)).await;
+//!         }
+//!     }))
+//!     .await
+//!     .unwrap();
+//! }
+//! ```
 
 #![cfg_attr(
     feature = "rt",
@@ -113,7 +166,7 @@ For example, you can use [metrics_exporter_prometheus] to make metrics visible
 to [Prometheus]. You can see the [metrics_exporter_prometheus] and [metrics-rs](metrics)
 docs for guidance on configuring exporters.
 
-The published metrics are the same as the fields of [RuntimeMetrics], but with
+The published metrics are the same as the fields and methods of [RuntimeMetrics], but with
 a "tokio_" prefix added, for example `tokio_workers_count`.
 
 [metrics_exporter_prometheus]: https://docs.rs/metrics_exporter_prometheus
