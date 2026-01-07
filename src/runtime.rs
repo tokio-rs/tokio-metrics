@@ -150,6 +150,12 @@ define_runtime_metrics! {
         /// ```
         pub workers_count: usize,
 
+        /// The current number of alive tasks in the runtime.
+        ///
+        /// ##### Definition
+        /// This metric is derived from [`tokio::runtime::RuntimeMetrics::num_alive_tasks`].
+        pub live_tasks_count: usize,
+
         /// The number of times worker threads parked.
         ///
         /// The worker park count increases by one each time the worker parks the thread waiting for
@@ -1155,12 +1161,6 @@ define_runtime_metrics! {
         /// This metric is derived from [`tokio::runtime::RuntimeMetrics::blocking_queue_depth`].
         pub blocking_queue_depth: usize,
 
-        /// The current number of alive tasks in the runtime.
-        ///
-        /// ##### Definition
-        /// This metric is derived from [`tokio::runtime::RuntimeMetrics::num_alive_tasks`].
-        pub live_tasks_count: usize,
-
         /// The number of additional threads spawned by the runtime.
         ///
         /// ##### Definition
@@ -1267,6 +1267,7 @@ impl RuntimeIntervals {
 
         let mut metrics = RuntimeMetrics {
             workers_count: self.runtime.num_workers(),
+            live_tasks_count: self.runtime.num_alive_tasks(),
             elapsed: now - self.started_at,
             global_queue_depth: self.runtime.global_queue_depth(),
             min_park_count: u64::MAX,
@@ -1556,12 +1557,6 @@ impl Worker {
             // Blocking queue depth is an absolute value too
             metrics.blocking_queue_depth = rt.blocking_queue_depth();
 
-            #[allow(deprecated)]
-            {
-                // use the deprecated active_tasks_count here to support slightly older versions of Tokio,
-                // it's the same.
-                metrics.live_tasks_count = rt.active_tasks_count();
-            }
             metrics.blocking_threads_count = rt.num_blocking_threads();
             metrics.idle_blocking_threads_count = rt.num_idle_blocking_threads();
         }
