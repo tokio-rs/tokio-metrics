@@ -249,6 +249,8 @@ metric_refs! {
         stable {
             /// The number of worker threads used by the runtime
             workers_count: Gauge<Count> [],
+            /// The current number of alive tasks in the runtime.
+            live_tasks_count: Gauge<Count> [],
             /// The number of times worker threads parked
             max_park_count: Gauge<Count> [],
             /// The minimum number of times any worker thread parked
@@ -323,8 +325,6 @@ metric_refs! {
             min_local_queue_depth: Gauge<Count> [],
             /// The number of tasks currently waiting to be executed in the runtime's blocking threadpool.
             blocking_queue_depth: Gauge<Count> [],
-            /// The current number of alive tasks in the runtime.
-            live_tasks_count: Gauge<Count> [],
             /// The number of additional threads spawned by the runtime.
             blocking_threads_count: Gauge<Count> [],
             /// The number of idle threads, which have spawned by the runtime for `spawn_blocking` calls.
