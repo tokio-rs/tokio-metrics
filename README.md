@@ -224,6 +224,8 @@ tokio::spawn(do_work());
   The number of tasks currently scheduled in the runtime's global queue.
 - **[`elapsed`]**
   Total amount of time elapsed since observing runtime metrics.
+- **[`live_tasks_count`]**
+  The current number of alive tasks in the runtime.
 
 #### Unstable Base Metrics
 - **[`mean_poll_duration`](https://docs.rs/tokio-metrics/0.4.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.mean_poll_duration)**
@@ -280,8 +282,6 @@ tokio::spawn(do_work());
   The minimum number of tasks currently scheduled any worker's local queue.
 - **[`blocking_queue_depth`]**
   The number of tasks currently waiting to be executed in the blocking threadpool.
-- **[`live_tasks_count`]**
-  The current number of alive tasks in the runtime.
 - **[`blocking_threads_count`]**
   The number of additional threads spawned by the runtime.
 - **[`idle_blocking_threads_count`]**
