@@ -1409,17 +1409,6 @@ pub struct TaskMetrics {
     ///   The mean duration of short scheduling delays.
     pub total_short_delay_count: u64,
 
-    /// The total count of tasks with long scheduling delays.
-    ///
-    /// This is defined as tasks taking
-    /// [`long_delay_threshold`][TaskMonitor::long_delay_threshold] or longer to be executed
-    /// after being scheduled.
-    ///
-    /// ##### Derived metrics
-    /// - **[`mean_long_delay_duration`][TaskMetrics::mean_long_delay_duration]**
-    ///   The mean duration of short scheduling delays.
-    pub total_long_delay_count: u64,
-
     /// The total duration of tasks with short scheduling delays.
     ///
     /// This is defined as tasks taking strictly less than
@@ -1430,6 +1419,17 @@ pub struct TaskMetrics {
     /// - **[`mean_short_delay_duration`][TaskMetrics::mean_short_delay_duration]**
     ///   The mean duration of short scheduling delays.
     pub total_short_delay_duration: Duration,
+
+    /// The total count of tasks with long scheduling delays.
+    ///
+    /// This is defined as tasks taking
+    /// [`long_delay_threshold`][TaskMonitor::long_delay_threshold] or longer to be executed
+    /// after being scheduled.
+    ///
+    /// ##### Derived metrics
+    /// - **[`mean_long_delay_duration`][TaskMetrics::mean_long_delay_duration]**
+    ///   The mean duration of short scheduling delays.
+    pub total_long_delay_count: u64,
 
     /// The total duration of tasks with long scheduling delays.
     ///
@@ -2301,20 +2301,6 @@ derived_metrics!(
                 mean(self.total_fast_poll_duration, self.total_fast_poll_count)
             }
 
-            /// The average time taken for a task with a short scheduling delay to be executed after being
-            /// scheduled.
-            ///
-            /// ##### Definition
-            /// This metric is derived from
-            /// [`total_short_delay_duration`][TaskMetrics::total_short_delay_duration] ÷
-            /// [`total_short_delay_count`][TaskMetrics::total_short_delay_count].
-            pub fn mean_short_delay_duration(&self) -> Duration {
-                mean(
-                    self.total_short_delay_duration,
-                    self.total_short_delay_count,
-                )
-            }
-
             /// The mean duration of slow polls.
             ///
             /// ##### Definition
@@ -2404,6 +2390,20 @@ derived_metrics!(
             /// ```
             pub fn mean_slow_poll_duration(&self) -> Duration {
                 mean(self.total_slow_poll_duration, self.total_slow_poll_count)
+            }
+
+            /// The average time taken for a task with a short scheduling delay to be executed after being
+            /// scheduled.
+            ///
+            /// ##### Definition
+            /// This metric is derived from
+            /// [`total_short_delay_duration`][TaskMetrics::total_short_delay_duration] ÷
+            /// [`total_short_delay_count`][TaskMetrics::total_short_delay_count].
+            pub fn mean_short_delay_duration(&self) -> Duration {
+                mean(
+                    self.total_short_delay_duration,
+                    self.total_short_delay_count,
+                )
             }
 
             /// The average scheduling delay for a task which takes a long time to start executing after

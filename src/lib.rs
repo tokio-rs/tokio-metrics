@@ -103,55 +103,72 @@ async fn do_work() {
     }
 }
 ```
-
-### Monitoring and publishing runtime metrics
-
-If the `metrics-rs-integration` feature is additionally enabled, this crate allows
-publishing runtime metrics externally via [metrics-rs](metrics) exporters.
-
-For example, you can use [metrics_exporter_prometheus] to make metrics visible
-to [Prometheus]. You can see the [metrics_exporter_prometheus] and [metrics-rs](metrics)
-docs for guidance on configuring exporters.
-
-The published metrics are the same as the fields of [RuntimeMetrics], but with
-a "tokio_" prefix added, for example `tokio_workers_count`.
-
-[metrics_exporter_prometheus]: https://docs.rs/metrics_exporter_prometheus
-[RuntimeMetrics]: crate::RuntimeMetrics
-[Prometheus]: https://prometheus.io
-
-This example exports [Prometheus] metrics by listening on a local Unix socket
-called `prometheus.sock`, which you can access for debugging by
-`curl --unix-socket prometheus.sock localhost`.
-
-```
-use std::time::Duration;
-
-#[tokio::main]
-async fn main() {
-    metrics_exporter_prometheus::PrometheusBuilder::new()
-        .with_http_uds_listener("prometheus.sock")
-        .install()
-        .unwrap();
-    tokio::task::spawn(
-        tokio_metrics::RuntimeMetricsReporterBuilder::default()
-            // the default metric sampling interval is 30 seconds, which is
-            // too long for quick tests, so have it be 1 second.
-            .with_interval(std::time::Duration::from_secs(1))
-            .describe_and_run(),
-    );
-    // Run some code
-    tokio::task::spawn(async move {
-        for _ in 0..1000 {
-            tokio::time::sleep(Duration::from_millis(10)).await;
-        }
-    })
-    .await
-    .unwrap();
-}
-```
 "##
 )]
+
+//! ### Monitoring and publishing metrics
+//!
+//! If the `metrics-rs-integration` feature is additionally enabled, this crate allows
+//! publishing metrics externally via [metrics-rs](metrics) exporters.
+//!
+//! For example, you can use [metrics_exporter_prometheus] to make metrics visible
+//! to [Prometheus]. You can see the [metrics_exporter_prometheus] and [metrics-rs](metrics)
+//! docs for guidance on configuring exporters.
+//!
+//! The published metrics are the same as the fields and methods of
+#![cfg_attr(feature = "rt", doc = "[RuntimeMetrics] and")]
+//! [TaskMetrics], but with a "tokio_" prefix added, for example
+#![cfg_attr(feature = "rt", doc = "`tokio_workers_count` and")]
+//! `tokio_instrumented_count`.
+//!
+//! [metrics_exporter_prometheus]: https://docs.rs/metrics_exporter_prometheus
+#![cfg_attr(feature = "rt", doc = "[RuntimeMetrics]: crate::RuntimeMetrics")]
+//! [Prometheus]: https://prometheus.io
+//! [TaskMetrics]: crate::TaskMetrics
+//!
+//! This example exports [Prometheus] metrics by listening on a local Unix socket
+//! called `prometheus.sock`, which you can access for debugging by
+//! `curl --unix-socket prometheus.sock localhost`.
+//!
+//! ```
+//! use std::time::Duration;
+//!
+//! use metrics::Key;
+//!
+//! #[tokio::main]
+//! async fn main() {
+//!     metrics_exporter_prometheus::PrometheusBuilder::new()
+//!         .with_http_uds_listener("prometheus.sock")
+//!         .install()
+//!         .unwrap();
+#![cfg_attr(
+    feature = "rt",
+    doc = r##"
+    // This line launches the runtime reporter that monitors the Tokio runtime and exports the metrics.
+    tokio::task::spawn(
+        tokio_metrics::RuntimeMetricsReporterBuilder::default().describe_and_run(),
+    );
+"##
+)]
+//!     let monitor = tokio_metrics::TaskMonitor::new();
+//!     // This line launches the task reporter that monitors Tokio tasks and exports the metrics.
+//!     tokio::task::spawn(
+//!         tokio_metrics::TaskMetricsReporterBuilder::new(|name| {
+//!             let name = name.replacen("tokio_", "my_task_", 1);
+//!             Key::from_parts(name, &[("application", "my_app")])
+//!         })
+//!         .describe_and_run(monitor.clone()),
+//!     );
+//!     // Run some code.
+//!     tokio::task::spawn(monitor.instrument(async move {
+//!         for _ in 0..1000 {
+//!             tokio::time::sleep(Duration::from_millis(10)).await;
+//!         }
+//!     }))
+//!     .await
+//!     .unwrap();
+//! }
+//! ```
 
 macro_rules! cfg_rt {
     ($($item:item)*) => {
