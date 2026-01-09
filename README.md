@@ -57,65 +57,65 @@ loop {
 
 ### Task Metrics
 #### Base Metrics
-- **[`instrumented_count`]**  
+- **[`instrumented_count`]**
   The number of tasks instrumented.
-- **[`dropped_count`]**  
+- **[`dropped_count`]**
   The number of tasks dropped.
-- **[`first_poll_count`]**  
+- **[`first_poll_count`]**
   The number of tasks polled for the first time.
-- **[`total_first_poll_delay`]**  
+- **[`total_first_poll_delay`]**
   The total duration elapsed between the instant tasks are instrumented, and the instant they are first polled.
-- **[`total_idled_count`]**  
+- **[`total_idled_count`]**
   The total number of times that tasks idled, waiting to be awoken.
-- **[`total_idle_duration`]**  
+- **[`total_idle_duration`]**
   The total duration that tasks idled.
-- **[`max_idle_duration`]**  
+- **[`max_idle_duration`]**
   The maximum idle duration that a task took.
-- **[`total_scheduled_count`]**  
+- **[`total_scheduled_count`]**
   The total number of times that tasks were awoken (and then, presumably, scheduled for execution).
-- **[`total_scheduled_duration`]**  
+- **[`total_scheduled_duration`]**
   The total duration that tasks spent waiting to be polled after awakening.
-- **[`total_poll_count`]**  
+- **[`total_poll_count`]**
   The total number of times that tasks were polled.
-- **[`total_poll_duration`]**  
+- **[`total_poll_duration`]**
   The total duration elapsed during polls.
-- **[`total_fast_poll_count`]**  
+- **[`total_fast_poll_count`]**
   The total number of times that polling tasks completed swiftly.
-- **[`total_fast_poll_duration`]**  
+- **[`total_fast_poll_duration`]**
   The total duration of fast polls.
-- **[`total_slow_poll_count`]**  
+- **[`total_slow_poll_count`]**
   The total number of times that polling tasks completed slowly.
-- **[`total_slow_poll_duration`]**  
+- **[`total_slow_poll_duration`]**
   The total duration of slow polls.
-- **[`total_short_delay_count`]**  
+- **[`total_short_delay_count`]**
   The total count of short scheduling delays.
-- **[`total_short_delay_duration`]**  
+- **[`total_short_delay_duration`]**
   The total duration of short scheduling delays.
-- **[`total_long_delay_count`]**  
+- **[`total_long_delay_count`]**
   The total count of long scheduling delays.
-- **[`total_long_delay_duration`]**  
+- **[`total_long_delay_duration`]**
   The total duration of long scheduling delays.
 
 #### Derived Metrics
-- **[`mean_first_poll_delay`]**  
+- **[`mean_first_poll_delay`]**
   The mean duration elapsed between the instant tasks are instrumented, and the instant they are first polled.
-- **[`mean_idle_duration`]**  
+- **[`mean_idle_duration`]**
   The mean duration of idles.
-- **[`mean_scheduled_duration`]**  
+- **[`mean_scheduled_duration`]**
   The mean duration that tasks spent waiting to be executed after awakening.
-- **[`mean_poll_duration`]**  
+- **[`mean_poll_duration`]**
   The mean duration of polls.
-- **[`slow_poll_ratio`]**  
+- **[`slow_poll_ratio`]**
   The ratio between the number polls categorized as slow and fast.
-- **[`long_delay_ratio`]**  
+- **[`long_delay_ratio`]**
   The ratio between the number of long scheduling delays and the number of total schedules.
-- **[`mean_fast_poll_duration`]**  
+- **[`mean_fast_poll_duration`]**
   The mean duration of fast polls.
-- **[`mean_slow_poll_duration`]**  
+- **[`mean_slow_poll_duration`]**
   The mean duration of slow polls.
-- **[`mean_short_delay_duration`]**  
+- **[`mean_short_delay_duration`]**
   The mean duration of short schedules.
-- **[`mean_long_delay_duration`]**  
+- **[`mean_long_delay_duration`]**
   The mean duration of long schedules.
 
 [`instrumented_count`]: https://docs.rs/tokio-metrics/0.4.*/tokio_metrics/struct.TaskMetrics.html#structfield.instrumented_count
@@ -206,97 +206,97 @@ tokio::spawn(do_work());
 
 ### Runtime Metrics
 #### Stable Base Metrics
-- **[`workers_count`]**  
+- **[`workers_count`]**
   The number of worker threads used by the runtime.
-- **[`total_park_count`]**  
+- **[`total_park_count`]**
   The number of times worker threads parked.
-- **[`max_park_count`]**  
+- **[`max_park_count`]**
   The maximum number of times any worker thread parked.
-- **[`min_park_count`]**  
+- **[`min_park_count`]**
   The minimum number of times any worker thread parked.
-- **[`total_busy_duration`]**  
+- **[`total_busy_duration`]**
   The amount of time worker threads were busy.
-- **[`max_busy_duration`]**  
+- **[`max_busy_duration`]**
   The maximum amount of time a worker thread was busy.
-- **[`min_busy_duration`]**  
+- **[`min_busy_duration`]**
   The minimum amount of time a worker thread was busy.
-- **[`global_queue_depth`]**  
+- **[`global_queue_depth`]**
   The number of tasks currently scheduled in the runtime's global queue.
-- **[`elapsed`]**  
+- **[`elapsed`]**
   Total amount of time elapsed since observing runtime metrics.
 
 #### Unstable Base Metrics
-- **[`mean_poll_duration`](https://docs.rs/tokio-metrics/0.4.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.mean_poll_duration)**  
+- **[`mean_poll_duration`](https://docs.rs/tokio-metrics/0.4.*/tokio_metrics/struct.RuntimeMetrics.html#structfield.mean_poll_duration)**
   The average duration of a single invocation of poll on a task.
-- **[`mean_poll_duration_worker_min`]**  
+- **[`mean_poll_duration_worker_min`]**
   The average duration of a single invocation of poll on a task on the worker with the lowest value.
-- **[`mean_poll_duration_worker_max`]**  
+- **[`mean_poll_duration_worker_max`]**
   The average duration of a single invocation of poll on a task on the worker with the highest value.
-- **[`poll_time_histogram`]**  
+- **[`poll_time_histogram`]**
   A histogram of task polls since the previous probe grouped by poll times.
-- **[`total_noop_count`]**  
+- **[`total_noop_count`]**
   The number of times worker threads unparked but performed no work before parking again.
-- **[`max_noop_count`]**  
+- **[`max_noop_count`]**
   The maximum number of times any worker thread unparked but performed no work before parking again.
-- **[`min_noop_count`]**  
+- **[`min_noop_count`]**
   The minimum number of times any worker thread unparked but performed no work before parking again.
-- **[`total_steal_count`]**  
+- **[`total_steal_count`]**
   The number of tasks worker threads stole from another worker thread.
-- **[`max_steal_count`]**  
+- **[`max_steal_count`]**
   The maximum number of tasks any worker thread stole from another worker thread.
-- **[`min_steal_count`]**  
+- **[`min_steal_count`]**
   The minimum number of tasks any worker thread stole from another worker thread.
-- **[`total_steal_operations`]**  
+- **[`total_steal_operations`]**
   The number of times worker threads stole tasks from another worker thread.
-- **[`max_steal_operations`]**  
+- **[`max_steal_operations`]**
   The maximum number of times any worker thread stole tasks from another worker thread.
-- **[`min_steal_operations`]**  
+- **[`min_steal_operations`]**
   The minimum number of times any worker thread stole tasks from another worker thread.
-- **[`num_remote_schedules`]**  
+- **[`num_remote_schedules`]**
   The number of tasks scheduled from outside of the runtime.
-- **[`total_local_schedule_count`]**  
+- **[`total_local_schedule_count`]**
   The number of tasks scheduled from worker threads.
-- **[`max_local_schedule_count`]**  
+- **[`max_local_schedule_count`]**
   The maximum number of tasks scheduled from any one worker thread.
-- **[`min_local_schedule_count`]**  
+- **[`min_local_schedule_count`]**
   The minimum number of tasks scheduled from any one worker thread.
-- **[`total_overflow_count`]**  
+- **[`total_overflow_count`]**
   The number of times worker threads saturated their local queues.
-- **[`max_overflow_count`]**  
+- **[`max_overflow_count`]**
   The maximum number of times any one worker saturated its local queue.
-- **[`min_overflow_count`]**  
+- **[`min_overflow_count`]**
   The minimum number of times any one worker saturated its local queue.
-- **[`total_polls_count`]**  
+- **[`total_polls_count`]**
   The number of tasks that have been polled across all worker threads.
-- **[`max_polls_count`]**  
+- **[`max_polls_count`]**
   The maximum number of tasks that have been polled in any worker thread.
-- **[`min_polls_count`]**  
+- **[`min_polls_count`]**
   The minimum number of tasks that have been polled in any worker thread.
-- **[`total_local_queue_depth`]**  
+- **[`total_local_queue_depth`]**
   The total number of tasks currently scheduled in workers' local queues.
-- **[`max_local_queue_depth`]**  
+- **[`max_local_queue_depth`]**
   The maximum number of tasks currently scheduled any worker's local queue.
-- **[`min_local_queue_depth`]**  
+- **[`min_local_queue_depth`]**
   The minimum number of tasks currently scheduled any worker's local queue.
-- **[`blocking_queue_depth`]**  
+- **[`blocking_queue_depth`]**
   The number of tasks currently waiting to be executed in the blocking threadpool.
-- **[`live_tasks_count`]**  
+- **[`live_tasks_count`]**
   The current number of alive tasks in the runtime.
-- **[`blocking_threads_count`]**  
+- **[`blocking_threads_count`]**
   The number of additional threads spawned by the runtime.
-- **[`idle_blocking_threads_count`]**  
+- **[`idle_blocking_threads_count`]**
   The number of idle threads, which have spawned by the runtime for `spawn_blocking` calls.
-- **[`budget_forced_yield_count`]**  
+- **[`budget_forced_yield_count`]**
   The number of times that a task was forced to yield because it exhausted its budget.
-- **[`io_driver_ready_count`]**  
+- **[`io_driver_ready_count`]**
   The number of ready events received from the I/O driver.
 
 #### Stable Derived Metrics
-- **[`busy_ratio`]**  
+- **[`busy_ratio`]**
   The ratio between the amount of time worker threads were busy and the total time elapsed since observing runtime metrics.
 
 #### Unstable Derived Metrics
-- **[`mean_polls_per_park`]**  
+- **[`mean_polls_per_park`]**
   The ratio of the number of tasks that have been polled and the number of times worker threads unparked but performed no work before parking again.
 
 
