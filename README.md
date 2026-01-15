@@ -22,7 +22,7 @@ runtime and per-task metrics.
 
 ```toml
 [dependencies]
-tokio-metrics = "0.4.6"
+tokio-metrics = "0.4.7"
 
 ```
 
@@ -180,7 +180,7 @@ The `rt` feature of `tokio-metrics` is on by default; simply check that you do
 not set `default-features = false` when declaring it as a dependency; e.g.:
 ```toml
 [dependencies]
-tokio-metrics = "0.4.6"
+tokio-metrics = "0.4.7"
 ```
 
 From within a Tokio runtime, use `RuntimeMonitor` to monitor key metrics of
@@ -363,7 +363,7 @@ If you want to use [Prometheus], you could have this `Cargo.toml`:
 
 ```toml
 [dependencies]
-tokio-metrics = { version = "0.4.6", features = ["metrics-rs-integration"] }
+tokio-metrics = { version = "0.4.7", features = ["metrics-rs-integration"] }
 metrics = "0.24"
 # You don't actually need to use the Prometheus exporter with uds-listener enabled,
 # it's just here as an example.

@@ -1,3 +1,18 @@
+# 0.4.7 (January 15, 2025)
+- docs: fix typos in `TaskMetrics` ([#103])
+- rt: integrate derived metrics with metrics.rs ([#104])
+- fix: indentation in task.rs ([#105])
+- docs: update readme and crate documentation ([#107])
+- rt: make `live_tasks_count` (`num_alive_tasks()`) stable([#108])
+- docs: move `live_tasks_count` to stable metrics in README ([#109])
+
+[#103]: https://github.com/tokio-rs/tokio-metrics/pull/103
+[#104]: https://github.com/tokio-rs/tokio-metrics/pull/104
+[#105]: https://github.com/tokio-rs/tokio-metrics/pull/105
+[#107]: https://github.com/tokio-rs/tokio-metrics/pull/107
+[#108]: https://github.com/tokio-rs/tokio-metrics/pull/108
+[#109]: https://github.com/tokio-rs/tokio-metrics/pull/109
+
 # 0.4.6 (December 3rd, 2025)
 - add metrics_rs integration to task metrics ([#100])
 - readme: add max_idle_duration to readme ([#98])
