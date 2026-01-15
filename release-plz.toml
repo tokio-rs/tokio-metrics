@@ -1,0 +1,9 @@
+[workspace]
+git_release_enable = false
+changelog_update = false
+
+[[package]]
+name = "tokio-metrics"
+changelog_path = "./CHANGELOG.md"
+changelog_update = true
+git_release_enable = true
