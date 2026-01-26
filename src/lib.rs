@@ -207,4 +207,4 @@ mod task;
     doc(cfg(all(feature = "rt", feature = "metrics-rs-integration")))
 )]
 pub use task::metrics_rs_integration::{TaskMetricsReporter, TaskMetricsReporterBuilder};
-pub use task::{Instrumented, TaskMetrics, TaskMonitor};
+pub use task::{Instrumented, TaskIntervals, TaskMetrics, TaskMonitor};
