@@ -2078,6 +2078,12 @@ impl Default for TaskMonitor {
     }
 }
 
+impl Default for TaskMonitorBase {
+    fn default() -> TaskMonitorBase {
+        TaskMonitorBase::new()
+    }
+}
+
 derived_metrics!(
     [TaskMetrics] {
         stable {
