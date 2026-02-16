@@ -516,14 +516,28 @@ pub(crate) mod metrics_rs_integration;
 /// its interval-sampled counterpart will also overflow.
 #[derive(Clone, Debug)]
 pub struct TaskMonitor {
-    base: Arc<TaskMonitorBase>,
+    base: ClonableTaskMonitorBase,
 }
 
 impl Deref for TaskMonitor {
     type Target = TaskMonitorBase;
 
     fn deref(&self) -> &Self::Target {
-        &self.base
+        &self.base.0
+    }
+}
+
+/// Wrapper type for a base task monitor that is clonable.
+///
+/// You probably want [`TaskMonitor`].
+#[derive(Clone, Debug)]
+pub struct ClonableTaskMonitorBase(Arc<TaskMonitorBase>);
+
+impl Deref for ClonableTaskMonitorBase {
+    type Target = TaskMonitorBase;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 
@@ -572,7 +586,7 @@ impl TaskMonitorBuilder {
     pub fn build(self) -> TaskMonitor {
         let base = self.build_static();
         TaskMonitor {
-            base: Arc::new(base),
+            base: ClonableTaskMonitorBase(Arc::new(base)),
         }
     }
 
@@ -590,7 +604,7 @@ impl TaskMonitorBuilder {
 pin_project! {
     /// An async task that has been instrumented with [`TaskMonitor::instrument`].
     #[derive(Debug)]
-    pub struct Instrumented<T, Monitor: Deref<Target = TaskMonitorBase> = Arc<TaskMonitorBase>> {
+    pub struct Instrumented<T, Monitor: Deref<Target = TaskMonitorBase> = ClonableTaskMonitorBase> {
         // The task being instrumented
         #[pin]
         task: T,
@@ -1633,7 +1647,7 @@ impl TaskMonitor {
     pub fn with_slow_poll_threshold(slow_poll_cut_off: Duration) -> TaskMonitor {
         let base = TaskMonitorBase::create(slow_poll_cut_off, Self::DEFAULT_LONG_DELAY_THRESHOLD);
         TaskMonitor {
-            base: Arc::new(base),
+            base: ClonableTaskMonitorBase(Arc::new(base)),
         }
     }
 
@@ -2758,7 +2772,7 @@ impl<Monitor: Send + Sync> ArcWake for State<Monitor> {
 /// See that method's documentation for more details.
 #[derive(Debug)]
 pub struct TaskIntervals<
-    Metrics: Deref<Target = TaskMonitorBase> + Send + Sync + 'static = Arc<TaskMonitorBase>,
+    Metrics: Deref<Target = TaskMonitorBase> + Send + Sync + 'static = ClonableTaskMonitorBase,
 > {
     metrics: Metrics,
     previous: Option<TaskMetrics>,
