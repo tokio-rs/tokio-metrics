@@ -590,7 +590,7 @@ impl TaskMonitorBuilder {
 pin_project! {
     /// An async task that has been instrumented with [`TaskMonitor::instrument`].
     #[derive(Debug)]
-    pub struct Instrumented<T, Monitor: Deref<Target = TaskMonitorBase> = TaskMonitor> {
+    pub struct Instrumented<T, M: Deref<Target = TaskMonitorBase> = TaskMonitor> {
         // The task being instrumented
         #[pin]
         task: T,
@@ -603,10 +603,10 @@ pin_project! {
         idled_at: u64,
 
         // State shared between the task and its instrumented waker.
-        state: Arc<State<Monitor>>,
+        state: Arc<State<M>>,
     }
 
-    impl<T, Monitor: Deref<Target = TaskMonitorBase>> PinnedDrop for Instrumented<T, Monitor> {
+    impl<T, M: Deref<Target = TaskMonitorBase>> PinnedDrop for Instrumented<T, M> {
         fn drop(this: Pin<&mut Self>) {
             this.state.metrics.metrics.dropped_count.fetch_add(1, SeqCst);
         }
@@ -1921,20 +1921,20 @@ impl TaskMonitorBase {
     /// ```
     ///
     /// Refer to [`TaskMonitor::instrument`] for for more examples.
-    pub fn instrument<F, Monitor: Deref<Target = TaskMonitorBase> + Send + Sync + 'static>(
+    pub fn instrument<F, M: Deref<Target = TaskMonitorBase> + Send + Sync + 'static>(
         task: F,
-        monitor: Monitor,
-    ) -> Instrumented<F, Monitor> {
+        monitor: M,
+    ) -> Instrumented<F, M> {
         monitor.metrics.instrumented_count.fetch_add(1, SeqCst);
 
-        let state: State<Monitor> = State {
+        let state: State<M> = State {
             metrics: monitor,
             instrumented_at: Instant::now(),
             woke_at: AtomicU64::new(0),
             waker: AtomicWaker::new(),
         };
 
-        let instrumented: Instrumented<F, Monitor> = Instrumented {
+        let instrumented: Instrumented<F, M> = Instrumented {
             task,
             did_poll_once: false,
             idled_at: 0,
@@ -2582,8 +2582,8 @@ derived_metrics!(
     }
 );
 
-impl<T: Future, Monitor: Deref<Target = TaskMonitorBase> + Send + Sync + 'static> Future
-    for Instrumented<T, Monitor>
+impl<T: Future, M: Deref<Target = TaskMonitorBase> + Send + Sync + 'static> Future
+    for Instrumented<T, M>
 {
     type Output = T::Output;
 
@@ -2600,9 +2600,9 @@ impl<T: Stream> Stream for Instrumented<T> {
     }
 }
 
-fn instrument_poll<T, Monitor: Deref<Target = TaskMonitorBase> + Send + Sync + 'static, Out>(
+fn instrument_poll<T, M: Deref<Target = TaskMonitorBase> + Send + Sync + 'static, Out>(
     cx: &mut Context<'_>,
-    instrumented: Pin<&mut Instrumented<T, Monitor>>,
+    instrumented: Pin<&mut Instrumented<T, M>>,
     poll_fn: impl FnOnce(Pin<&mut T>, &mut Context<'_>) -> Poll<Out>,
 ) -> Poll<Out> {
     let poll_start = Instant::now();
@@ -2726,7 +2726,7 @@ fn instrument_poll<T, Monitor: Deref<Target = TaskMonitorBase> + Send + Sync + '
     ret
 }
 
-impl<Monitor> State<Monitor> {
+impl<M> State<M> {
     fn on_wake(&self) {
         let woke_at: u64 = match self.instrumented_at.elapsed().as_nanos().try_into() {
             Ok(woke_at) => woke_at,
@@ -2741,13 +2741,13 @@ impl<Monitor> State<Monitor> {
     }
 }
 
-impl<Monitor: Send + Sync> ArcWake for State<Monitor> {
-    fn wake_by_ref(arc_self: &Arc<State<Monitor>>) {
+impl<M: Send + Sync> ArcWake for State<M> {
+    fn wake_by_ref(arc_self: &Arc<State<M>>) {
         arc_self.on_wake();
         arc_self.waker.wake();
     }
 
-    fn wake(self: Arc<State<Monitor>>) {
+    fn wake(self: Arc<State<M>>) {
         self.on_wake();
         self.waker.wake();
     }
