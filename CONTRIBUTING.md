@@ -11,7 +11,7 @@ git checkout main && release-plz update
 git commit -a
 ```
 
-Then open a PR for the release and get it approved. Even if you have bypass permissions on branch protection, always use a PR so CI runs before the release publishes. Once merged, the release workflow will automatically publish to crates.io and create a GitHub release.
+Then open a PR for the release and get it approved. Once merged, the release workflow will automatically publish to crates.io and create a GitHub release.
 
 ## How to test docs.rs changes
 
