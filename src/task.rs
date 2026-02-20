@@ -608,7 +608,7 @@ pin_project! {
 
     impl<T, M: Deref<Target = TaskMonitorCore>> PinnedDrop for Instrumented<T, M> {
         fn drop(this: Pin<&mut Self>) {
-            this.state.metrics.metrics.dropped_count.fetch_add(1, SeqCst);
+            this.state.monitor.metrics.dropped_count.fetch_add(1, SeqCst);
         }
     }
 }
@@ -1537,9 +1537,9 @@ struct RawMetrics {
 }
 
 #[derive(Debug)]
-struct State<Metrics> {
+struct State<M> {
     /// Where metrics should be recorded
-    metrics: Metrics,
+    monitor: M,
 
     /// Instant at which the task was instrumented. This is used to track the time to first poll.
     instrumented_at: Instant,
@@ -1928,7 +1928,7 @@ impl TaskMonitorCore {
         monitor.metrics.instrumented_count.fetch_add(1, SeqCst);
 
         let state: State<M> = State {
-            metrics: monitor,
+            monitor,
             instrumented_at: Instant::now(),
             woke_at: AtomicU64::new(0),
             waker: AtomicWaker::new(),
@@ -2610,7 +2610,7 @@ fn instrument_poll<T, M: Deref<Target = TaskMonitorCore> + Send + Sync + 'static
     let idled_at = this.idled_at;
     let state = this.state;
     let instrumented_at = state.instrumented_at;
-    let metrics = &state.metrics.metrics;
+    let metrics = &state.monitor.metrics;
     /* accounting for time-to-first-poll and tasks-count */
     // is this the first time this task has been polled?
     if !*this.did_poll_once {
