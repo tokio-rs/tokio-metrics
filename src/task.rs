@@ -540,14 +540,54 @@ pub struct TaskMonitorCore {
 /// Provides an interface for constructing a [`TaskMonitor`] with specialized configuration
 /// parameters.
 #[derive(Clone, Debug, Default)]
-pub struct TaskMonitorBuilder {
-    slow_poll_threshold: Option<Duration>,
-    long_delay_threshold: Option<Duration>,
-}
+pub struct TaskMonitorBuilder(TaskMonitorCoreBuilder);
 
 impl TaskMonitorBuilder {
     /// Creates a new [`TaskMonitorBuilder`].
     pub fn new() -> Self {
+        Self(TaskMonitorCoreBuilder::new())
+    }
+
+    /// Specifies the threshold at which polls are considered 'slow'.
+    pub fn with_slow_poll_threshold(&mut self, threshold: Duration) -> &mut Self {
+        self.0.slow_poll_threshold = Some(threshold);
+        self
+    }
+
+    /// Specifies the threshold at which schedules are considered 'long'.
+    pub fn with_long_delay_threshold(&mut self, threshold: Duration) -> &mut Self {
+        self.0.long_delay_threshold = Some(threshold);
+        self
+    }
+
+    /// Consume the builder, producing a [`TaskMonitor`].
+    pub fn build(self) -> TaskMonitor {
+        TaskMonitor {
+            base: Arc::new(self.0.build()),
+        }
+    }
+}
+
+/// A const-friendly builder for [`TaskMonitorCore`].
+///
+/// All methods consume and return `self`, enabling fully const construction:
+/// ```
+/// use std::time::Duration;
+/// use tokio_metrics::TaskMonitorCoreBuilder;
+///
+/// static MONITOR: tokio_metrics::TaskMonitorCore = TaskMonitorCoreBuilder::new()
+///     .with_slow_poll_threshold(Duration::from_micros(100))
+///     .build();
+/// ```
+#[derive(Clone, Debug, Default)]
+pub struct TaskMonitorCoreBuilder {
+    slow_poll_threshold: Option<Duration>,
+    long_delay_threshold: Option<Duration>,
+}
+
+impl TaskMonitorCoreBuilder {
+    /// Creates a new [`TaskMonitorCoreBuilder`].
+    pub const fn new() -> Self {
         Self {
             slow_poll_threshold: None,
             long_delay_threshold: None,
@@ -555,35 +595,32 @@ impl TaskMonitorBuilder {
     }
 
     /// Specifies the threshold at which polls are considered 'slow'.
-    pub fn with_slow_poll_threshold(&mut self, threshold: Duration) -> &mut Self {
-        self.slow_poll_threshold = Some(threshold);
-
-        self
+    pub const fn with_slow_poll_threshold(self, threshold: Duration) -> Self {
+        Self {
+            slow_poll_threshold: Some(threshold),
+            ..self
+        }
     }
 
     /// Specifies the threshold at which schedules are considered 'long'.
-    pub fn with_long_delay_threshold(&mut self, threshold: Duration) -> &mut Self {
-        self.long_delay_threshold = Some(threshold);
-
-        self
-    }
-
-    /// Consume the builder, producing a [`TaskMonitor`].
-    pub fn build(self) -> TaskMonitor {
-        let base = self.build_static();
-        TaskMonitor {
-            base: Arc::new(base),
+    pub const fn with_long_delay_threshold(self, threshold: Duration) -> Self {
+        Self {
+            long_delay_threshold: Some(threshold),
+            ..self
         }
     }
 
     /// Consume the builder, producing a [`TaskMonitorCore`].
-    pub fn build_static(self) -> TaskMonitorCore {
-        TaskMonitorCore::create(
-            self.slow_poll_threshold
-                .unwrap_or(TaskMonitor::DEFAULT_SLOW_POLL_THRESHOLD),
-            self.long_delay_threshold
-                .unwrap_or(TaskMonitor::DEFAULT_LONG_DELAY_THRESHOLD),
-        )
+    pub const fn build(self) -> TaskMonitorCore {
+        let slow = match self.slow_poll_threshold {
+            Some(v) => v,
+            None => TaskMonitor::DEFAULT_SLOW_POLL_THRESHOLD,
+        };
+        let long = match self.long_delay_threshold {
+            Some(v) => v,
+            None => TaskMonitor::DEFAULT_LONG_DELAY_THRESHOLD,
+        };
+        TaskMonitorCore::create(slow, long)
     }
 }
 
@@ -1856,6 +1893,11 @@ impl TaskMonitor {
 }
 
 impl TaskMonitorCore {
+    /// Returns a const-friendly [`TaskMonitorCoreBuilder`].
+    pub const fn builder() -> TaskMonitorCoreBuilder {
+        TaskMonitorCoreBuilder::new()
+    }
+
     /// Constructs a new task monitor, without inner indirection or `Clone` support. This allows:
     /// - static-friendly initialization
     /// - bringing your own outer indirection layer
@@ -1865,14 +1907,14 @@ impl TaskMonitorCore {
     ///
     /// Uses [`TaskMonitor::DEFAULT_LONG_DELAY_THRESHOLD`] as the threshold at which scheduling will be
     /// considered 'long'.
-    pub fn new() -> TaskMonitorCore {
+    pub const fn new() -> TaskMonitorCore {
         TaskMonitorCore::with_slow_poll_threshold(TaskMonitor::DEFAULT_SLOW_POLL_THRESHOLD)
     }
 
     /// Constructs a new task monitor with a given threshold at which polls are considered 'slow'.
     ///
     /// Refer to [`TaskMonitor::with_slow_poll_threshold`] for examples.
-    pub fn with_slow_poll_threshold(slow_poll_cut_off: Duration) -> TaskMonitorCore {
+    pub const fn with_slow_poll_threshold(slow_poll_cut_off: Duration) -> TaskMonitorCore {
         Self::create(slow_poll_cut_off, TaskMonitor::DEFAULT_LONG_DELAY_THRESHOLD)
     }
 
@@ -1990,7 +2032,7 @@ impl TaskMonitorCore {
 }
 
 impl TaskMonitorCore {
-    fn create(slow_poll_cut_off: Duration, long_delay_cut_off: Duration) -> TaskMonitorCore {
+    const fn create(slow_poll_cut_off: Duration, long_delay_cut_off: Duration) -> TaskMonitorCore {
         TaskMonitorCore {
             metrics: RawMetrics {
                 slow_poll_threshold: slow_poll_cut_off,
