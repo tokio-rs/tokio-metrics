@@ -516,11 +516,11 @@ pub(crate) mod metrics_rs_integration;
 /// its interval-sampled counterpart will also overflow.
 #[derive(Clone, Debug)]
 pub struct TaskMonitor {
-    base: Arc<TaskMonitorBase>,
+    base: Arc<TaskMonitorCore>,
 }
 
 impl Deref for TaskMonitor {
-    type Target = TaskMonitorBase;
+    type Target = TaskMonitorCore;
 
     fn deref(&self) -> &Self::Target {
         &self.base
@@ -533,7 +533,7 @@ impl Deref for TaskMonitor {
 /// Use this if you need static initialization, or want to manage an outer `Arc`
 /// yourself.
 #[derive(Debug)]
-pub struct TaskMonitorBase {
+pub struct TaskMonitorCore {
     metrics: RawMetrics,
 }
 
@@ -576,9 +576,9 @@ impl TaskMonitorBuilder {
         }
     }
 
-    /// Consume the builder, producing a [`TaskMonitorBase`].
-    pub fn build_static(self) -> TaskMonitorBase {
-        TaskMonitorBase::create(
+    /// Consume the builder, producing a [`TaskMonitorCore`].
+    pub fn build_static(self) -> TaskMonitorCore {
+        TaskMonitorCore::create(
             self.slow_poll_threshold
                 .unwrap_or(TaskMonitor::DEFAULT_SLOW_POLL_THRESHOLD),
             self.long_delay_threshold
@@ -590,7 +590,7 @@ impl TaskMonitorBuilder {
 pin_project! {
     /// An async task that has been instrumented with [`TaskMonitor::instrument`].
     #[derive(Debug)]
-    pub struct Instrumented<T, M: Deref<Target = TaskMonitorBase> = TaskMonitor> {
+    pub struct Instrumented<T, M: Deref<Target = TaskMonitorCore> = TaskMonitor> {
         // The task being instrumented
         #[pin]
         task: T,
@@ -606,7 +606,7 @@ pin_project! {
         state: Arc<State<M>>,
     }
 
-    impl<T, M: Deref<Target = TaskMonitorBase>> PinnedDrop for Instrumented<T, M> {
+    impl<T, M: Deref<Target = TaskMonitorCore>> PinnedDrop for Instrumented<T, M> {
         fn drop(this: Pin<&mut Self>) {
             this.state.metrics.metrics.dropped_count.fetch_add(1, SeqCst);
         }
@@ -1631,7 +1631,7 @@ impl TaskMonitor {
     /// }
     /// ```
     pub fn with_slow_poll_threshold(slow_poll_cut_off: Duration) -> TaskMonitor {
-        let base = TaskMonitorBase::create(slow_poll_cut_off, Self::DEFAULT_LONG_DELAY_THRESHOLD);
+        let base = TaskMonitorCore::create(slow_poll_cut_off, Self::DEFAULT_LONG_DELAY_THRESHOLD);
         TaskMonitor {
             base: Arc::new(base),
         }
@@ -1727,7 +1727,7 @@ impl TaskMonitor {
     /// }
     /// ```
     pub fn instrument<F>(&self, task: F) -> Instrumented<F> {
-        TaskMonitorBase::instrument(task, self.clone())
+        TaskMonitorCore::instrument(task, self.clone())
     }
 
     /// Produces [`TaskMetrics`] for the tasks instrumented by this [`TaskMonitor`], collected since
@@ -1855,7 +1855,7 @@ impl TaskMonitor {
     }
 }
 
-impl TaskMonitorBase {
+impl TaskMonitorCore {
     /// Constructs a new task monitor, without inner indirection or `Clone` support. This allows:
     /// - static-friendly initialization
     /// - bringing your own outer indirection layer
@@ -1865,14 +1865,14 @@ impl TaskMonitorBase {
     ///
     /// Uses [`TaskMonitor::DEFAULT_LONG_DELAY_THRESHOLD`] as the threshold at which scheduling will be
     /// considered 'long'.
-    pub fn new() -> TaskMonitorBase {
-        TaskMonitorBase::with_slow_poll_threshold(TaskMonitor::DEFAULT_SLOW_POLL_THRESHOLD)
+    pub fn new() -> TaskMonitorCore {
+        TaskMonitorCore::with_slow_poll_threshold(TaskMonitor::DEFAULT_SLOW_POLL_THRESHOLD)
     }
 
     /// Constructs a new task monitor with a given threshold at which polls are considered 'slow'.
     ///
     /// Refer to [`TaskMonitor::with_slow_poll_threshold`] for examples.
-    pub fn with_slow_poll_threshold(slow_poll_cut_off: Duration) -> TaskMonitorBase {
+    pub fn with_slow_poll_threshold(slow_poll_cut_off: Duration) -> TaskMonitorCore {
         Self::create(slow_poll_cut_off, TaskMonitor::DEFAULT_LONG_DELAY_THRESHOLD)
     }
 
@@ -1889,31 +1889,31 @@ impl TaskMonitorBase {
         self.metrics.long_delay_threshold
     }
 
-    /// Produces an instrumented façade around a given async task. With [`TaskMonitorBase`],
+    /// Produces an instrumented façade around a given async task. With [`TaskMonitorCore`],
     /// you are responsible for doing any cloning yourself, in order to provide a 'static input.
     ///
     /// ##### Examples
-    /// Instrument an async task by passing it to [`TaskMonitorBase::instrument`]:
+    /// Instrument an async task by passing it to [`TaskMonitorCore::instrument`]:
     /// ```
     /// use std::sync::Arc;
     ///
-    /// use tokio_metrics::TaskMonitorBase;
+    /// use tokio_metrics::TaskMonitorCore;
     ///
     /// #[tokio::main]
     /// async fn main() {
-    ///     let metrics_monitor = Arc::new(TaskMonitorBase::new());
+    ///     let metrics_monitor = Arc::new(TaskMonitorCore::new());
     ///
     ///     // 0 tasks have been instrumented, much less polled
     ///     assert_eq!(metrics_monitor.cumulative().first_poll_count, 0);
     ///
     ///     // instrument a task and poll it to completion
-    ///     TaskMonitorBase::instrument(async {}, metrics_monitor.clone()).await;
+    ///     TaskMonitorCore::instrument(async {}, metrics_monitor.clone()).await;
     ///
     ///     // 1 task has been instrumented and polled
     ///     assert_eq!(metrics_monitor.cumulative().first_poll_count, 1);
     ///
     ///     // instrument a task and poll it to completion
-    ///     TaskMonitorBase::instrument(async {}, metrics_monitor.clone()).await;
+    ///     TaskMonitorCore::instrument(async {}, metrics_monitor.clone()).await;
     ///
     ///     // 2 tasks have been instrumented and polled
     ///     assert_eq!(metrics_monitor.cumulative().first_poll_count, 2);
@@ -1921,7 +1921,7 @@ impl TaskMonitorBase {
     /// ```
     ///
     /// Refer to [`TaskMonitor::instrument`] for for more examples.
-    pub fn instrument<F, M: Deref<Target = TaskMonitorBase> + Send + Sync + 'static>(
+    pub fn instrument<F, M: Deref<Target = TaskMonitorCore> + Send + Sync + 'static>(
         task: F,
         monitor: M,
     ) -> Instrumented<F, M> {
@@ -1944,11 +1944,11 @@ impl TaskMonitorBase {
         instrumented
     }
 
-    /// Produces [`TaskMetrics`] for the tasks instrumented by this [`TaskMonitorBase`], collected since
-    /// the construction of [`TaskMonitorBase`].
+    /// Produces [`TaskMetrics`] for the tasks instrumented by this [`TaskMonitorCore`], collected since
+    /// the construction of [`TaskMonitorCore`].
     ///
     /// ##### See also
-    /// - [`TaskMonitorBase::intervals`]:
+    /// - [`TaskMonitorCore::intervals`]:
     ///   produces [`TaskMetrics`] for user-defined sampling intervals, instead of cumulatively
     ///
     /// See [`TaskMonitor::cumulative`] for examples.
@@ -1959,12 +1959,12 @@ impl TaskMonitorBase {
     /// Produces an unending iterator of metric sampling intervals.
     ///
     /// Each sampling interval is defined by the time elapsed between advancements of the iterator
-    /// produced by [`TaskMonitorBase::intervals`]. The item type of this iterator is [`TaskMetrics`],
+    /// produced by [`TaskMonitorCore::intervals`]. The item type of this iterator is [`TaskMetrics`],
     /// which is a bundle of task metrics that describe *only* events occurring within that sampling
     /// interval.
     ///
     /// ##### Examples
-    /// The below example demonstrates construction of [`TaskIntervals`] with [`TaskMonitorBase`].
+    /// The below example demonstrates construction of [`TaskIntervals`] with [`TaskMonitorCore`].
     ///
     /// See [`TaskMonitor::intervals`] for more usage examples.
     ///
@@ -1972,12 +1972,12 @@ impl TaskMonitorBase {
     /// use std::sync::Arc;
     ///
     /// fn main() {
-    ///     let metrics_monitor = Arc::new(tokio_metrics::TaskMonitorBase::new());
+    ///     let metrics_monitor = Arc::new(tokio_metrics::TaskMonitorCore::new());
     ///
-    ///     let mut _intervals = tokio_metrics::TaskMonitorBase::intervals(metrics_monitor);
+    ///     let mut _intervals = tokio_metrics::TaskMonitorCore::intervals(metrics_monitor);
     /// }
     /// ```
-    pub fn intervals<Monitor: Deref<Target = TaskMonitorBase> + Send + Sync + 'static>(
+    pub fn intervals<Monitor: Deref<Target = TaskMonitorCore> + Send + Sync + 'static>(
         monitor: Monitor,
     ) -> TaskIntervals<Monitor> {
         let intervals: TaskIntervals<Monitor> = TaskIntervals {
@@ -1989,9 +1989,9 @@ impl TaskMonitorBase {
     }
 }
 
-impl TaskMonitorBase {
-    fn create(slow_poll_cut_off: Duration, long_delay_cut_off: Duration) -> TaskMonitorBase {
-        TaskMonitorBase {
+impl TaskMonitorCore {
+    fn create(slow_poll_cut_off: Duration, long_delay_cut_off: Duration) -> TaskMonitorCore {
+        TaskMonitorCore {
             metrics: RawMetrics {
                 slow_poll_threshold: slow_poll_cut_off,
                 first_poll_count: AtomicU64::new(0),
@@ -2078,9 +2078,9 @@ impl Default for TaskMonitor {
     }
 }
 
-impl Default for TaskMonitorBase {
-    fn default() -> TaskMonitorBase {
-        TaskMonitorBase::new()
+impl Default for TaskMonitorCore {
+    fn default() -> TaskMonitorCore {
+        TaskMonitorCore::new()
     }
 }
 
@@ -2582,7 +2582,7 @@ derived_metrics!(
     }
 );
 
-impl<T: Future, M: Deref<Target = TaskMonitorBase> + Send + Sync + 'static> Future
+impl<T: Future, M: Deref<Target = TaskMonitorCore> + Send + Sync + 'static> Future
     for Instrumented<T, M>
 {
     type Output = T::Output;
@@ -2600,7 +2600,7 @@ impl<T: Stream> Stream for Instrumented<T> {
     }
 }
 
-fn instrument_poll<T, M: Deref<Target = TaskMonitorBase> + Send + Sync + 'static, Out>(
+fn instrument_poll<T, M: Deref<Target = TaskMonitorCore> + Send + Sync + 'static, Out>(
     cx: &mut Context<'_>,
     instrumented: Pin<&mut Instrumented<T, M>>,
     poll_fn: impl FnOnce(Pin<&mut T>, &mut Context<'_>) -> Poll<Out>,
@@ -2757,12 +2757,12 @@ impl<M: Send + Sync> ArcWake for State<M> {
 ///
 /// See that method's documentation for more details.
 #[derive(Debug)]
-pub struct TaskIntervals<M: Deref<Target = TaskMonitorBase> + Send + Sync + 'static = TaskMonitor> {
+pub struct TaskIntervals<M: Deref<Target = TaskMonitorCore> + Send + Sync + 'static = TaskMonitor> {
     monitor: M,
     previous: Option<TaskMetrics>,
 }
 
-impl<Metrics: Deref<Target = TaskMonitorBase> + Send + Sync + 'static> TaskIntervals<Metrics> {
+impl<Metrics: Deref<Target = TaskMonitorCore> + Send + Sync + 'static> TaskIntervals<Metrics> {
     fn probe(&mut self) -> TaskMetrics {
         let latest = self.monitor.metrics.metrics();
         let local_max_idle_duration = self.monitor.metrics.get_and_reset_local_max_idle_duration();
