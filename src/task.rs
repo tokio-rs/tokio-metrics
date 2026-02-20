@@ -1849,7 +1849,7 @@ impl TaskMonitor {
     /// ```
     pub fn intervals(&self) -> TaskIntervals {
         TaskIntervals {
-            metrics: self.clone(),
+            monitor: self.clone(),
             previous: None,
         }
     }
@@ -1981,7 +1981,7 @@ impl TaskMonitorBase {
         monitor: Monitor,
     ) -> TaskIntervals<Monitor> {
         let intervals: TaskIntervals<Monitor> = TaskIntervals {
-            metrics: monitor,
+            monitor,
             previous: None,
         };
 
@@ -2757,17 +2757,15 @@ impl<M: Send + Sync> ArcWake for State<M> {
 ///
 /// See that method's documentation for more details.
 #[derive(Debug)]
-pub struct TaskIntervals<
-    Metrics: Deref<Target = TaskMonitorBase> + Send + Sync + 'static = TaskMonitor,
-> {
-    metrics: Metrics,
+pub struct TaskIntervals<M: Deref<Target = TaskMonitorBase> + Send + Sync + 'static = TaskMonitor> {
+    monitor: M,
     previous: Option<TaskMetrics>,
 }
 
 impl<Metrics: Deref<Target = TaskMonitorBase> + Send + Sync + 'static> TaskIntervals<Metrics> {
     fn probe(&mut self) -> TaskMetrics {
-        let latest = self.metrics.metrics.metrics();
-        let local_max_idle_duration = self.metrics.metrics.get_and_reset_local_max_idle_duration();
+        let latest = self.monitor.metrics.metrics();
+        let local_max_idle_duration = self.monitor.metrics.get_and_reset_local_max_idle_duration();
 
         let next = if let Some(previous) = self.previous {
             TaskMetrics {
