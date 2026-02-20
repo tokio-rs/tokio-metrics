@@ -527,7 +527,7 @@ impl Deref for TaskMonitor {
     }
 }
 
-/// A non-Clone, non-allocated, static-friendly verison of [`TaskMonitor`].
+/// A non-Clone, non-allocated, static-friendly version of [`TaskMonitor`].
 /// See full docs there.
 ///
 /// Use this if you need static initialization, or want to manage an outer `Arc`
