@@ -1898,9 +1898,9 @@ impl TaskMonitorCore {
         TaskMonitorCoreBuilder::new()
     }
 
-    /// Constructs a new task monitor, without inner indirection or `Clone` support. This allows:
+    /// Constructs a new task monitor, without built-in cloneability. This allows:
     /// - static-friendly initialization
-    /// - bringing your own outer indirection layer
+    /// - constructing your own cloneable wrapper (e.g. `Arc<TaskMonitorCore>`)
     ///
     /// Uses [`TaskMonitor::DEFAULT_SLOW_POLL_THRESHOLD`] as the threshold at which polls will be
     /// considered 'slow'.
