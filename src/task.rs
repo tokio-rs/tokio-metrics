@@ -2877,7 +2877,7 @@ impl<Metrics: Deref<Target = TaskMonitorCore> + Send + Sync + 'static> TaskInter
     }
 }
 
-impl Iterator for TaskIntervals {
+impl<M: Deref<Target = TaskMonitorCore> + Send + Sync + 'static> Iterator for TaskIntervals<M> {
     type Item = TaskMetrics;
 
     fn next(&mut self) -> Option<Self::Item> {
