@@ -568,9 +568,9 @@ impl TaskMonitorBuilder {
     }
 }
 
-/// A const-friendly builder for [`TaskMonitorCore`].
+/// Provides an interface for constructing a [`TaskMonitorCore`] with specialized configuration
+/// parameters.
 ///
-/// All methods consume and return `self`, enabling fully const construction:
 /// ```
 /// use std::time::Duration;
 /// use tokio_metrics::TaskMonitorCoreBuilder;
