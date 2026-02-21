@@ -2903,7 +2903,7 @@ pub struct TaskIntervals<M: AsRef<TaskMonitorCore> + Send + Sync + 'static = Tas
     previous: Option<TaskMetrics>,
 }
 
-impl<Metrics: AsRef<TaskMonitorCore> + Send + Sync + 'static> TaskIntervals<Metrics> {
+impl<M: AsRef<TaskMonitorCore> + Send + Sync + 'static> TaskIntervals<M> {
     fn probe(&mut self) -> TaskMetrics {
         let latest = self.monitor.as_ref().metrics.metrics();
         let local_max_idle_duration = self
