@@ -2907,3 +2907,61 @@ fn mean(d: Duration, count: u64) -> Duration {
         Duration::ZERO
     }
 }
+
+#[cfg(test)]
+mod inference_tests {
+    use super::*;
+    use std::future::Future;
+    use std::pin::Pin;
+
+    // Type alias — M defaults to TaskMonitor
+    type _BoxedInstrumented = Instrumented<Pin<Box<dyn Future<Output = ()>>>>;
+
+    // Struct field — M defaults to TaskMonitor
+    struct _Wrapper {
+        _fut: Instrumented<Pin<Box<dyn Future<Output = ()>>>>,
+    }
+
+    // Partial type annotation — M defaults to TaskMonitor
+    async fn _partial_annotation(monitor: &TaskMonitor) {
+        let _: Instrumented<_> = monitor.instrument(async { 42 });
+    }
+
+    // Common path — fully inferred from instrument()'s return type
+    async fn _common_usage(monitor: &TaskMonitor) {
+        monitor.instrument(async { 42 }).await;
+    }
+
+    // Storing without annotation — both T and M inferred
+    async fn _store_without_annotation(monitor: &TaskMonitor) {
+        let fut = monitor.instrument(async { 42 });
+        fut.await;
+    }
+
+    // Function boundary — M defaults to TaskMonitor in the signature
+    async fn _function_boundary(fut: Instrumented<impl Future<Output = i32>>) -> i32 {
+        fut.await
+    }
+
+    // Return position — M defaults to TaskMonitor
+    fn _return_position(monitor: &TaskMonitor) -> Instrumented<impl Future<Output = i32> + '_> {
+        monitor.instrument(async { 42 })
+    }
+
+    // intervals() inference
+    fn _intervals_inference(monitor: &TaskMonitor) {
+        let mut intervals = monitor.intervals();
+        let _: Option<TaskMetrics> = intervals.next();
+    }
+
+    #[tokio::test]
+    async fn inference_compiles() {
+        let monitor = TaskMonitor::new();
+        _partial_annotation(&monitor).await;
+        _common_usage(&monitor).await;
+        _store_without_annotation(&monitor).await;
+        _function_boundary(monitor.instrument(async { 42 })).await;
+        _return_position(&monitor).await;
+        _intervals_inference(&monitor);
+    }
+}
