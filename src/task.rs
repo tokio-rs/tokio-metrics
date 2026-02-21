@@ -1931,8 +1931,7 @@ impl TaskMonitorCore {
         self.metrics.long_delay_threshold
     }
 
-    /// Produces an instrumented façade around a given async task. With [`TaskMonitorCore`],
-    /// you are responsible for doing any cloning yourself, in order to provide a 'static input.
+    /// Produces an instrumented façade around a given async task. With [`TaskMonitorCore`].
     ///
     /// ##### Examples
     /// Instrument an async task by passing it to [`TaskMonitorCore::instrument`]:
@@ -1961,8 +1960,6 @@ impl TaskMonitorCore {
     ///     assert_eq!(metrics_monitor.cumulative().first_poll_count, 2);
     /// }
     /// ```
-    ///
-    /// Refer to [`TaskMonitor::instrument`] for for more examples.
     pub fn instrument<F, M: Deref<Target = TaskMonitorCore> + Send + Sync + 'static>(
         task: F,
         monitor: M,
