@@ -19,14 +19,14 @@ use std::time::{Duration, Instant};
 pub(crate) mod metrics_rs_integration;
 
 /// Monitors key metrics of instrumented tasks.
-/// 
+///
 /// This struct is preferred for generating a variable number of monitors at runtime.
 /// If you can construct a fixed count of `static` monitors instead, see [`TaskMonitorCore`].
-/// 
+///
 /// ### Basic Usage
 /// A [`TaskMonitor`] tracks key [metrics][TaskMetrics] of async tasks that have been
 /// [instrumented][`TaskMonitor::instrument`] with the monitor.
-/// 
+///
 /// In the below example, a [`TaskMonitor`] is [constructed][TaskMonitor::new] and used to
 /// [instrument][TaskMonitor::instrument] three worker tasks; meanwhile, a fourth task
 /// prints [metrics][TaskMetrics] in 500ms [intervals][TaskMonitor::intervals].
@@ -544,7 +544,7 @@ impl AsRef<TaskMonitorCore> for TaskMonitor {
 ///
 /// You can also use [`TaskMonitorCore`] if you are already passing around an `Arc`-wrapped
 /// struct that you want to store your monitor in. This way, you can avoid double-`Arc`'ing it.
-/// 
+///
 /// For other most other non-static usage, [`TaskMonitor`] will be more ergonomic.
 ///
 /// ##### Examples
