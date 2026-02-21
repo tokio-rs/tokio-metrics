@@ -2,46 +2,46 @@ use std::time::Duration;
 use tokio_metrics::{TaskMonitor, TaskMonitorCore};
 
 /// A static TaskMonitorCore — no Arc or lazy initialization needed.
+///
+/// This is a good default usage, unless you havae special needs around
+/// runtime initialization or avoiding any extra `Arc`'s.
 static STATIC_MONITOR: TaskMonitorCore = TaskMonitorCore::new();
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // === Using TaskMonitor (Arc-backed, cloneable) ===
-    let metrics_monitor = TaskMonitor::new();
-
-    // print task metrics every 500ms
-    {
-        let metrics_monitor = metrics_monitor.clone();
-        tokio::spawn(async move {
-            for deltas in metrics_monitor.intervals() {
-                // pretty-print the metric deltas
-                println!("{deltas:?}");
-                // wait 500ms
-                tokio::time::sleep(Duration::from_millis(500)).await;
-            }
-        });
-    }
-
-    // instrument some tasks and await them
-    tokio::join![
-        metrics_monitor.instrument(do_work()),
-        metrics_monitor.instrument(do_work()),
-        metrics_monitor.instrument(do_work())
-    ];
-
-    // === Using TaskMonitorCore (static, no allocation) ===
+    // spawn a task that prints out from the static monitor on a loop
     tokio::spawn(async {
         for deltas in TaskMonitorCore::intervals(&STATIC_MONITOR) {
+            // pretty print 
             println!("{deltas:?}");
             tokio::time::sleep(Duration::from_millis(500)).await;
         }
     });
 
     tokio::join![
-        TaskMonitorCore::instrument(do_work(), &STATIC_MONITOR),
-        TaskMonitorCore::instrument(do_work(), &STATIC_MONITOR),
-        TaskMonitorCore::instrument(do_work(), &STATIC_MONITOR),
+        STATIC_MONITOR.instrument(do_work()),
+        STATIC_MONITOR.instrument(do_work()),
+        STATIC_MONITOR.instrument(do_work()),
     ];
+
+
+    // imagine we wanted to generate a task monitor to keep track of all tasks
+    // and child tasks spawned by a given request
+    for i in 0..5 {
+        // roughly equivalent to Arc::new(TaskMonitorCore::new())
+        let metrics_monitor = TaskMonitor::new();
+
+        // instrument some tasks and await them
+        tokio::join![
+            // roughly equivalent to TaskMonitorCore::instrument_with(do_work(), metrics_monitor.clone())
+            metrics_monitor.instrument(do_work()),
+            metrics_monitor.instrument(do_work()),
+            metrics_monitor.instrument(do_work())
+        ];
+        
+        let cumulative = metrics_monitor.cumulative();
+        println!("{i}: {cumulative:?}");
+    }
 
     Ok(())
 }

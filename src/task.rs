@@ -24,6 +24,10 @@ pub(crate) mod metrics_rs_integration;
 /// A [`TaskMonitor`] tracks key [metrics][TaskMetrics] of async tasks that have been
 /// [instrumented][`TaskMonitor::instrument`] with the monitor.
 ///
+/// If you only need a fixed set of task monitors that are known at compile time, consider using
+/// the const-friendly [`TaskMonitorCore`] instead. It offers the same API, but without needing
+/// to allocate or manually pass the monitor around.
+/// 
 /// In the below example, a [`TaskMonitor`] is [constructed][TaskMonitor::new] and used to
 /// [instrument][TaskMonitor::instrument] three worker tasks; meanwhile, a fourth task
 /// prints [metrics][TaskMetrics] in 500ms [intervals][TaskMonitor::intervals].
@@ -527,11 +531,54 @@ impl Deref for TaskMonitor {
     }
 }
 
-/// A non-Clone, non-allocated, static-friendly version of [`TaskMonitor`].
-/// See full docs there.
+/// A non-`Clone`, non-allocated, static-friendly version of [`TaskMonitor`].
+/// See full docs on the [`TaskMonitor`] struct.
+/// 
+/// You should use [`TaskMonitorCore`] if you have a known count of monitors
+/// that you want to initialize as compile-time `static` structs.
+/// 
+/// You also might prefer this struct if you want to avoid double-`Arc`-wrapping
+/// the monitor and are anyway passing it around in an `Arc`-wrapped struct. If
+/// an external wrapper provides `Clone`, then you can use [`TaskMonitorCore::instrument_with`]
+/// and avoid [`TaskMonitor`]'s internal `Arc`.
+/// 
+/// Otherwise, this type will be less ergonomic to work with than a [`TaskMonitor`].
+/// 
+/// ##### Examples
+/// 
+/// Static usage:
+/// ```
+/// use tokio_metrics::TaskMonitorCore;
 ///
-/// Use this if you need static initialization, or want to manage an outer `Arc`
-/// yourself.
+/// static MONITOR: TaskMonitorCore = TaskMonitorCore::new();
+///
+/// #[tokio::main]
+/// async fn main() {
+///     assert_eq!(MONITOR.cumulative().first_poll_count, 0);
+///
+///     MONITOR.instrument(async {}).await;
+///     assert_eq!(MONITOR.cumulative().first_poll_count, 1);
+/// }
+/// ```
+/// 
+/// Usage with wrapper struct and [`TaskMonitorCore::instrument_with`]:
+/// ```
+/// use tokio_metrics::TaskMonitorCore;
+/// 
+/// // imagine: a type that wasn't `Clone` that you want to pass around
+/// // in a similar way as the monitor
+/// struct SomeOtherSharedState;
+///
+/// #[tokio::main]
+/// async fn main() {
+///     let monitor = Arc::new((TaskMonitorCore::new(), SomeOtherSharedState));
+///     
+///     assert_eq!(monitor.cumulative().first_poll_count, 0);
+///
+///     monitor.instrument_with(async {}, monitor.clone()).await;
+///     assert_eq!(monitor.cumulative().first_poll_count, 1);
+/// }
+/// ```
 #[derive(Debug)]
 pub struct TaskMonitorCore {
     metrics: RawMetrics,
@@ -1764,7 +1811,7 @@ impl TaskMonitor {
     /// }
     /// ```
     pub fn instrument<F>(&self, task: F) -> Instrumented<F> {
-        TaskMonitorCore::instrument(task, self.clone())
+        TaskMonitorCore::instrument_with(task, self.clone())
     }
 
     /// Produces [`TaskMetrics`] for the tasks instrumented by this [`TaskMonitor`], collected since
@@ -1898,9 +1945,8 @@ impl TaskMonitorCore {
         TaskMonitorCoreBuilder::new()
     }
 
-    /// Constructs a new task monitor, without built-in cloneability. This allows:
-    /// - static-friendly initialization
-    /// - constructing your own cloneable wrapper (e.g. `Arc<TaskMonitorCore>`)
+    /// Constructs a new [`TaskMonitorCore`]. Refer to the struct documentation for more discussion
+    /// of benefits compared to [`TaskMonitor`].
     ///
     /// Uses [`TaskMonitor::DEFAULT_SLOW_POLL_THRESHOLD`] as the threshold at which polls will be
     /// considered 'slow'.
@@ -1931,36 +1977,44 @@ impl TaskMonitorCore {
         self.metrics.long_delay_threshold
     }
 
-    /// Produces an instrumented façade around a given async task. With [`TaskMonitorCore`].
+    /// Produces an instrumented façade around a given async task.
     ///
     /// ##### Examples
-    /// Instrument an async task by passing it to [`TaskMonitorCore::instrument`]:
+    /// ```
+    /// use tokio_metrics::TaskMonitorCore;
+    ///
+    /// static MONITOR: TaskMonitorCore = TaskMonitorCore::new();
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     assert_eq!(MONITOR.cumulative().first_poll_count, 0);
+    ///
+    ///     MONITOR.instrument(async {}).await;
+    ///     assert_eq!(MONITOR.cumulative().first_poll_count, 1);
+    /// }
+    /// ```
+    pub fn instrument<F>(&'static self, task: F) -> Instrumented<F, &'static Self> {
+        Self::instrument_with(task, self)
+    }
+
+    /// Produces an instrumented façade around a given async task, with an explicit monitor.
+    ///
+    /// Use this when you have a non-static monitor reference, such as an `Arc<TaskMonitorCore>`.
+    ///
+    /// ##### Examples
     /// ```
     /// use std::sync::Arc;
-    ///
     /// use tokio_metrics::TaskMonitorCore;
     ///
     /// #[tokio::main]
     /// async fn main() {
-    ///     let metrics_monitor = Arc::new(TaskMonitorCore::new());
+    ///     let monitor = Arc::new(TaskMonitorCore::new());
     ///
-    ///     // 0 tasks have been instrumented, much less polled
-    ///     assert_eq!(metrics_monitor.cumulative().first_poll_count, 0);
-    ///
-    ///     // instrument a task and poll it to completion
-    ///     TaskMonitorCore::instrument(async {}, metrics_monitor.clone()).await;
-    ///
-    ///     // 1 task has been instrumented and polled
-    ///     assert_eq!(metrics_monitor.cumulative().first_poll_count, 1);
-    ///
-    ///     // instrument a task and poll it to completion
-    ///     TaskMonitorCore::instrument(async {}, metrics_monitor.clone()).await;
-    ///
-    ///     // 2 tasks have been instrumented and polled
-    ///     assert_eq!(metrics_monitor.cumulative().first_poll_count, 2);
+    ///     TaskMonitorCore::instrument_with(async {}, monitor.clone()).await;
+    ///     assert_eq!(monitor.cumulative().first_poll_count, 1);
     /// }
     /// ```
-    pub fn instrument<F, M: Deref<Target = TaskMonitorCore> + Send + Sync + 'static>(
+    pub fn instrument_with<F, M: Deref<Target = TaskMonitorCore> + Send + Sync + 'static>(
         task: F,
         monitor: M,
     ) -> Instrumented<F, M> {
