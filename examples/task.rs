@@ -1,8 +1,13 @@
 use std::time::Duration;
+use tokio_metrics::{TaskMonitor, TaskMonitorCore};
+
+/// A static TaskMonitorCore — no Arc or lazy initialization needed.
+static STATIC_MONITOR: TaskMonitorCore = TaskMonitorCore::new();
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let metrics_monitor = tokio_metrics::TaskMonitor::new();
+    // === Using TaskMonitor (Arc-backed, cloneable) ===
+    let metrics_monitor = TaskMonitor::new();
 
     // print task metrics every 500ms
     {
@@ -22,6 +27,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         metrics_monitor.instrument(do_work()),
         metrics_monitor.instrument(do_work()),
         metrics_monitor.instrument(do_work())
+    ];
+
+    // === Using TaskMonitorCore (static, no allocation) ===
+    tokio::spawn(async {
+        for deltas in TaskMonitorCore::intervals(&STATIC_MONITOR) {
+            println!("{deltas:?}");
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+    });
+
+    tokio::join![
+        TaskMonitorCore::instrument(do_work(), &STATIC_MONITOR),
+        TaskMonitorCore::instrument(do_work(), &STATIC_MONITOR),
+        TaskMonitorCore::instrument(do_work(), &STATIC_MONITOR),
     ];
 
     Ok(())
