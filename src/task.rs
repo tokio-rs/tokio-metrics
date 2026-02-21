@@ -19,15 +19,14 @@ use std::time::{Duration, Instant};
 pub(crate) mod metrics_rs_integration;
 
 /// Monitors key metrics of instrumented tasks.
-///
+/// 
+/// This struct is preferred for generating a variable number of monitors at runtime.
+/// If you can construct a fixed count of `static` monitors instead, see [`TaskMonitorCore`].
+/// 
 /// ### Basic Usage
 /// A [`TaskMonitor`] tracks key [metrics][TaskMetrics] of async tasks that have been
 /// [instrumented][`TaskMonitor::instrument`] with the monitor.
-///
-/// If you only need a fixed set of task monitors that are known at compile time, consider using
-/// the const-friendly [`TaskMonitorCore`] instead. It offers the same API, but without needing
-/// to allocate or manually pass the monitor around.
-///
+/// 
 /// In the below example, a [`TaskMonitor`] is [constructed][TaskMonitor::new] and used to
 /// [instrument][TaskMonitor::instrument] three worker tasks; meanwhile, a fourth task
 /// prints [metrics][TaskMetrics] in 500ms [intervals][TaskMonitor::intervals].
@@ -543,12 +542,10 @@ impl AsRef<TaskMonitorCore> for TaskMonitor {
 /// You should use [`TaskMonitorCore`] if you have a known count of monitors
 /// that you want to initialize as compile-time `static` structs.
 ///
-/// You also might prefer this struct if you want to avoid double-`Arc`-wrapping
-/// the monitor and are anyway passing it around in an `Arc`-wrapped struct. If
-/// an external wrapper provides `Clone`, then you can use [`TaskMonitorCore::instrument_with`]
-/// and avoid [`TaskMonitor`]'s internal `Arc`. This comes at the cost of ergonomics.
-///
-/// Otherwise, this type will be less ergonomic to work with than a [`TaskMonitor`].
+/// You can also use [`TaskMonitorCore`] if you are already passing around an `Arc`-wrapped
+/// struct that you want to store your monitor in. This way, you can avoid double-`Arc`'ing it.
+/// 
+/// For other most other non-static usage, [`TaskMonitor`] will be more ergonomic.
 ///
 /// ##### Examples
 ///

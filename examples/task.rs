@@ -1,10 +1,12 @@
 use std::time::Duration;
 use tokio_metrics::{TaskMonitor, TaskMonitorCore};
 
-/// A static TaskMonitorCore — no Arc or lazy initialization needed.
-///
-/// This is a good default usage, unless you havae special needs around
-/// runtime initialization or avoiding any extra `Arc`'s.
+/// It's usually the right choice to use a static [`tokio_metrics::TaskMonitorCore`].
+/// 
+/// The reasons not do this if you specifically need to dynamically generate different
+/// task monitors at runtime. For that, [`tokio_metrics::TaskMonitor`] will be most ergonomic.
+/// 
+/// See the struct docs for more discussion.
 static STATIC_MONITOR: TaskMonitorCore = TaskMonitorCore::new();
 
 #[tokio::main]
