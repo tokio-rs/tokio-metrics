@@ -2975,7 +2975,8 @@ mod inference_tests {
 
     // Partial type annotation — M defaults to TaskMonitor
     async fn _partial_annotation(monitor: &TaskMonitor) {
-        let _: Instrumented<_> = monitor.instrument(async { 42 });
+        let fut: Instrumented<_> = monitor.instrument(async { 42 });
+        fut.await;
     }
 
     // Common path — fully inferred from instrument()'s return type
