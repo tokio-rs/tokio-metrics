@@ -531,6 +531,12 @@ impl Deref for TaskMonitor {
     }
 }
 
+impl AsRef<TaskMonitorCore> for TaskMonitor {
+    fn as_ref(&self) -> &TaskMonitorCore {
+        &self.base
+    }
+}
+
 /// A non-`Clone`, non-allocated, static-friendly version of [`TaskMonitor`].
 /// See full docs on the [`TaskMonitor`] struct.
 ///
@@ -540,7 +546,7 @@ impl Deref for TaskMonitor {
 /// You also might prefer this struct if you want to avoid double-`Arc`-wrapping
 /// the monitor and are anyway passing it around in an `Arc`-wrapped struct. If
 /// an external wrapper provides `Clone`, then you can use [`TaskMonitorCore::instrument_with`]
-/// and avoid [`TaskMonitor`]'s internal `Arc`.
+/// and avoid [`TaskMonitor`]'s internal `Arc`. This comes at the cost of ergonomics.
 ///
 /// Otherwise, this type will be less ergonomic to work with than a [`TaskMonitor`].
 ///
@@ -563,20 +569,36 @@ impl Deref for TaskMonitor {
 ///
 /// Usage with wrapper struct and [`TaskMonitorCore::instrument_with`]:
 /// ```
+/// use std::sync::Arc;
 /// use tokio_metrics::TaskMonitorCore;
 ///
-/// // imagine: a type that wasn't `Clone` that you want to pass around
-/// // in a similar way as the monitor
+/// #[derive(Clone)]
+/// struct SharedState(Arc<SharedStateInner>);
+/// struct SharedStateInner {
+///     monitor: TaskMonitorCore,
+///     other_state: SomeOtherSharedState,
+/// }
+/// /// Imagine: a type that wasn't `Clone` that you want to pass around
+/// /// in a similar way as the monitor
 /// struct SomeOtherSharedState;
+///
+/// impl AsRef<TaskMonitorCore> for SharedState {
+///     fn as_ref(&self) -> &TaskMonitorCore {
+///         &self.0.monitor
+///     }
+/// }
 ///
 /// #[tokio::main]
 /// async fn main() {
-///     let monitor = Arc::new((TaskMonitorCore::new(), SomeOtherSharedState));
-///     
-///     assert_eq!(monitor.cumulative().first_poll_count, 0);
+///     let state = SharedState(Arc::new(SharedStateInner {
+///         monitor: TaskMonitorCore::new(),
+///         other_state: SomeOtherSharedState,
+///     }));
 ///
-///     monitor.instrument_with(async {}, monitor.clone()).await;
-///     assert_eq!(monitor.cumulative().first_poll_count, 1);
+///     assert_eq!(state.0.monitor.cumulative().first_poll_count, 0);
+///
+///     TaskMonitorCore::instrument_with(async {}, state.clone()).await;
+///     assert_eq!(state.0.monitor.cumulative().first_poll_count, 1);
 /// }
 /// ```
 #[derive(Debug)]
@@ -674,7 +696,7 @@ impl TaskMonitorCoreBuilder {
 pin_project! {
     /// An async task that has been instrumented with [`TaskMonitor::instrument`].
     #[derive(Debug)]
-    pub struct Instrumented<T, M: Deref<Target = TaskMonitorCore> = TaskMonitor> {
+    pub struct Instrumented<T, M: AsRef<TaskMonitorCore> = TaskMonitor> {
         // The task being instrumented
         #[pin]
         task: T,
@@ -690,9 +712,9 @@ pin_project! {
         state: Arc<State<M>>,
     }
 
-    impl<T, M: Deref<Target = TaskMonitorCore>> PinnedDrop for Instrumented<T, M> {
+    impl<T, M: AsRef<TaskMonitorCore>> PinnedDrop for Instrumented<T, M> {
         fn drop(this: Pin<&mut Self>) {
-            this.state.monitor.metrics.dropped_count.fetch_add(1, SeqCst);
+            this.state.monitor.as_ref().metrics.dropped_count.fetch_add(1, SeqCst);
         }
     }
 }
@@ -2006,19 +2028,44 @@ impl TaskMonitorCore {
     /// use std::sync::Arc;
     /// use tokio_metrics::TaskMonitorCore;
     ///
+    /// #[derive(Clone)]
+    /// struct SharedState(Arc<SharedStateInner>);
+    /// struct SharedStateInner {
+    ///     monitor: TaskMonitorCore,
+    ///     other_state: SomeOtherSharedState,
+    /// }
+    /// /// Imagine: a type that wasn't `Clone` that you want to pass around
+    /// /// in a similar way as the monitor
+    /// struct SomeOtherSharedState;
+    ///
+    /// impl AsRef<TaskMonitorCore> for SharedState {
+    ///     fn as_ref(&self) -> &TaskMonitorCore {
+    ///         &self.0.monitor
+    ///     }
+    /// }
+    ///
     /// #[tokio::main]
     /// async fn main() {
-    ///     let monitor = Arc::new(TaskMonitorCore::new());
+    ///     let state = SharedState(Arc::new(SharedStateInner {
+    ///         monitor: TaskMonitorCore::new(),
+    ///         other_state: SomeOtherSharedState,
+    ///     }));
     ///
-    ///     TaskMonitorCore::instrument_with(async {}, monitor.clone()).await;
-    ///     assert_eq!(monitor.cumulative().first_poll_count, 1);
+    ///     assert_eq!(state.0.monitor.cumulative().first_poll_count, 0);
+    ///
+    ///     TaskMonitorCore::instrument_with(async {}, state.clone()).await;
+    ///     assert_eq!(state.0.monitor.cumulative().first_poll_count, 1);
     /// }
     /// ```
-    pub fn instrument_with<F, M: Deref<Target = TaskMonitorCore> + Send + Sync + 'static>(
+    pub fn instrument_with<F, M: AsRef<TaskMonitorCore> + Send + Sync + 'static>(
         task: F,
         monitor: M,
     ) -> Instrumented<F, M> {
-        monitor.metrics.instrumented_count.fetch_add(1, SeqCst);
+        monitor
+            .as_ref()
+            .metrics
+            .instrumented_count
+            .fetch_add(1, SeqCst);
 
         let state: State<M> = State {
             monitor,
@@ -2070,7 +2117,7 @@ impl TaskMonitorCore {
     ///     let mut _intervals = tokio_metrics::TaskMonitorCore::intervals(metrics_monitor);
     /// }
     /// ```
-    pub fn intervals<Monitor: Deref<Target = TaskMonitorCore> + Send + Sync + 'static>(
+    pub fn intervals<Monitor: AsRef<TaskMonitorCore> + Send + Sync + 'static>(
         monitor: Monitor,
     ) -> TaskIntervals<Monitor> {
         let intervals: TaskIntervals<Monitor> = TaskIntervals {
@@ -2079,6 +2126,12 @@ impl TaskMonitorCore {
         };
 
         intervals
+    }
+}
+
+impl AsRef<TaskMonitorCore> for TaskMonitorCore {
+    fn as_ref(&self) -> &TaskMonitorCore {
+        self
     }
 }
 
@@ -2675,9 +2728,7 @@ derived_metrics!(
     }
 );
 
-impl<T: Future, M: Deref<Target = TaskMonitorCore> + Send + Sync + 'static> Future
-    for Instrumented<T, M>
-{
+impl<T: Future, M: AsRef<TaskMonitorCore> + Send + Sync + 'static> Future for Instrumented<T, M> {
     type Output = T::Output;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -2693,7 +2744,7 @@ impl<T: Stream> Stream for Instrumented<T> {
     }
 }
 
-fn instrument_poll<T, M: Deref<Target = TaskMonitorCore> + Send + Sync + 'static, Out>(
+fn instrument_poll<T, M: AsRef<TaskMonitorCore> + Send + Sync + 'static, Out>(
     cx: &mut Context<'_>,
     instrumented: Pin<&mut Instrumented<T, M>>,
     poll_fn: impl FnOnce(Pin<&mut T>, &mut Context<'_>) -> Poll<Out>,
@@ -2703,7 +2754,7 @@ fn instrument_poll<T, M: Deref<Target = TaskMonitorCore> + Send + Sync + 'static
     let idled_at = this.idled_at;
     let state = this.state;
     let instrumented_at = state.instrumented_at;
-    let metrics = &state.monitor.metrics;
+    let metrics = &state.monitor.as_ref().metrics;
     /* accounting for time-to-first-poll and tasks-count */
     // is this the first time this task has been polled?
     if !*this.did_poll_once {
@@ -2850,15 +2901,19 @@ impl<M: Send + Sync> ArcWake for State<M> {
 ///
 /// See that method's documentation for more details.
 #[derive(Debug)]
-pub struct TaskIntervals<M: Deref<Target = TaskMonitorCore> + Send + Sync + 'static = TaskMonitor> {
+pub struct TaskIntervals<M: AsRef<TaskMonitorCore> + Send + Sync + 'static = TaskMonitor> {
     monitor: M,
     previous: Option<TaskMetrics>,
 }
 
-impl<Metrics: Deref<Target = TaskMonitorCore> + Send + Sync + 'static> TaskIntervals<Metrics> {
+impl<Metrics: AsRef<TaskMonitorCore> + Send + Sync + 'static> TaskIntervals<Metrics> {
     fn probe(&mut self) -> TaskMetrics {
-        let latest = self.monitor.metrics.metrics();
-        let local_max_idle_duration = self.monitor.metrics.get_and_reset_local_max_idle_duration();
+        let latest = self.monitor.as_ref().metrics.metrics();
+        let local_max_idle_duration = self
+            .monitor
+            .as_ref()
+            .metrics
+            .get_and_reset_local_max_idle_duration();
 
         let next = if let Some(previous) = self.previous {
             TaskMetrics {
@@ -2928,7 +2983,7 @@ impl<Metrics: Deref<Target = TaskMonitorCore> + Send + Sync + 'static> TaskInter
     }
 }
 
-impl<M: Deref<Target = TaskMonitorCore> + Send + Sync + 'static> Iterator for TaskIntervals<M> {
+impl<M: AsRef<TaskMonitorCore> + Send + Sync + 'static> Iterator for TaskIntervals<M> {
     type Item = TaskMetrics;
 
     fn next(&mut self) -> Option<Self::Item> {
