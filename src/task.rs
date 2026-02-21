@@ -1693,13 +1693,13 @@ impl TaskMonitor {
     /// }
     /// ```
     pub fn slow_poll_threshold(&self) -> Duration {
-        self.metrics.slow_poll_threshold
+        self.base.metrics.slow_poll_threshold
     }
 
     /// Produces the duration greater-than-or-equal-to at which scheduling delays are categorized
     /// as long.
     pub fn long_delay_threshold(&self) -> Duration {
-        self.metrics.long_delay_threshold
+        self.base.metrics.long_delay_threshold
     }
 
     /// Produces an instrumented façade around a given async task.
@@ -1825,7 +1825,7 @@ impl TaskMonitor {
     /// }
     /// ```
     pub fn cumulative(&self) -> TaskMetrics {
-        self.metrics.metrics()
+        self.base.metrics.metrics()
     }
 
     /// Produces an unending iterator of metric sampling intervals.
