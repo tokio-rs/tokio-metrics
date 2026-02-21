@@ -27,7 +27,7 @@ pub(crate) mod metrics_rs_integration;
 /// If you only need a fixed set of task monitors that are known at compile time, consider using
 /// the const-friendly [`TaskMonitorCore`] instead. It offers the same API, but without needing
 /// to allocate or manually pass the monitor around.
-/// 
+///
 /// In the below example, a [`TaskMonitor`] is [constructed][TaskMonitor::new] and used to
 /// [instrument][TaskMonitor::instrument] three worker tasks; meanwhile, a fourth task
 /// prints [metrics][TaskMetrics] in 500ms [intervals][TaskMonitor::intervals].
@@ -533,19 +533,19 @@ impl Deref for TaskMonitor {
 
 /// A non-`Clone`, non-allocated, static-friendly version of [`TaskMonitor`].
 /// See full docs on the [`TaskMonitor`] struct.
-/// 
+///
 /// You should use [`TaskMonitorCore`] if you have a known count of monitors
 /// that you want to initialize as compile-time `static` structs.
-/// 
+///
 /// You also might prefer this struct if you want to avoid double-`Arc`-wrapping
 /// the monitor and are anyway passing it around in an `Arc`-wrapped struct. If
 /// an external wrapper provides `Clone`, then you can use [`TaskMonitorCore::instrument_with`]
 /// and avoid [`TaskMonitor`]'s internal `Arc`.
-/// 
+///
 /// Otherwise, this type will be less ergonomic to work with than a [`TaskMonitor`].
-/// 
+///
 /// ##### Examples
-/// 
+///
 /// Static usage:
 /// ```
 /// use tokio_metrics::TaskMonitorCore;
@@ -560,11 +560,11 @@ impl Deref for TaskMonitor {
 ///     assert_eq!(MONITOR.cumulative().first_poll_count, 1);
 /// }
 /// ```
-/// 
+///
 /// Usage with wrapper struct and [`TaskMonitorCore::instrument_with`]:
 /// ```
 /// use tokio_metrics::TaskMonitorCore;
-/// 
+///
 /// // imagine: a type that wasn't `Clone` that you want to pass around
 /// // in a similar way as the monitor
 /// struct SomeOtherSharedState;

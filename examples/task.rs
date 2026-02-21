@@ -12,7 +12,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // spawn a task that prints out from the static monitor on a loop
     tokio::spawn(async {
         for deltas in TaskMonitorCore::intervals(&STATIC_MONITOR) {
-            // pretty print 
+            // pretty print
             println!("{deltas:?}");
             tokio::time::sleep(Duration::from_millis(500)).await;
         }
@@ -23,7 +23,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         STATIC_MONITOR.instrument(do_work()),
         STATIC_MONITOR.instrument(do_work()),
     ];
-
 
     // imagine we wanted to generate a task monitor to keep track of all tasks
     // and child tasks spawned by a given request
@@ -38,7 +37,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             metrics_monitor.instrument(do_work()),
             metrics_monitor.instrument(do_work())
         ];
-        
+
         let cumulative = metrics_monitor.cumulative();
         println!("{i}: {cumulative:?}");
     }
