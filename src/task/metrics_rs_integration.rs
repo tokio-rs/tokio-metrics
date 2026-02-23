@@ -182,6 +182,7 @@ impl TaskMetricsReporterBuilder {
     /// [`build_with_monitor`]: Self::build_with_monitor.
     /// [`run`]: TaskMetricsReporter::run
     /// [`with_local_recorder`]: metrics::with_local_recorder
+    #[cfg(feature = "rt")]
     pub async fn describe_and_run(self, monitor: TaskMonitor) {
         self.describe().build_with_monitor(monitor).run().await;
     }
@@ -197,6 +198,7 @@ impl TaskMetricsReporterBuilder {
     /// [`build_with_monitor`]: Self::build_with_monitor
     /// [`run`]: TaskMetricsReporter::run
     /// [`with_local_recorder`]: metrics::with_local_recorder
+    #[cfg(feature = "rt")]
     pub async fn run_without_describing(self, monitor: TaskMonitor) {
         self.build_with_monitor(monitor).run().await;
     }
@@ -300,6 +302,7 @@ impl TaskMetricsReporter {
     /// Collect and publish metrics periodically to the configured [metrics_rs](metrics) reporter.
     ///
     /// You probably want to run this within its own task (using [`tokio::task::spawn`])
+    #[cfg(feature = "rt")]
     pub async fn run(mut self) {
         loop {
             self.run_once();

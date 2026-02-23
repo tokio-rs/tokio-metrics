@@ -277,7 +277,7 @@ impl<T> MyMetricOp<T> for (&metrics::Gauge, f64) {
     }
 }
 
-#[cfg(tokio_unstable)]
+#[cfg(all(feature = "rt", tokio_unstable))]
 impl MyMetricOp<&tokio::runtime::RuntimeMetrics> for (&metrics::Histogram, Vec<u64>) {
     fn op(self, tokio: &tokio::runtime::RuntimeMetrics) {
         for (i, bucket) in self.1.iter().enumerate() {

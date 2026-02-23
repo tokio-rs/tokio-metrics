@@ -15,7 +15,7 @@ use crate::derived_metrics::derived_metrics;
 #[cfg(not(feature = "rt"))]
 use std::time::{Duration, Instant};
 
-#[cfg(all(feature = "rt", feature = "metrics-rs-integration"))]
+#[cfg(feature = "metrics-rs-integration")]
 pub(crate) mod metrics_rs_integration;
 
 /// Monitors key metrics of instrumented tasks.
