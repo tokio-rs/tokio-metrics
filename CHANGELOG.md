@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.9](https://github.com/tokio-rs/tokio-metrics/compare/v0.4.8...v0.4.9) - 2026-02-23
+
+### Added
+
+- *(task)* Expose a static-friendly TaskMonitorCore without inner Arc ([#115](https://github.com/tokio-rs/tokio-metrics/pull/115))
+
+### Other
+
+- Fix doctest feature gates and relax rt requirement for task metrics reporter ([#118](https://github.com/tokio-rs/tokio-metrics/pull/118))
+
 ## [0.4.8](https://github.com/tokio-rs/tokio-metrics/compare/v0.4.7...v0.4.8) - 2026-02-16
 
 ### Added
