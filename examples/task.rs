@@ -3,10 +3,10 @@ use tokio_metrics::{TaskMonitor, TaskMonitorCore};
 
 /// It's usually the right choice to use a static [`tokio_metrics::TaskMonitorCore`].
 ///
-/// The reasons not do this if you specifically need to dynamically generate different
-/// task monitors at runtime. For that, [`tokio_metrics::TaskMonitor`] will be most ergonomic.
+/// If you need to dynamically generate task monitors at runtime,
+/// [`tokio_metrics::TaskMonitor`] will be more ergonomic.
 ///
-/// See the struct docs for more discussion.
+/// See the [`tokio_metrics::TaskMonitorCore`] documentation for more discussion.
 static STATIC_MONITOR: TaskMonitorCore = TaskMonitorCore::new();
 
 #[tokio::main]
