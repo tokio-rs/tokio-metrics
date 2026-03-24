@@ -72,6 +72,7 @@ macro_rules! define_runtime_metrics {
         /// Key runtime metrics.
         #[non_exhaustive]
         #[derive(Default, Debug, Clone)]
+        #[cfg_attr(feature = "metrique-integration", derive(metrique_writer::Entry))]
         pub struct RuntimeMetrics {
             $(
                 $(#[$($attributes)*])*
@@ -483,6 +484,12 @@ define_runtime_metrics! {
         /// configuration options on
         /// [`runtime::Builder`][tokio::runtime::Builder::enable_metrics_poll_time_histogram].
         ///
+        /// ##### Metrique integration
+        /// This field is `#[entry(ignore)]` because the raw `Vec<u64>` bucket
+        /// counts are not meaningful without the corresponding bucket ranges from
+        /// the runtime handle. The metrique bridge in `metrique-util` handles
+        /// this by querying ranges and emitting a proper distribution metric.
+        ///
         /// ##### Examples
         /// ```
         /// use tokio::runtime::HistogramConfiguration;
@@ -506,6 +513,7 @@ define_runtime_metrics! {
         ///     println!("poll count histogram {:?}", interval.poll_time_histogram);
         /// });
         /// ```
+        #[cfg_attr(feature = "metrique-integration", entry(ignore))]
         pub poll_time_histogram: Vec<u64>,
 
         /// The number of times worker threads unparked but performed no work before parking again.
