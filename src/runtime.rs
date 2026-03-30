@@ -1,6 +1,13 @@
+use crate::derived_metrics::derived_metrics;
+#[cfg(tokio_unstable)]
+use std::ops::Range;
 use std::time::{Duration, Instant};
 use tokio::runtime;
-use crate::derived_metrics::derived_metrics;
+
+#[cfg(tokio_unstable)]
+mod poll_time_histogram;
+#[cfg(tokio_unstable)]
+pub use poll_time_histogram::{HistogramBucket, PollTimeHistogram};
 
 #[cfg(feature = "metrics-rs-integration")]
 pub(crate) mod metrics_rs_integration;
@@ -72,7 +79,7 @@ macro_rules! define_runtime_metrics {
         /// Key runtime metrics.
         #[non_exhaustive]
         #[derive(Default, Debug, Clone)]
-        #[cfg_attr(feature = "metrique-integration", derive(metrique_writer::Entry))]
+        #[cfg_attr(feature = "metrique-integration", metrique::unit_of_work::metrics(rename_all = "PascalCase"))]
         pub struct RuntimeMetrics {
             $(
                 $(#[$($attributes)*])*
@@ -478,17 +485,14 @@ define_runtime_metrics! {
         /// A histogram of task polls since the previous probe grouped by poll
         /// times.
         ///
+        /// Each bucket contains the configured [`Duration`] range and the count
+        /// of task polls that fell into that range during the interval.
+        /// 
         /// This metric must be explicitly enabled when creating the runtime with
         /// [`enable_metrics_poll_time_histogram`][tokio::runtime::Builder::enable_metrics_poll_time_histogram].
         /// Bucket sizes are fixed and configured at the runtime level. See
         /// configuration options on
         /// [`runtime::Builder`][tokio::runtime::Builder::enable_metrics_poll_time_histogram].
-        ///
-        /// ##### Metrique integration
-        /// This field is `#[entry(ignore)]` because the raw `Vec<u64>` bucket
-        /// counts are not meaningful without the corresponding bucket ranges from
-        /// the runtime handle. The metrique bridge in `metrique-util` handles
-        /// this by querying ranges and emitting a proper distribution metric.
         ///
         /// ##### Examples
         /// ```
@@ -510,11 +514,12 @@ define_runtime_metrics! {
         ///     let mut next_interval = || intervals.next().unwrap();
         ///
         ///     let interval = next_interval();
-        ///     println!("poll count histogram {:?}", interval.poll_time_histogram);
+        ///     for bucket in &interval.poll_time_histogram.buckets {
+        ///         println!("{:?} => {} polls", bucket.range, bucket.count);
+        ///     }
         /// });
         /// ```
-        #[cfg_attr(feature = "metrique-integration", entry(ignore))]
-        pub poll_time_histogram: Vec<u64>,
+        pub poll_time_histogram: PollTimeHistogram,
 
         /// The number of times worker threads unparked but performed no work before parking again.
         ///
@@ -1265,6 +1270,8 @@ define_semi_stable! {
             num_remote_schedules: u64,
             budget_forced_yield_count: u64,
             io_driver_ready_count: u64,
+            // Cached bucket ranges, static config that doesn't change after runtime creation.
+            bucket_ranges: Vec<Range<Duration>>,
         }
     }
 }
@@ -1297,7 +1304,16 @@ impl RuntimeIntervals {
             metrics.min_polls_count = u64::MAX;
             metrics.min_local_queue_depth = usize::MAX;
             metrics.mean_poll_duration_worker_min = Duration::MAX;
-            metrics.poll_time_histogram = vec![0; self.runtime.poll_time_histogram_num_buckets()];
+            metrics.poll_time_histogram = PollTimeHistogram {
+                buckets: self
+                    .bucket_ranges
+                    .iter()
+                    .map(|range| HistogramBucket {
+                        range: range.clone(),
+                        count: 0,
+                    })
+                    .collect(),
+            };
             metrics.budget_forced_yield_count =
                 budget_forced_yields.saturating_sub(self.budget_forced_yield_count);
             metrics.io_driver_ready_count = io_driver_ready_events.saturating_sub(self.io_driver_ready_count);
@@ -1407,6 +1423,10 @@ impl RuntimeMonitor {
             budget_forced_yield_count: self.runtime.budget_forced_yield_count(),
             #[cfg(tokio_unstable)]
             io_driver_ready_count: self.runtime.io_driver_ready_count(),
+            #[cfg(tokio_unstable)]
+            bucket_ranges: (0..self.runtime.poll_time_histogram_num_buckets())
+                .map(|i| self.runtime.poll_time_histogram_bucket_range(i))
+                .collect(),
         }
     }
 }
@@ -1541,12 +1561,12 @@ impl Worker {
 
             // Update the histogram counts if there were polls since last count
             if worker_polls_count > 0 {
-                for (bucket, cell) in metrics.poll_time_histogram.iter_mut().enumerate() {
+                for (bucket, entry) in metrics.poll_time_histogram.buckets.iter_mut().enumerate() {
                     let new = rt.poll_time_histogram_bucket_count(self.worker, bucket);
                     let delta = new.saturating_sub(self.poll_time_histogram[bucket]);
                     self.poll_time_histogram[bucket] = new;
 
-                    *cell = cell.saturating_add(delta);
+                    entry.count = entry.count.saturating_add(delta);
                 }
             }
 
@@ -1592,3 +1612,18 @@ derived_metrics!(
         }
     }
 );
+
+#[cfg(all(test, tokio_unstable, feature = "metrique-integration"))]
+mod metrique_integration_tests {
+    use super::*;
+    use metrique::CloseValue;
+
+    /// Verify that the `#[metrics]` usage on `RuntimeMetrics` produces
+    /// working `CloseValue` and `InflectableEntry` impls. This checks for regressions: 
+    /// if a field is added whose type doesn't implement `CloseValue`, this will fail to compile.
+    #[test]
+    fn metrique_derive_compiles() {
+        let metrics = RuntimeMetrics::default();
+        let _entry = metrics.close();
+    }
+}

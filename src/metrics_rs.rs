@@ -179,7 +179,14 @@ macro_rules! metric_refs {
             // since the metrics structs are #[non_exhaustive], so use a debug impl
             let debug = format!("{:#?}", <$metrics_name>::default());
             for line in debug.lines() {
-                if line == format!("{} {{", stringify!($metrics_name)) || line == "}" {
+                // Only look at top-level field lines: exactly 4 spaces of
+                // indentation and containing a `:` (field name separator).
+                // This skips the struct header/footer and any nested
+                // struct/vec Debug output from complex field types.
+                let is_top_level_field = line.starts_with("    ")
+                    && !line.starts_with("     ")
+                    && line.contains(':');
+                if !is_top_level_field {
                     continue
                 }
                 $(
@@ -278,15 +285,14 @@ impl<T> MyMetricOp<T> for (&metrics::Gauge, f64) {
 }
 
 #[cfg(all(feature = "rt", tokio_unstable))]
-impl MyMetricOp<&tokio::runtime::RuntimeMetrics> for (&metrics::Histogram, Vec<u64>) {
-    fn op(self, tokio: &tokio::runtime::RuntimeMetrics) {
-        for (i, bucket) in self.1.iter().enumerate() {
-            let range = tokio.poll_time_histogram_bucket_range(i);
-            if *bucket > 0 {
-                // emit using range.start to avoid very large numbers for open bucket
-                // FIXME: do we want to do something else here?
+impl<T> MyMetricOp<T> for (&metrics::Histogram, crate::runtime::PollTimeHistogram) {
+    fn op(self, _: T) {
+        for bucket in &self.1.buckets {
+            if bucket.count > 0 {
+                // Use range.start as the representative value; the metrics-rs
+                // histogram handles its own bucketing from these raw values.
                 self.0
-                    .record_many(range.start.as_micros() as f64, *bucket as usize);
+                    .record_many(bucket.range.start.as_micros() as f64, bucket.count as usize);
             }
         }
     }

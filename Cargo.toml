@@ -20,7 +20,7 @@ unexpected_cfgs = { level = "warn", check-cfg = ['cfg(tokio_unstable)'] }
 [features]
 default = ["rt"]
 metrics-rs-integration = ["dep:metrics"]
-metrique-integration = ["dep:metrique-writer"]
+metrique-integration = ["dep:metrique"]
 rt = ["tokio"]
 
 [dependencies]
@@ -29,7 +29,9 @@ futures-util = "0.3.19"
 pin-project-lite = "0.2.7"
 tokio = { version = "1.45.1", features = ["rt", "time", "net"], optional = true }
 metrics = { version = "0.24", optional = true }
-metrique-writer = { version = "0.1", optional = true }
+# TODO: Switch to crates.io version once metrique publishes a release
+# with the macro hygiene fix (awslabs/metrique#259).
+metrique = { git = "https://github.com/awslabs/metrique", default-features = false, optional = true }
 
 [dev-dependencies]
 axum = "0.8"
