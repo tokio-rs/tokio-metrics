@@ -77,6 +77,15 @@ impl metrique::CloseValue for PollTimeHistogram {
     }
 }
 
+#[cfg(feature = "metrique-integration")]
+impl metrique::CloseValue for &PollTimeHistogram {
+    type Closed = PollTimeHistogram;
+
+    fn close(self) -> PollTimeHistogram {
+        self.clone()
+    }
+}
+
 #[cfg(all(test, feature = "metrique-integration"))]
 mod tests {
     use super::*;
