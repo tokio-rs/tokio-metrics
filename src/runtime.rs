@@ -78,8 +78,8 @@ macro_rules! define_runtime_metrics {
     ) => {
         /// Key runtime metrics.
         #[non_exhaustive]
-        #[derive(Default, Debug, Clone)]
         #[cfg_attr(feature = "metrique-integration", metrique::unit_of_work::metrics(rename_all = "PascalCase"))]
+        #[derive(Default, Debug, Clone)]
         pub struct RuntimeMetrics {
             $(
                 $(#[$($attributes)*])*
