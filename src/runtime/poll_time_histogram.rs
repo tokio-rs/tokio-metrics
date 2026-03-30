@@ -50,7 +50,11 @@ impl metrique::writer::Value for PollTimeHistogram {
                 let value_us = if b.range.end == Duration::MAX {
                     b.range.start.as_micros() as f64
                 } else {
-                    (b.range.start.as_micros() + b.range.end.as_micros()) as f64 / 2.0
+                    #[allow(clippy::incompatible_msrv)] // metrique-integration requires 1.89+
+                    f64::midpoint(
+                        b.range.start.as_micros() as f64,
+                        b.range.end.as_micros() as f64,
+                    )
                 };
                 Observation::Repeated {
                     total: value_us * b.count as f64,
