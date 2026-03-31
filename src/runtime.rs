@@ -1625,23 +1625,25 @@ mod metrique_integration_tests {
     /// this will fail to compile.
     #[test]
     fn metrique_integration_produces_expected_fields() {
-        let mut metrics = RuntimeMetrics::default();
-        metrics.workers_count = 4;
-        metrics.total_park_count = 100;
-        metrics.poll_time_histogram = PollTimeHistogram::new(vec![
-            HistogramBucket {
-                range: Duration::from_micros(0)..Duration::from_micros(100),
-                count: 10,
-            },
-            HistogramBucket {
-                range: Duration::from_micros(100)..Duration::from_micros(200),
-                count: 0,
-            },
-            HistogramBucket {
-                range: Duration::from_micros(200)..Duration::from_micros(500),
-                count: 3,
-            },
-        ]);
+        let metrics = RuntimeMetrics {
+            workers_count: 4,
+            total_park_count: 100,
+            poll_time_histogram: PollTimeHistogram::new(vec![
+                HistogramBucket {
+                    range: Duration::from_micros(0)..Duration::from_micros(100),
+                    count: 10,
+                },
+                HistogramBucket {
+                    range: Duration::from_micros(100)..Duration::from_micros(200),
+                    count: 0,
+                },
+                HistogramBucket {
+                    range: Duration::from_micros(200)..Duration::from_micros(500),
+                    count: 3,
+                },
+            ]),
+            ..Default::default()
+        };
 
         let entry = test_metric(metrics);
 
