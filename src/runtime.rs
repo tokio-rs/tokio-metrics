@@ -1618,14 +1618,68 @@ derived_metrics!(
 #[cfg(all(test, tokio_unstable, feature = "metrique-integration"))]
 mod metrique_integration_tests {
     use super::*;
-    use metrique::CloseValue;
+    use metrique::test_util::test_metric;
 
-    /// Verify that the `#[metrics]` usage on `RuntimeMetrics` produces
-    /// working `CloseValue` and `InflectableEntry` impls. This checks for regressions: 
-    /// if a field is added whose type doesn't implement `CloseValue`, this will fail to compile.
+    /// Verify that the `#[metrics(subfield)]` derive on `RuntimeMetrics`
+    /// produces working metric output. This is also a compile-time regression
+    /// test: if a field is added whose type doesn't implement `CloseValue`,
+    /// this will fail to compile.
     #[test]
-    fn metrique_derive_compiles() {
-        let metrics = RuntimeMetrics::default();
-        let _entry = metrics.close();
+    fn metrique_integration_produces_expected_fields() {
+        let mut metrics = RuntimeMetrics::default();
+        metrics.workers_count = 4;
+        metrics.total_park_count = 100;
+        metrics.poll_time_histogram = PollTimeHistogram {
+            buckets: vec![
+                HistogramBucket {
+                    range: Duration::from_micros(0)..Duration::from_micros(100),
+                    count: 10,
+                },
+                HistogramBucket {
+                    range: Duration::from_micros(100)..Duration::from_micros(200),
+                    count: 0,
+                },
+                HistogramBucket {
+                    range: Duration::from_micros(200)..Duration::from_micros(500),
+                    count: 3,
+                },
+            ],
+        };
+
+        let entry = test_metric(metrics);
+
+        // Stable fields
+        assert_eq!(entry.metrics["workers_count"], 4);
+        assert_eq!(entry.metrics["total_park_count"], 100);
+        assert!(entry.metrics.contains_key("elapsed"));
+        assert!(entry.metrics.contains_key("total_busy_duration"));
+        assert!(entry.metrics.contains_key("global_queue_depth"));
+
+        // Unstable fields
+        assert!(entry.metrics.contains_key("mean_poll_duration"));
+        assert!(entry.metrics.contains_key("total_steal_count"));
+        assert!(entry.metrics.contains_key("total_polls_count"));
+
+        // Histogram — 2 non-zero buckets (count 10 and 3) should produce 2 observations
+        let hist = &entry.metrics["poll_time_histogram"];
+        assert_eq!(hist.distribution.len(), 2, "expected 2 non-zero buckets");
+
+        // First bucket: midpoint of 0..100µs = 50µs, count = 10
+        match hist.distribution[0] {
+            metrique::writer::Observation::Repeated { total, occurrences } => {
+                assert_eq!(occurrences, 10);
+                assert!((total - 500.0).abs() < 0.01, "expected 50 * 10 = 500, got {total}");
+            }
+            other => panic!("expected Repeated, got {other:?}"),
+        }
+
+        // Second observation: midpoint of 200..500µs = 350µs, count = 3
+        match hist.distribution[1] {
+            metrique::writer::Observation::Repeated { total, occurrences } => {
+                assert_eq!(occurrences, 3);
+                assert!((total - 1050.0).abs() < 0.01, "expected 350 * 3 = 1050, got {total}");
+            }
+            other => panic!("expected Repeated, got {other:?}"),
+        }
     }
 }

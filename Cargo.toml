@@ -34,6 +34,7 @@ metrics = { version = "0.24", optional = true }
 metrique = { git = "https://github.com/awslabs/metrique", default-features = false, optional = true }
 
 [dev-dependencies]
+metrique = { git = "https://github.com/awslabs/metrique", features = ["test-util"] }
 axum = "0.8"
 criterion = "0.7"
 futures = "0.3.21"
