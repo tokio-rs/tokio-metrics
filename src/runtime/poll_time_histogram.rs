@@ -17,6 +17,13 @@ pub struct PollTimeHistogram {
     pub buckets: Vec<HistogramBucket>,
 }
 
+impl PollTimeHistogram {
+    /// Returns just the bucket counts, matching the old `Vec<u64>` representation.
+    pub fn as_counts(&self) -> Vec<u64> {
+        self.buckets.iter().map(|b| b.count).collect()
+    }
+}
+
 /// A single bucket in a [`PollTimeHistogram`].
 #[derive(Debug, Clone)]
 pub struct HistogramBucket {
@@ -113,9 +120,15 @@ mod tests {
         let closed = hist.close();
         assert_eq!(closed.buckets.len(), 3);
         assert_eq!(closed.buckets[0].count, 5);
-        assert_eq!(closed.buckets[0].range, Duration::from_micros(0)..Duration::from_micros(100));
+        assert_eq!(
+            closed.buckets[0].range,
+            Duration::from_micros(0)..Duration::from_micros(100)
+        );
         assert_eq!(closed.buckets[1].count, 0);
         assert_eq!(closed.buckets[2].count, 3);
-        assert_eq!(closed.buckets[2].range, Duration::from_micros(200)..Duration::from_micros(500));
+        assert_eq!(
+            closed.buckets[2].range,
+            Duration::from_micros(200)..Duration::from_micros(500)
+        );
     }
 }

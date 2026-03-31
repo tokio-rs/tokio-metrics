@@ -486,8 +486,10 @@ define_runtime_metrics! {
         /// times.
         ///
         /// Each bucket contains the configured [`Duration`] range and the count
-        /// of task polls that fell into that range during the interval.
-        /// 
+        /// of task polls that fell into that range during the interval. Use
+        /// [`PollTimeHistogram::as_counts`] to get just the raw counts as a
+        /// `Vec<u64>`.
+        ///
         /// This metric must be explicitly enabled when creating the runtime with
         /// [`enable_metrics_poll_time_histogram`][tokio::runtime::Builder::enable_metrics_poll_time_histogram].
         /// Bucket sizes are fixed and configured at the runtime level. See
