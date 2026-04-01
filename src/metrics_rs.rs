@@ -287,7 +287,7 @@ impl<T> MyMetricOp<T> for (&metrics::Gauge, f64) {
 #[cfg(all(feature = "rt", tokio_unstable))]
 impl<T> MyMetricOp<T> for (&metrics::Histogram, crate::runtime::PollTimeHistogram) {
     fn op(self, _: T) {
-        for bucket in self.1.buckets() {
+        for bucket in &self.1.buckets {
             if bucket.count > 0 {
                 // Use range.start as the representative value; the metrics-rs
                 // histogram handles its own bucketing from these raw values.

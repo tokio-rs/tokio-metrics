@@ -1,5 +1,4 @@
 use std::ops::Range;
-use std::sync::Arc;
 use std::time::Duration;
 
 /// A histogram of task poll durations, pairing each bucket's count with its
@@ -14,26 +13,11 @@ use std::time::Duration;
 /// interval.
 #[derive(Debug, Clone, Default)]
 pub struct PollTimeHistogram {
-    buckets: Arc<Vec<HistogramBucket>>,
+    /// The histogram buckets with their ranges and counts.
+    pub buckets: Vec<HistogramBucket>,
 }
 
 impl PollTimeHistogram {
-    /// Creates a new histogram from the given buckets.
-    pub(crate) fn new(buckets: Vec<HistogramBucket>) -> Self {
-        Self {
-            buckets: Arc::new(buckets),
-        }
-    }
-
-    /// Returns the histogram buckets with their ranges and counts.
-    pub fn buckets(&self) -> &[HistogramBucket] {
-        &self.buckets
-    }
-
-    pub(crate) fn buckets_mut(&mut self) -> &mut Vec<HistogramBucket> {
-        Arc::make_mut(&mut self.buckets)
-    }
-
     /// Returns just the bucket counts, matching the old `Vec<u64>` representation.
     pub fn as_counts(&self) -> Vec<u64> {
         self.buckets.iter().map(|b| b.count).collect()
@@ -100,15 +84,6 @@ impl metrique::CloseValue for PollTimeHistogram {
     }
 }
 
-#[cfg(feature = "metrique-integration")]
-impl metrique::CloseValue for &PollTimeHistogram {
-    type Closed = PollTimeHistogram;
-
-    fn close(self) -> PollTimeHistogram {
-        self.clone()
-    }
-}
-
 #[cfg(all(test, feature = "metrique-integration"))]
 mod tests {
     use super::*;
@@ -116,7 +91,8 @@ mod tests {
 
     #[test]
     fn poll_time_histogram_close_value() {
-        let hist = PollTimeHistogram::new(vec![
+        let hist = PollTimeHistogram {
+            buckets: vec![
                 HistogramBucket {
                     range: Duration::from_micros(0)..Duration::from_micros(100),
                     count: 5,
@@ -130,19 +106,19 @@ mod tests {
                     count: 3,
                 },
             ],
-        );
+        };
 
         let closed = hist.close();
-        assert_eq!(closed.buckets().len(), 3);
-        assert_eq!(closed.buckets()[0].count, 5);
+        assert_eq!(closed.buckets.len(), 3);
+        assert_eq!(closed.buckets[0].count, 5);
         assert_eq!(
-            closed.buckets()[0].range,
+            closed.buckets[0].range,
             Duration::from_micros(0)..Duration::from_micros(100)
         );
-        assert_eq!(closed.buckets()[1].count, 0);
-        assert_eq!(closed.buckets()[2].count, 3);
+        assert_eq!(closed.buckets[1].count, 0);
+        assert_eq!(closed.buckets[2].count, 3);
         assert_eq!(
-            closed.buckets()[2].range,
+            closed.buckets[2].range,
             Duration::from_micros(200)..Duration::from_micros(500)
         );
     }
