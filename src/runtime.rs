@@ -1636,14 +1636,14 @@ mod metrique_integration_tests {
         // Stable fields
         assert_eq!(entry.metrics["workers_count"], 4);
         assert_eq!(entry.metrics["total_park_count"], 100);
-        assert!(entry.metrics.contains_key("elapsed"));
-        assert!(entry.metrics.contains_key("total_busy_duration"));
-        assert!(entry.metrics.contains_key("global_queue_depth"));
+        assert_eq!(entry.metrics["elapsed"].as_f64(), 0.0);
+        assert_eq!(entry.metrics["total_busy_duration"].as_f64(), 0.0);
+        assert_eq!(entry.metrics["global_queue_depth"].as_u64(), 0);
 
         // Unstable fields
-        assert!(entry.metrics.contains_key("mean_poll_duration"));
-        assert!(entry.metrics.contains_key("total_steal_count"));
-        assert!(entry.metrics.contains_key("total_polls_count"));
+        assert_eq!(entry.metrics["mean_poll_duration"].as_f64(), 0.0);
+        assert_eq!(entry.metrics["total_steal_count"].as_u64(), 0);
+        assert_eq!(entry.metrics["total_polls_count"].as_u64(), 0);
 
         // 2 non-zero buckets (count 10 and 3) should produce 2 observations
         let hist = &entry.metrics["poll_time_histogram"];
@@ -1720,9 +1720,8 @@ mod metrique_integration_tests {
             let entry = test_metric(metrics);
 
             assert_eq!(entry.metrics["workers_count"], expected_workers_count as u64);
-            assert!(entry.metrics.contains_key("elapsed"));
-            assert!(entry.metrics.contains_key("total_busy_duration"));
-            assert!(entry.metrics.contains_key("poll_time_histogram"));
+            assert!(entry.metrics["elapsed"].as_f64() >= 0.0);
+            assert!(entry.metrics["total_busy_duration"].as_f64() >= 0.0);
 
             let hist = &entry.metrics["poll_time_histogram"];
             assert_eq!(hist.distribution.len(), expected_non_zero_buckets);
