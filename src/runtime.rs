@@ -516,8 +516,8 @@ define_runtime_metrics! {
         ///     let mut next_interval = || intervals.next().unwrap();
         ///
         ///     let interval = next_interval();
-        ///     for bucket in &interval.poll_time_histogram.buckets {
-        ///         println!("{:?} => {} polls", bucket.range, bucket.count);
+        ///     for bucket in interval.poll_time_histogram.buckets() {
+        ///         println!("{:?} => {} polls", bucket.range(), bucket.count());
         ///     }
         /// });
         /// ```
@@ -1306,16 +1306,12 @@ impl RuntimeIntervals {
             metrics.min_polls_count = u64::MAX;
             metrics.min_local_queue_depth = usize::MAX;
             metrics.mean_poll_duration_worker_min = Duration::MAX;
-            metrics.poll_time_histogram = PollTimeHistogram {
-                buckets: self
-                    .bucket_ranges
+            metrics.poll_time_histogram = PollTimeHistogram::new(
+                self.bucket_ranges
                     .iter()
-                    .map(|range| HistogramBucket {
-                        range: range.clone(),
-                        count: 0,
-                    })
+                    .map(|range| HistogramBucket::new(range.clone(), 0))
                     .collect(),
-            };
+            );
             metrics.budget_forced_yield_count =
                 budget_forced_yields.saturating_sub(self.budget_forced_yield_count);
             metrics.io_driver_ready_count = io_driver_ready_events.saturating_sub(self.io_driver_ready_count);
@@ -1563,12 +1559,12 @@ impl Worker {
 
             // Update the histogram counts if there were polls since last count
             if worker_polls_count > 0 {
-                for (bucket, entry) in metrics.poll_time_histogram.buckets.iter_mut().enumerate() {
+                for (bucket, entry) in metrics.poll_time_histogram.buckets_mut().iter_mut().enumerate() {
                     let new = rt.poll_time_histogram_bucket_count(self.worker, bucket);
                     let delta = new.saturating_sub(self.poll_time_histogram[bucket]);
                     self.poll_time_histogram[bucket] = new;
 
-                    entry.count = entry.count.saturating_add(delta);
+                    entry.add_count(delta);
                 }
             }
 
@@ -1629,22 +1625,11 @@ mod metrique_integration_tests {
         let metrics = RuntimeMetrics {
             workers_count: 4,
             total_park_count: 100,
-            poll_time_histogram: PollTimeHistogram {
-                buckets: vec![
-                    HistogramBucket {
-                        range: Duration::from_micros(0)..Duration::from_micros(100),
-                        count: 10,
-                    },
-                    HistogramBucket {
-                        range: Duration::from_micros(100)..Duration::from_micros(200),
-                        count: 0,
-                    },
-                    HistogramBucket {
-                        range: Duration::from_micros(200)..Duration::from_micros(500),
-                        count: 3,
-                    },
-                ],
-            },
+            poll_time_histogram: PollTimeHistogram::new(vec![
+                HistogramBucket::new(Duration::from_micros(0)..Duration::from_micros(100), 10),
+                HistogramBucket::new(Duration::from_micros(100)..Duration::from_micros(200), 0),
+                HistogramBucket::new(Duration::from_micros(200)..Duration::from_micros(500), 3),
+            ]),
             ..Default::default()
         };
 

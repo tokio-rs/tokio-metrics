@@ -12,13 +12,28 @@ use std::time::Duration;
 /// the count of task polls that fell into that range during the sampling
 /// interval.
 #[derive(Debug, Clone, Default)]
+#[non_exhaustive]
 pub struct PollTimeHistogram {
-    /// The histogram buckets with their ranges and counts.
-    pub buckets: Vec<HistogramBucket>,
+    buckets: Vec<HistogramBucket>,
 }
 
 impl PollTimeHistogram {
-    /// Returns just the bucket counts, matching the old `Vec<u64>` representation.
+    /// Creates a new histogram from the given buckets.
+    pub(crate) fn new(buckets: Vec<HistogramBucket>) -> Self {
+        Self { buckets }
+    }
+
+    /// Returns the histogram buckets.
+    pub fn buckets(&self) -> &[HistogramBucket] {
+        &self.buckets
+    }
+
+    /// Returns a mutable reference to the histogram buckets.
+    pub(crate) fn buckets_mut(&mut self) -> &mut [HistogramBucket] {
+        &mut self.buckets
+    }
+
+    /// Returns just the bucket counts as a `Vec<u64>`.
     pub fn as_counts(&self) -> Vec<u64> {
         self.buckets.iter().map(|b| b.count).collect()
     }
@@ -26,11 +41,32 @@ impl PollTimeHistogram {
 
 /// A single bucket in a [`PollTimeHistogram`].
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct HistogramBucket {
-    /// The time range for this bucket (from the runtime's histogram configuration).
-    pub range: Range<Duration>,
-    /// The number of task polls that fell into this bucket during the interval.
-    pub count: u64,
+    range: Range<Duration>,
+    count: u64,
+}
+
+impl HistogramBucket {
+    /// Creates a new histogram bucket.
+    pub(crate) fn new(range: Range<Duration>, count: u64) -> Self {
+        Self { range, count }
+    }
+
+    /// Returns the time range for this bucket.
+    pub fn range(&self) -> &Range<Duration> {
+        &self.range
+    }
+
+    /// Returns the number of task polls that fell into this bucket during the interval.
+    pub fn count(&self) -> u64 {
+        self.count
+    }
+
+    /// Adds to the count of this bucket.
+    pub(crate) fn add_count(&mut self, delta: u64) {
+        self.count = self.count.saturating_add(delta);
+    }
 }
 
 impl Default for HistogramBucket {
@@ -91,34 +127,24 @@ mod tests {
 
     #[test]
     fn poll_time_histogram_close_value() {
-        let hist = PollTimeHistogram {
-            buckets: vec![
-                HistogramBucket {
-                    range: Duration::from_micros(0)..Duration::from_micros(100),
-                    count: 5,
-                },
-                HistogramBucket {
-                    range: Duration::from_micros(100)..Duration::from_micros(200),
-                    count: 0,
-                },
-                HistogramBucket {
-                    range: Duration::from_micros(200)..Duration::from_micros(500),
-                    count: 3,
-                },
-            ],
-        };
+        let hist = PollTimeHistogram::new(vec![
+            HistogramBucket::new(Duration::from_micros(0)..Duration::from_micros(100), 5),
+            HistogramBucket::new(Duration::from_micros(100)..Duration::from_micros(200), 0),
+            HistogramBucket::new(Duration::from_micros(200)..Duration::from_micros(500), 3),
+        ]);
 
         let closed = hist.close();
-        assert_eq!(closed.buckets.len(), 3);
-        assert_eq!(closed.buckets[0].count, 5);
+        let buckets = closed.buckets();
+        assert_eq!(buckets.len(), 3);
+        assert_eq!(buckets[0].count(), 5);
         assert_eq!(
-            closed.buckets[0].range,
+            *buckets[0].range(),
             Duration::from_micros(0)..Duration::from_micros(100)
         );
-        assert_eq!(closed.buckets[1].count, 0);
-        assert_eq!(closed.buckets[2].count, 3);
+        assert_eq!(buckets[1].count(), 0);
+        assert_eq!(buckets[2].count(), 3);
         assert_eq!(
-            closed.buckets[2].range,
+            *buckets[2].range(),
             Duration::from_micros(200)..Duration::from_micros(500)
         );
     }
