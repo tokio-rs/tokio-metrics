@@ -1685,7 +1685,7 @@ mod metrique_integration_tests {
 
             let _ = intervals.next().unwrap();
 
-            // Drive some work, then sample up to a few intervals
+            // Spawn tasks to create some work for the runtime to poll.
             let mut metrics_with_polls = None;
             for _ in 0..4 {
                 for _ in 0..25 {
@@ -1695,6 +1695,12 @@ mod metrique_integration_tests {
                     .await
                     .unwrap();
                 }
+                // Slow poll (>900µs) to land in the last histogram bucket.
+                tokio::spawn(async {
+                    std::thread::sleep(Duration::from_millis(1));
+                })
+                .await
+                .unwrap();
 
                 let metrics = intervals.next().unwrap();
                 let total_polls: u64 = metrics.poll_time_histogram.buckets().iter().map(|b| b.count()).sum();
@@ -1717,6 +1723,14 @@ mod metrique_integration_tests {
             assert!(expected_workers_count > 0);
             assert!(expected_total_polls > 0);
 
+            let last_bucket = metrics.poll_time_histogram.buckets().last().unwrap();
+
+            // Sanity check: Tokio's last histogram bucket ends at Duration::from_nanos(u64::MAX)
+            assert_eq!(last_bucket.range_end(), Duration::from_nanos(u64::MAX));
+            assert!(last_bucket.count() > 0, "expected slow poll to land in last bucket");
+            let last_bucket_start_us = last_bucket.range_start().as_micros() as f64;
+            let last_bucket_count = last_bucket.count();
+
             let entry = test_metric(metrics);
 
             assert_eq!(entry.metrics["workers_count"], expected_workers_count as u64);
@@ -1734,8 +1748,23 @@ mod metrique_integration_tests {
                 })
                 .sum();
             assert_eq!(observed_total_occurrences, expected_total_polls);
+
+            // The last observation corresponds to the last histogram bucket.
+            // Verify it uses range_start as the representative value instead of a midpoint,
+            // since the last bucket range_end is Duration::from_nanos(u64::MAX).
+            let last_obs = hist.distribution.last().unwrap();
+            match last_obs {
+                metrique::writer::Observation::Repeated { total, occurrences } => {
+                    assert_eq!(*occurrences, last_bucket_count);
+                    let expected_total = last_bucket_start_us * last_bucket_count as f64;
+                    assert!(
+                        (total - expected_total).abs() < 0.01,
+                        "last bucket should use range_start ({last_bucket_start_us}µs) as representative value, \
+                         expected total={expected_total}, got {total}"
+                    );
+                }
+                other => panic!("expected Repeated, got {other:?}"),
+            }
         });
     }
-
 }
-

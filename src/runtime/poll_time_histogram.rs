@@ -77,14 +77,13 @@ impl metrique::writer::Value for PollTimeHistogram {
         use metrique::writer::unit::NegativeScale;
         use metrique::writer::{MetricFlags, Observation, Unit};
 
-        // Use the bucket midpoint as the representative value. Tokio's last
-        // bucket is an overflow bucket whose range.end is
-        // Duration::from_nanos(u64::MAX); use range.start for that bucket
-        // since the midpoint would be nonsensical.
-        const OVERFLOW_END: Duration = Duration::from_nanos(u64::MAX);
+        // Use the bucket midpoint as the representative value. 
+        // Tokio's last bucket has range_end of Duration::from_nanos(u64::MAX),
+        // so use range_start for it since the midpoint wouldn't be representative.
+        const LAST_BUCKET_END: Duration = Duration::from_nanos(u64::MAX);
         writer.metric(
             self.buckets.iter().filter(|b| b.count > 0).map(|b| {
-                let value_us = if b.range_end == OVERFLOW_END {
+                let value_us = if b.range_end == LAST_BUCKET_END {
                     b.range_start.as_micros() as f64
                 } else {
                     #[allow(clippy::incompatible_msrv)] // metrique-integration requires 1.89+
@@ -142,12 +141,12 @@ mod tests {
     }
 
     #[test]
-    fn poll_time_histogram_overflow_bucket_uses_range_start() {
-        let overflow_start = Duration::from_millis(500);
+    fn poll_time_histogram_last_bucket_uses_range_start() {
+        let last_bucket_start = Duration::from_millis(500);
         let metrics = RuntimeMetrics {
             poll_time_histogram: PollTimeHistogram::new(vec![
                 HistogramBucket::new(Duration::from_micros(0), Duration::from_micros(100), 0),
-                HistogramBucket::new(overflow_start, Duration::from_nanos(u64::MAX), 2),
+                HistogramBucket::new(last_bucket_start, Duration::from_nanos(u64::MAX), 2),
             ]),
             ..Default::default()
         };
@@ -159,7 +158,7 @@ mod tests {
         match hist.distribution[0] {
             metrique::writer::Observation::Repeated { total, occurrences } => {
                 assert_eq!(occurrences, 2);
-                let expected = overflow_start.as_micros() as f64 * 2.0;
+                let expected = last_bucket_start.as_micros() as f64 * 2.0;
                 assert!((total - expected).abs() < 0.01);
             }
             other => panic!("expected Repeated, got {other:?}"),
