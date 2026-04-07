@@ -1669,4 +1669,126 @@ mod metrique_integration_tests {
             other => panic!("expected Repeated, got {other:?}"),
         }
     }
+
+    /// Collect `RuntimeMetrics` from a live Tokio runtime and verify the pipeline produces valid output.
+    #[cfg(feature = "rt")]
+    #[test]
+    fn metrique_end_to_end() {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .enable_metrics_poll_time_histogram()
+            .build()
+            .unwrap();
+
+        rt.block_on(async {
+            let handle = tokio::runtime::Handle::current();
+            let monitor = RuntimeMonitor::new(&handle);
+            let mut intervals = monitor.intervals();
+
+            let _ = intervals.next().unwrap();
+
+            // Drive some work, then sample up to a few intervals
+            let mut metrics_with_polls = None;
+            for _ in 0..4 {
+                for _ in 0..25 {
+                    tokio::spawn(async {
+                        tokio::task::yield_now().await;
+                    })
+                    .await
+                    .unwrap();
+                }
+
+                let metrics = intervals.next().unwrap();
+                let total_polls: u64 = metrics.poll_time_histogram.buckets().iter().map(|b| b.count()).sum();
+                if total_polls > 0 {
+                    metrics_with_polls = Some(metrics);
+                    break;
+                }
+            }
+            let metrics = metrics_with_polls.expect("expected polls to be recorded within 4 sampled intervals");
+
+            // Capture expected values from raw runtime metrics before writing.
+            let expected_workers_count = metrics.workers_count;
+            let expected_non_zero_buckets = metrics
+                .poll_time_histogram
+                .buckets()
+                .iter()
+                .filter(|b| b.count() > 0)
+                .count();
+            assert_eq!(
+                metrics.poll_time_histogram.buckets().last().unwrap().range().end,
+                Duration::from_nanos(u64::MAX),
+                "Tokio's overflow bucket should end at Duration::from_nanos(u64::MAX)",
+            );
+            let expected_total_polls: u64 = metrics.poll_time_histogram.buckets().iter().map(|b| b.count()).sum();
+            assert!(expected_workers_count > 0);
+            assert!(expected_total_polls > 0);
+
+            // Feed through metrique and verify output.
+            let entry = test_metric(metrics);
+
+            assert_eq!(entry.metrics["workers_count"], expected_workers_count as u64);
+            assert!(entry.metrics.contains_key("elapsed"));
+            assert!(entry.metrics.contains_key("total_busy_duration"));
+            assert!(entry.metrics.contains_key("poll_time_histogram"));
+
+            // Histogram observations should match non-zero buckets and poll totals.
+            let hist = &entry.metrics["poll_time_histogram"];
+            assert_eq!(
+                hist.distribution.len(),
+                expected_non_zero_buckets,
+                "expected one observation per non-zero bucket",
+            );
+            assert!(
+                !hist.distribution.is_empty(),
+                "expected histogram observations from runtime polls",
+            );
+            let observed_total_occurrences: u64 = hist
+                .distribution
+                .iter()
+                .map(|obs| match obs {
+                    metrique::writer::Observation::Repeated { occurrences, .. } => *occurrences,
+                    other => panic!("expected Repeated, got {other:?}"),
+                })
+                .sum();
+            assert_eq!(
+                observed_total_occurrences, expected_total_polls,
+                "histogram observation counts should equal total polled tasks",
+            );
+        });
+    }
+
+    /// The overflow bucket (range.end == Duration::from_nanos(u64::MAX)) should
+    /// use range.start as its representative value, not a midpoint.
+    #[test]
+    fn overflow_bucket_uses_start_not_midpoint() {
+        let overflow_start = Duration::from_millis(500);
+        let overflow_end = Duration::from_nanos(u64::MAX);
+
+        let metrics = RuntimeMetrics {
+            poll_time_histogram: PollTimeHistogram::new(vec![
+                HistogramBucket::new(Duration::from_micros(0)..Duration::from_micros(100), 0),
+                HistogramBucket::new(overflow_start..overflow_end, 2),
+            ]),
+            ..Default::default()
+        };
+
+        let entry = test_metric(metrics);
+        let hist = &entry.metrics["poll_time_histogram"];
+        assert_eq!(hist.distribution.len(), 1, "only the overflow bucket has count > 0");
+
+        match hist.distribution[0] {
+            metrique::writer::Observation::Repeated { total, occurrences } => {
+                assert_eq!(occurrences, 2);
+                // Should use overflow_start, instead of midpoint.
+                let expected = overflow_start.as_micros() as f64 * 2.0;
+                assert!(
+                    (total - expected).abs() < 0.01,
+                    "overflow bucket should use range.start ({expected}), got {total}",
+                );
+            }
+            other => panic!("expected Repeated, got {other:?}"),
+        }
+    }
 }
+

@@ -85,12 +85,13 @@ impl metrique::writer::Value for PollTimeHistogram {
         use metrique::writer::{MetricFlags, Observation, Unit};
 
         // Use the bucket midpoint as the representative value. Tokio's last
-        // bucket is an overflow bucket with range.end == Duration::MAX (from
-        // Duration::from_nanos(u64::MAX)); use range.start for that bucket
+        // bucket is an overflow bucket whose range.end is
+        // Duration::from_nanos(u64::MAX); use range.start for that bucket
         // since the midpoint would be nonsensical.
+        const OVERFLOW_END: Duration = Duration::from_nanos(u64::MAX);
         writer.metric(
             self.buckets.iter().filter(|b| b.count > 0).map(|b| {
-                let value_us = if b.range.end == Duration::MAX {
+                let value_us = if b.range.end == OVERFLOW_END {
                     b.range.start.as_micros() as f64
                 } else {
                     #[allow(clippy::incompatible_msrv)] // metrique-integration requires 1.89+
@@ -123,7 +124,9 @@ impl metrique::CloseValue for PollTimeHistogram {
 #[cfg(all(test, feature = "metrique-integration"))]
 mod tests {
     use super::*;
+    use crate::runtime::RuntimeMetrics;
     use metrique::CloseValue;
+    use metrique::test_util::test_metric;
 
     #[test]
     fn poll_time_histogram_close_value() {
@@ -147,5 +150,30 @@ mod tests {
             *buckets[2].range(),
             Duration::from_micros(200)..Duration::from_micros(500)
         );
+    }
+
+    #[test]
+    fn poll_time_histogram_overflow_bucket_uses_range_start() {
+        let overflow_start = Duration::from_millis(500);
+        let metrics = RuntimeMetrics {
+            poll_time_histogram: PollTimeHistogram::new(vec![
+                HistogramBucket::new(Duration::from_micros(0)..Duration::from_micros(100), 0),
+                HistogramBucket::new(overflow_start..Duration::from_nanos(u64::MAX), 2),
+            ]),
+            ..Default::default()
+        };
+
+        let entry = test_metric(metrics);
+        let hist = &entry.metrics["poll_time_histogram"];
+        assert_eq!(hist.distribution.len(), 1);
+
+        match hist.distribution[0] {
+            metrique::writer::Observation::Repeated { total, occurrences } => {
+                assert_eq!(occurrences, 2);
+                let expected = overflow_start.as_micros() as f64 * 2.0;
+                assert!((total - expected).abs() < 0.01);
+            }
+            other => panic!("expected Repeated, got {other:?}"),
+        }
     }
 }
