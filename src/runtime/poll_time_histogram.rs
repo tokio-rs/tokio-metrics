@@ -18,7 +18,6 @@ pub struct PollTimeHistogram {
 }
 
 impl PollTimeHistogram {
-    /// Creates a new histogram from the given buckets.
     pub(crate) fn new(buckets: Vec<HistogramBucket>) -> Self {
         Self { buckets }
     }
@@ -28,7 +27,6 @@ impl PollTimeHistogram {
         &self.buckets
     }
 
-    /// Returns a mutable reference to the histogram buckets.
     pub(crate) fn buckets_mut(&mut self) -> &mut [HistogramBucket] {
         &mut self.buckets
     }
@@ -48,17 +46,16 @@ pub struct HistogramBucket {
 }
 
 impl HistogramBucket {
-    /// Creates a new histogram bucket.
     pub(crate) fn new(range: Range<Duration>, count: u64) -> Self {
         Self { range, count }
     }
 
-    /// Returns the time range for this bucket.
+    /// The time range for this bucket.
     pub fn range(&self) -> &Range<Duration> {
         &self.range
     }
 
-    /// Returns the number of task polls that fell into this bucket during the interval.
+    /// Returns the poll count for this bucket during the interval.
     pub fn count(&self) -> u64 {
         self.count
     }
