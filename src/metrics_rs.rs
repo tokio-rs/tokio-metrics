@@ -292,7 +292,7 @@ impl<T> MyMetricOp<T> for (&metrics::Histogram, crate::runtime::PollTimeHistogra
                 // Use range.start as the representative value; the metrics-rs
                 // histogram handles its own bucketing from these raw values.
                 self.0.record_many(
-                    bucket.range().start.as_micros() as f64,
+                    bucket.range_start().as_micros() as f64,
                     bucket.count() as usize,
                 );
             }

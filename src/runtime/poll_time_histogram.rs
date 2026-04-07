@@ -1,4 +1,3 @@
-use std::ops::Range;
 use std::time::Duration;
 
 /// A histogram of task poll durations, pairing each bucket's count with its
@@ -38,21 +37,27 @@ impl PollTimeHistogram {
 }
 
 /// A single bucket in a [`PollTimeHistogram`].
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, Default)]
 #[non_exhaustive]
 pub struct HistogramBucket {
-    range: Range<Duration>,
+    range_start: Duration,
+    range_end: Duration,
     count: u64,
 }
 
 impl HistogramBucket {
-    pub(crate) fn new(range: Range<Duration>, count: u64) -> Self {
-        Self { range, count }
+    pub(crate) fn new(range_start: Duration, range_end: Duration, count: u64) -> Self {
+        Self { range_start, range_end, count }
     }
 
-    /// The time range for this bucket.
-    pub fn range(&self) -> &Range<Duration> {
-        &self.range
+    /// The start of the time range for this bucket (inclusive).
+    pub fn range_start(&self) -> Duration {
+        self.range_start
+    }
+
+    /// The end of the time range for this bucket (exclusive).
+    pub fn range_end(&self) -> Duration {
+        self.range_end
     }
 
     /// Returns the poll count for this bucket during the interval.
@@ -63,15 +68,6 @@ impl HistogramBucket {
     /// Adds to the count of this bucket.
     pub(crate) fn add_count(&mut self, delta: u64) {
         self.count = self.count.saturating_add(delta);
-    }
-}
-
-impl Default for HistogramBucket {
-    fn default() -> Self {
-        Self {
-            range: Duration::ZERO..Duration::ZERO,
-            count: 0,
-        }
     }
 }
 
@@ -88,13 +84,13 @@ impl metrique::writer::Value for PollTimeHistogram {
         const OVERFLOW_END: Duration = Duration::from_nanos(u64::MAX);
         writer.metric(
             self.buckets.iter().filter(|b| b.count > 0).map(|b| {
-                let value_us = if b.range.end == OVERFLOW_END {
-                    b.range.start.as_micros() as f64
+                let value_us = if b.range_end == OVERFLOW_END {
+                    b.range_start.as_micros() as f64
                 } else {
                     #[allow(clippy::incompatible_msrv)] // metrique-integration requires 1.89+
                     f64::midpoint(
-                        b.range.start.as_micros() as f64,
-                        b.range.end.as_micros() as f64,
+                        b.range_start.as_micros() as f64,
+                        b.range_end.as_micros() as f64,
                     )
                 };
                 Observation::Repeated {
@@ -128,25 +124,21 @@ mod tests {
     #[test]
     fn poll_time_histogram_close_value() {
         let hist = PollTimeHistogram::new(vec![
-            HistogramBucket::new(Duration::from_micros(0)..Duration::from_micros(100), 5),
-            HistogramBucket::new(Duration::from_micros(100)..Duration::from_micros(200), 0),
-            HistogramBucket::new(Duration::from_micros(200)..Duration::from_micros(500), 3),
+            HistogramBucket::new(Duration::from_micros(0), Duration::from_micros(100), 5),
+            HistogramBucket::new(Duration::from_micros(100), Duration::from_micros(200), 0),
+            HistogramBucket::new(Duration::from_micros(200), Duration::from_micros(500), 3),
         ]);
 
         let closed = hist.close();
         let buckets = closed.buckets();
         assert_eq!(buckets.len(), 3);
         assert_eq!(buckets[0].count(), 5);
-        assert_eq!(
-            *buckets[0].range(),
-            Duration::from_micros(0)..Duration::from_micros(100)
-        );
+        assert_eq!(buckets[0].range_start(), Duration::from_micros(0));
+        assert_eq!(buckets[0].range_end(), Duration::from_micros(100));
         assert_eq!(buckets[1].count(), 0);
         assert_eq!(buckets[2].count(), 3);
-        assert_eq!(
-            *buckets[2].range(),
-            Duration::from_micros(200)..Duration::from_micros(500)
-        );
+        assert_eq!(buckets[2].range_start(), Duration::from_micros(200));
+        assert_eq!(buckets[2].range_end(), Duration::from_micros(500));
     }
 
     #[test]
@@ -154,8 +146,8 @@ mod tests {
         let overflow_start = Duration::from_millis(500);
         let metrics = RuntimeMetrics {
             poll_time_histogram: PollTimeHistogram::new(vec![
-                HistogramBucket::new(Duration::from_micros(0)..Duration::from_micros(100), 0),
-                HistogramBucket::new(overflow_start..Duration::from_nanos(u64::MAX), 2),
+                HistogramBucket::new(Duration::from_micros(0), Duration::from_micros(100), 0),
+                HistogramBucket::new(overflow_start, Duration::from_nanos(u64::MAX), 2),
             ]),
             ..Default::default()
         };

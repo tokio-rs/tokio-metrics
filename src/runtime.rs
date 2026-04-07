@@ -517,7 +517,7 @@ define_runtime_metrics! {
         ///
         ///     let interval = next_interval();
         ///     for bucket in interval.poll_time_histogram.buckets() {
-        ///         println!("{:?} => {} polls", bucket.range(), bucket.count());
+        ///         println!("{:?}..{:?} => {} polls", bucket.range_start(), bucket.range_end(), bucket.count());
         ///     }
         /// });
         /// ```
@@ -1309,7 +1309,7 @@ impl RuntimeIntervals {
             metrics.poll_time_histogram = PollTimeHistogram::new(
                 self.bucket_ranges
                     .iter()
-                    .map(|range| HistogramBucket::new(range.clone(), 0))
+                    .map(|range| HistogramBucket::new(range.start, range.end, 0))
                     .collect(),
             );
             metrics.budget_forced_yield_count =
@@ -1624,9 +1624,9 @@ mod metrique_integration_tests {
             workers_count: 4,
             total_park_count: 100,
             poll_time_histogram: PollTimeHistogram::new(vec![
-                HistogramBucket::new(Duration::from_micros(0)..Duration::from_micros(100), 10),
-                HistogramBucket::new(Duration::from_micros(100)..Duration::from_micros(200), 0),
-                HistogramBucket::new(Duration::from_micros(200)..Duration::from_micros(500), 3),
+                HistogramBucket::new(Duration::from_micros(0), Duration::from_micros(100), 10),
+                HistogramBucket::new(Duration::from_micros(100), Duration::from_micros(200), 0),
+                HistogramBucket::new(Duration::from_micros(200), Duration::from_micros(500), 3),
             ]),
             ..Default::default()
         };
