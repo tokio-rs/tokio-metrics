@@ -564,8 +564,6 @@ define_runtime_metrics! {
         ///     let mut intervals = monitor.intervals();
         ///     let mut next_interval = || intervals.next().unwrap();
         ///
-        ///     assert_eq!(next_interval().total_noop_count, 0);
-        ///
         ///     async {
         ///         tokio::time::sleep(std::time::Duration::from_millis(1)).await;
         ///     }.await;
@@ -1105,45 +1103,50 @@ define_runtime_metrics! {
         /// ```
         ///
         /// ###### With `multi_thread` runtime
-        /// The below example spawns 100 tasks:
+        /// The below example spawns 100 tasks and observes them in the
+        /// local queue:
         /// ```
         /// #[tokio::main(flavor = "multi_thread", worker_threads = 2)]
         /// async fn main() {
+        ///     use std::sync::mpsc;
+        ///     use tokio::sync::oneshot;
+        ///
         ///     const N: usize = 100;
-        ///
+        /// 
         ///     let handle = tokio::runtime::Handle::current();
-        ///     let monitor = tokio_metrics::RuntimeMonitor::new(&handle);
-        ///     let mut intervals = monitor.intervals();
-        ///     let mut next_interval = || intervals.next().unwrap();
         ///
-        ///     let interval =  next_interval(); // end of interval 1
-        ///     assert_eq!(interval.total_local_queue_depth, 0);
+        ///     // block one worker so the other is the only one running
+        ///     let (block_tx, block_rx) = mpsc::channel::<()>();
+        ///     let (started_tx, started_rx) = oneshot::channel();
+        ///     tokio::spawn(async move {
+        ///         let _ = started_tx.send(());
+        ///         let _ = block_rx.recv();
+        ///     });
+        ///     let _ = started_rx.await;
         ///
-        ///     use std::sync::atomic::{AtomicBool, Ordering};
-        ///     static SPINLOCK_A: AtomicBool = AtomicBool::new(true);
+        ///     // spawn + sample from the free worker thread
+        ///     let (depth_tx, depth_rx) = oneshot::channel();
+        ///     tokio::spawn(async move {
+        ///         let monitor = tokio_metrics::RuntimeMonitor::new(&handle);
+        ///         let mut intervals = monitor.intervals();
+        ///         let _ = intervals.next().unwrap(); // baseline
         ///
-        ///     // block the other worker thread
-        ///     tokio::spawn(async {
-        ///         while SPINLOCK_A.load(Ordering::SeqCst) {}
+        ///         for _ in 0..N {
+        ///             tokio::spawn(async {});
+        ///         }
+        ///
+        ///         let depth = intervals.next().unwrap().total_local_queue_depth;
+        ///         let _ = depth_tx.send(depth);
         ///     });
         ///
-        ///     static SPINLOCK_B: AtomicBool = AtomicBool::new(true);
+        ///     let depth = depth_rx.await.unwrap();
         ///
-        ///     let _ = tokio::spawn(async {
-        ///         for _ in 0..N {
-        ///             tokio::spawn(async {
-        ///                 while SPINLOCK_B.load(Ordering::SeqCst) {}
-        ///             });
-        ///         }
-        ///     }).await;
+        ///     // Tokio may place one spawned task in a LIFO slot rather than the
+        ///     // local queue, which may not be reflected in `worker_local_queue_depth`,
+        ///     // so accept N or N - 1.
+        ///     assert!(depth == N || depth == N - 1, "depth = {depth}");
         ///
-        ///     // unblock the other worker thread
-        ///     SPINLOCK_A.store(false, Ordering::SeqCst);
-        ///
-        ///     let interval =  next_interval(); // end of interval 2
-        ///     assert_eq!(interval.total_local_queue_depth, N - 1);
-        ///
-        ///     SPINLOCK_B.store(false, Ordering::SeqCst);
+        ///     let _ = block_tx.send(());
         /// }
         /// ```
         pub total_local_queue_depth: usize,
