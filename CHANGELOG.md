@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0](https://github.com/tokio-rs/tokio-metrics/compare/v0.4.9...v0.5.0) - 2026-04-09
+
+### Breaking Changes
+
+- `RuntimeMetrics::poll_time_histogram` is now a `PollTimeHistogram` instead of `Vec<u64>`. Each bucket carries its duration range alongside the count. ([#121](https://github.com/tokio-rs/tokio-metrics/pull/121))
+
+### Added
+
+- Add `metrique-integration` feature to use `RuntimeMetrics` as a metrique unit of work ([#121](https://github.com/tokio-rs/tokio-metrics/pull/121))
+
+### Other
+
+- Fix doctests failing after Tokio v1.51 ([#122](https://github.com/tokio-rs/tokio-metrics/pull/122))
+
 ## [0.4.9](https://github.com/tokio-rs/tokio-metrics/compare/v0.4.8...v0.4.9) - 2026-02-23
 
 ### Added
