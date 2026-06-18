@@ -213,5 +213,6 @@ mod task;
 #[cfg_attr(docsrs, doc(cfg(feature = "metrics-rs-integration")))]
 pub use task::metrics_rs_integration::{TaskMetricsReporter, TaskMetricsReporterBuilder};
 pub use task::{
-    Instrumented, TaskIntervals, TaskMetrics, TaskMonitor, TaskMonitorCore, TaskMonitorCoreBuilder,
+    Instrumented, InstrumentedRequest, RequestMonitor, RequestTaskMetrics, TaskIntervals,
+    TaskMetrics, TaskMonitor, TaskMonitorCore, TaskMonitorCoreBuilder, TaskScheduling,
 };
