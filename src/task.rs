@@ -1783,7 +1783,9 @@ impl TaskScheduling {
             total_scheduled_duration: self
                 .total_scheduled_duration
                 .saturating_sub(earlier.total_scheduled_duration),
-            long_delay_count: self.long_delay_count.saturating_sub(earlier.long_delay_count),
+            long_delay_count: self
+                .long_delay_count
+                .saturating_sub(earlier.long_delay_count),
         }
     }
 }
@@ -3129,7 +3131,8 @@ impl SpanState {
     /// scheduling log is in scope.
     fn record(&self, now: TaskScheduling) {
         if !self.started.swap(true, SeqCst) {
-            self.start_scheduled_count.store(now.scheduled_count, SeqCst);
+            self.start_scheduled_count
+                .store(now.scheduled_count, SeqCst);
             self.start_scheduled_duration_ns
                 .store(duration_to_nanos(now.total_scheduled_duration), SeqCst);
             self.start_long_delay_count
@@ -3139,7 +3142,8 @@ impl SpanState {
         self.end_scheduled_count.store(now.scheduled_count, SeqCst);
         self.end_scheduled_duration_ns
             .store(duration_to_nanos(now.total_scheduled_duration), SeqCst);
-        self.end_long_delay_count.store(now.long_delay_count, SeqCst);
+        self.end_long_delay_count
+            .store(now.long_delay_count, SeqCst);
         if let Some(first_poll) = self.first_poll.get() {
             self.total_duration_ns
                 .store(duration_to_nanos(first_poll.elapsed()), SeqCst);
@@ -3183,7 +3187,8 @@ pin_project! {
 
 impl<F> std::fmt::Debug for InstrumentedRequest<F> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("InstrumentedRequest").finish_non_exhaustive()
+        f.debug_struct("InstrumentedRequest")
+            .finish_non_exhaustive()
     }
 }
 
