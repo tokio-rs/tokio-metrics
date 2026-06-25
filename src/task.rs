@@ -1715,6 +1715,11 @@ struct SchedulingLog {
 thread_local! {
     /// The scheduling log of the innermost [`Instrumented`] task currently being
     /// polled on this thread, if any.
+    ///
+    /// This is a hand-rolled task-local built on a `thread_local!`: it is only
+    /// set for the duration of a single synchronous poll (see
+    /// [`SchedulingLogGuard`]) and never held across an `.await`, so the usual
+    /// hazard of thread-locals in async code does not apply.
     static CURRENT_SCHEDULING_LOG: RefCell<Option<Arc<SchedulingLog>>> =
         const { RefCell::new(None) };
 }
