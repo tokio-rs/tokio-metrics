@@ -3131,10 +3131,10 @@ fn duration_to_nanos(d: Duration) -> u64 {
 }
 
 impl SpanState {
-    /// Records the root scheduling snapshot for this poll. Called at the top of
+    /// Records the root scheduling snapshot for a poll. Called at the top of
     /// every poll of the [`InstrumentedRequest`], while the root task's
     /// scheduling log is in scope.
-    fn record(&self, now: TaskScheduling) {
+    fn record_poll_start(&self, now: TaskScheduling) {
         if !self.started.swap(true, SeqCst) {
             self.start_scheduled_count
                 .store(now.scheduled_count, SeqCst);
@@ -3149,6 +3149,11 @@ impl SpanState {
             .store(duration_to_nanos(now.total_scheduled_duration), SeqCst);
         self.end_long_delay_count
             .store(now.long_delay_count, SeqCst);
+    }
+
+    /// Records total elapsed time *after* a poll completes, so the execution
+    /// time of the poll just finished — including the final one — is counted.
+    fn record_poll_end(&self) {
         if let Some(first_poll) = self.first_poll.get() {
             self.total_duration_ns
                 .store(duration_to_nanos(first_poll.elapsed()), SeqCst);
@@ -3207,8 +3212,13 @@ impl<F: Future> Future for InstrumentedRequest<F> {
         // inner `Instrumented` shadows it with the request's own log during its
         // poll, which we deliberately ignore).
         this.span
-            .record(TaskScheduling::try_current().unwrap_or_default());
-        this.inner.poll(cx)
+            .record_poll_start(TaskScheduling::try_current().unwrap_or_default());
+        let ret = this.inner.poll(cx);
+        // Stamp total elapsed *after* the poll so the execution time of the poll
+        // just finished — including the final one that returns `Ready` — is
+        // captured in `total_duration`.
+        this.span.record_poll_end();
+        ret
     }
 }
 
@@ -3558,5 +3568,28 @@ mod request_monitor_tests {
                 assert!(TaskScheduling::try_current().is_none());
             })
             .await;
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn total_duration_includes_final_poll_execution() {
+        // The request completes in a single poll that spends real time
+        // executing. `total_duration` is stamped after the poll, so it must
+        // include that execution time (a regression would record it before the
+        // poll and report ~0).
+        let request = RequestMonitor::new();
+        request
+            .instrument(async {
+                let start = std::time::Instant::now();
+                while start.elapsed() < Duration::from_millis(20) {}
+            })
+            .await;
+
+        let m = request.metrics();
+        assert!(m.poll_count == 1, "poll_count = {}", m.poll_count);
+        assert!(
+            m.total_duration >= Duration::from_millis(15),
+            "total_duration = {:?}",
+            m.total_duration
+        );
     }
 }
