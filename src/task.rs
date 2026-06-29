@@ -605,7 +605,7 @@ pub struct TaskMonitorCore {
     /// Whether instrumented tasks should publish their scheduling delay as a
     /// task-local for [`RequestMonitor`] to sample. Off by default so the common
     /// case pays nothing; enabled via
-    /// [`TaskMonitorBuilder::record_request_scheduling`]. Kept out of
+    /// [`TaskMonitorBuilder::publish_scheduling_delay`]. Kept out of
     /// [`RawMetrics`] so that struct's (heavily contended) layout is unchanged.
     record_scheduling_log: bool,
 }
@@ -638,8 +638,8 @@ impl TaskMonitorBuilder {
     /// Off by default: tasks instrumented by a monitor without this enabled pay
     /// no extra per-poll cost. Enable it on the monitor wrapping the larger task
     /// when you want [`RequestMonitor`]'s scheduling metrics to be populated.
-    pub fn record_request_scheduling(self) -> Self {
-        Self(self.0.record_request_scheduling())
+    pub fn publish_scheduling_delay(self) -> Self {
+        Self(self.0.publish_scheduling_delay())
     }
 
     /// Consume the builder, producing a [`TaskMonitor`].
@@ -699,8 +699,8 @@ impl TaskMonitorCoreBuilder {
     /// to a single request via [`TaskScheduling`].
     ///
     /// Off by default; see
-    /// [`TaskMonitorBuilder::record_request_scheduling`] for details.
-    pub const fn record_request_scheduling(self) -> Self {
+    /// [`TaskMonitorBuilder::publish_scheduling_delay`] for details.
+    pub const fn publish_scheduling_delay(self) -> Self {
         Self {
             record_scheduling_log: true,
             ..self
@@ -1689,7 +1689,7 @@ struct State<M> {
     /// the task is being polled so that nested futures (e.g. a per-request
     /// [`RequestMonitor`]) can attribute scheduling delay to themselves. `None`
     /// unless the monitor opted in via
-    /// [`TaskMonitorBuilder::record_request_scheduling`], so the common case
+    /// [`TaskMonitorBuilder::publish_scheduling_delay`], so the common case
     /// allocates nothing and pays no per-poll cost.
     log: Option<Arc<SchedulingLog>>,
 }
@@ -3267,9 +3267,9 @@ impl<F: Future> Future for InstrumentedRequest<F> {
 ///
 /// #[tokio::main]
 /// async fn main() {
-///     // the larger task is instrumented once; `record_request_scheduling`
+///     // the larger task is instrumented once; `publish_scheduling_delay`
 ///     // enables per-request scheduling-delay capture
-///     let task_monitor = TaskMonitor::builder().record_request_scheduling().build();
+///     let task_monitor = TaskMonitor::builder().publish_scheduling_delay().build();
 ///     task_monitor.instrument(async {
 ///         // each unit of work within the task is measured on its own
 ///         let (_output, metrics) = RequestMonitor::new()
@@ -3548,7 +3548,7 @@ mod request_monitor_tests {
     async fn try_current_tracks_root_scheduling_when_opted_in() {
         assert!(TaskScheduling::try_current().is_none());
 
-        let monitor = TaskMonitor::builder().record_request_scheduling().build();
+        let monitor = TaskMonitor::builder().publish_scheduling_delay().build();
         monitor
             .instrument(async {
                 // The log exists from the first poll, even before any scheduling.
