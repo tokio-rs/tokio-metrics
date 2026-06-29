@@ -622,15 +622,13 @@ impl TaskMonitorBuilder {
     }
 
     /// Specifies the threshold at which polls are considered 'slow'.
-    pub fn with_slow_poll_threshold(&mut self, threshold: Duration) -> &mut Self {
-        self.0.slow_poll_threshold = Some(threshold);
-        self
+    pub fn with_slow_poll_threshold(self, threshold: Duration) -> Self {
+        Self(self.0.with_slow_poll_threshold(threshold))
     }
 
     /// Specifies the threshold at which schedules are considered 'long'.
-    pub fn with_long_delay_threshold(&mut self, threshold: Duration) -> &mut Self {
-        self.0.long_delay_threshold = Some(threshold);
-        self
+    pub fn with_long_delay_threshold(self, threshold: Duration) -> Self {
+        Self(self.0.with_long_delay_threshold(threshold))
     }
 
     /// Records each instrumented task's scheduling delay so that a
@@ -640,9 +638,8 @@ impl TaskMonitorBuilder {
     /// Off by default: tasks instrumented by a monitor without this enabled pay
     /// no extra per-poll cost. Enable it on the monitor wrapping the larger task
     /// when you want [`RequestMonitor`]'s scheduling metrics to be populated.
-    pub fn record_request_scheduling(&mut self) -> &mut Self {
-        self.0.record_scheduling_log = true;
-        self
+    pub fn record_request_scheduling(self) -> Self {
+        Self(self.0.record_request_scheduling())
     }
 
     /// Consume the builder, producing a [`TaskMonitor`].
@@ -3272,9 +3269,7 @@ impl<F: Future> Future for InstrumentedRequest<F> {
 /// async fn main() {
 ///     // the larger task is instrumented once; `record_request_scheduling`
 ///     // enables per-request scheduling-delay capture
-///     let mut builder = TaskMonitor::builder();
-///     builder.record_request_scheduling();
-///     let task_monitor = builder.build();
+///     let task_monitor = TaskMonitor::builder().record_request_scheduling().build();
 ///     task_monitor.instrument(async {
 ///         // each unit of work within the task is measured on its own
 ///         let (_output, metrics) = RequestMonitor::new()
@@ -3553,9 +3548,7 @@ mod request_monitor_tests {
     async fn try_current_tracks_root_scheduling_when_opted_in() {
         assert!(TaskScheduling::try_current().is_none());
 
-        let mut builder = TaskMonitor::builder();
-        builder.record_request_scheduling();
-        let monitor = builder.build();
+        let monitor = TaskMonitor::builder().record_request_scheduling().build();
         monitor
             .instrument(async {
                 // The log exists from the first poll, even before any scheduling.
