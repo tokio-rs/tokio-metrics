@@ -603,7 +603,7 @@ impl AsRef<TaskMonitorCore> for TaskMonitor {
 pub struct TaskMonitorCore {
     metrics: RawMetrics,
     /// Whether instrumented tasks should publish their scheduling delay as a
-    /// task-local for [`RequestMonitor`] to sample. Off by default so the common
+    /// task-local for [`FutureMonitor`] to sample. Off by default so the common
     /// case pays nothing; enabled via
     /// [`TaskMonitorBuilder::publish_scheduling_delay`]. Kept out of
     /// [`RawMetrics`] so that struct's (heavily contended) layout is unchanged.
@@ -632,12 +632,12 @@ impl TaskMonitorBuilder {
     }
 
     /// Records each instrumented task's scheduling delay so that a
-    /// [`RequestMonitor`] running within the task can attribute scheduling delay
-    /// to a single request via [`TaskScheduling`].
+    /// [`FutureMonitor`] running within the task can attribute scheduling delay
+    /// to a single future via [`TaskScheduling`].
     ///
     /// Off by default: tasks instrumented by a monitor without this enabled pay
     /// no extra per-poll cost. Enable it on the monitor wrapping the larger task
-    /// when you want [`RequestMonitor`]'s scheduling metrics to be populated.
+    /// when you want [`FutureMonitor`]'s scheduling metrics to be populated.
     pub fn publish_scheduling_delay(self) -> Self {
         Self(self.0.publish_scheduling_delay())
     }
@@ -695,8 +695,8 @@ impl TaskMonitorCoreBuilder {
     }
 
     /// Records each instrumented task's scheduling delay so that a
-    /// [`RequestMonitor`] running within the task can attribute scheduling delay
-    /// to a single request via [`TaskScheduling`].
+    /// [`FutureMonitor`] running within the task can attribute scheduling delay
+    /// to a single future via [`TaskScheduling`].
     ///
     /// Off by default; see
     /// [`TaskMonitorBuilder::publish_scheduling_delay`] for details.
@@ -1686,8 +1686,8 @@ struct State<M> {
     waker: AtomicWaker,
 
     /// Cumulative scheduling info for this task, published as a task-local while
-    /// the task is being polled so that nested futures (e.g. a per-request
-    /// [`RequestMonitor`]) can attribute scheduling delay to themselves. `None`
+    /// the task is being polled so that nested futures (e.g. a per-future
+    /// [`FutureMonitor`]) can attribute scheduling delay to themselves. `None`
     /// unless the monitor opted in via
     /// [`TaskMonitorBuilder::publish_scheduling_delay`], so the common case
     /// allocates nothing and pays no per-poll cost.
@@ -1748,8 +1748,8 @@ impl Drop for SchedulingLogGuard {
 /// been instrumented with [`TaskMonitor::instrument`]. Scheduling delay can only
 /// be measured by the root future the runtime schedules, so a future running
 /// within a larger task samples this at two points and reports the difference —
-/// this is exactly what [`RequestMonitor`] does to attribute scheduling delay to
-/// a single request.
+/// this is exactly what [`FutureMonitor`] does to attribute scheduling delay to
+/// a single future.
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct TaskScheduling {
@@ -2989,7 +2989,7 @@ fn instrument_poll<T, M: AsRef<TaskMonitorCore> + Send + Sync + 'static, Out>(
 
         // mirror the same scheduling accounting into this task's own log so that
         // futures running within the task can attribute scheduling delay to
-        // their own lifetime (see `RequestMonitor`). Only present when the
+        // their own lifetime (see `FutureMonitor`). Only present when the
         // monitor opted in, so the common case skips this entirely.
         if let Some(log) = &state.log {
             log.scheduled_count.fetch_add(1, SeqCst);
@@ -3068,48 +3068,48 @@ impl<M: Send + Sync> ArcWake for State<M> {
     }
 }
 
-/// Key metrics of a single instrumented future — a "request" running within a
-/// larger task — as captured by a [`RequestMonitor`].
+/// Key metrics of a single instrumented future running within a larger task, as
+/// captured by a [`FutureMonitor`].
 ///
 /// Unlike [`TaskMetrics`], which aggregates across every future instrumented by
 /// a [`TaskMonitor`], these metrics describe just one future. Idle, poll, and
 /// first-poll metrics are measured locally from that future's own polls, so they
 /// remain accurate even when the surrounding task interleaves other work.
 /// Scheduling metrics are sampled from the root task's [`TaskScheduling`] log
-/// over the request's lifetime (see [`RequestMonitor`]).
+/// over the future's lifetime (see [`FutureMonitor`]).
 #[non_exhaustive]
 #[cfg_attr(
     feature = "metrique-integration",
     metrique::unit_of_work::metrics(subfield_owned)
 )]
 #[derive(Debug, Clone, Default)]
-pub struct RequestTaskMetrics {
-    /// The number of times the request's future was polled.
+pub struct FutureMetrics {
+    /// The number of times the future was polled.
     pub poll_count: u64,
-    /// The total time spent polling the request's future.
+    /// The total time spent polling the future.
     pub total_poll_duration: Duration,
     /// The number of polls that exceeded the monitor's slow-poll threshold.
     pub slow_poll_count: u64,
-    /// The number of times the request idled, waiting to be awoken.
+    /// The number of times the future idled, waiting to be awoken.
     pub idle_count: u64,
-    /// The total time the request spent idle, waiting on external events.
+    /// The total time the future spent idle, waiting on external events.
     pub total_idle_duration: Duration,
-    /// The longest single idle the request experienced.
+    /// The longest single idle the future experienced.
     pub max_idle_duration: Duration,
-    /// The delay between the request being instrumented and its first poll.
+    /// The delay between the future being instrumented and its first poll.
     pub first_poll_delay: Duration,
-    /// The wall-clock time from the request's first poll to its completion.
+    /// The wall-clock time from the future's first poll to its completion.
     pub total_duration: Duration,
-    /// The number of times the underlying task was scheduled while the request was alive.
+    /// The number of times the underlying task was scheduled while the future was alive.
     pub scheduled_count: u64,
-    /// The total scheduling delay the underlying task incurred while the request was alive.
+    /// The total scheduling delay the underlying task incurred while the future was alive.
     pub total_scheduled_duration: Duration,
     /// The number of those scheduling delays that crossed the long-delay threshold.
     pub long_delay_count: u64,
 }
 
-/// Per-request capture state shared between a [`RequestMonitor`] and the
-/// [`InstrumentedRequest`] future it produces.
+/// Per-future capture state shared between a [`FutureMonitor`] and the
+/// [`MonitoredFuture`] future it produces.
 #[derive(Debug, Default)]
 struct SpanState {
     started: AtomicBool,
@@ -3129,7 +3129,7 @@ fn duration_to_nanos(d: Duration) -> u64 {
 
 impl SpanState {
     /// Records the root scheduling snapshot for a poll. Called at the top of
-    /// every poll of the [`InstrumentedRequest`], while the root task's
+    /// every poll of the [`MonitoredFuture`], while the root task's
     /// scheduling log is in scope.
     fn record_poll_start(&self, now: TaskScheduling) {
         if !self.started.swap(true, SeqCst) {
@@ -3180,10 +3180,10 @@ impl SpanState {
     }
 }
 
-fn build_request_metrics(monitor: &TaskMonitor, span: &SpanState) -> RequestTaskMetrics {
+fn build_future_metrics(monitor: &TaskMonitor, span: &SpanState) -> FutureMetrics {
     let local = monitor.cumulative();
     let scheduling = span.scheduling_delta();
-    RequestTaskMetrics {
+    FutureMetrics {
         poll_count: local.total_poll_count,
         total_poll_duration: local.total_poll_duration,
         slow_poll_count: local.total_slow_poll_count,
@@ -3199,12 +3199,12 @@ fn build_request_metrics(monitor: &TaskMonitor, span: &SpanState) -> RequestTask
 }
 
 pin_project! {
-    /// The future returned by [`RequestMonitor::instrument`].
+    /// The future returned by [`FutureMonitor::instrument`].
     ///
-    /// Wraps the request's future, capturing its per-poll metrics locally and
+    /// Wraps the future, capturing its per-poll metrics locally and
     /// sampling the surrounding task's scheduling delay at each poll. Resolves to
-    /// the wrapped future's output paired with the captured [`RequestTaskMetrics`].
-    pub struct InstrumentedRequest<F> {
+    /// the wrapped future's output paired with the captured [`FutureMetrics`].
+    pub struct MonitoredFuture<F> {
         #[pin]
         inner: Instrumented<F, TaskMonitor>,
         monitor: TaskMonitor,
@@ -3212,21 +3212,21 @@ pin_project! {
     }
 }
 
-impl<F> std::fmt::Debug for InstrumentedRequest<F> {
+impl<F> std::fmt::Debug for MonitoredFuture<F> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("InstrumentedRequest")
+        f.debug_struct("MonitoredFuture")
             .finish_non_exhaustive()
     }
 }
 
-impl<F: Future> Future for InstrumentedRequest<F> {
-    type Output = (F::Output, RequestTaskMetrics);
+impl<F: Future> Future for MonitoredFuture<F> {
+    type Output = (F::Output, FutureMetrics);
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
         // Sample the root task's scheduling log *before* delegating to the inner
         // `Instrumented`, while the root task's log is the one in scope (the
-        // inner `Instrumented` shadows it with the request's own log during its
+        // inner `Instrumented` shadows it with the future's own log during its
         // poll, which we deliberately ignore).
         this.span
             .record_poll_start(TaskScheduling::try_current().unwrap_or_default());
@@ -3237,7 +3237,7 @@ impl<F: Future> Future for InstrumentedRequest<F> {
         this.span.record_poll_end();
         match ret {
             Poll::Ready(output) => {
-                let metrics = build_request_metrics(this.monitor, this.span);
+                let metrics = build_future_metrics(this.monitor, this.span);
                 Poll::Ready((output, metrics))
             }
             Poll::Pending => Poll::Pending,
@@ -3245,34 +3245,34 @@ impl<F: Future> Future for InstrumentedRequest<F> {
     }
 }
 
-/// Monitors the metrics of a single future — a "request" — running within a
-/// larger, already-[instrumented][TaskMonitor::instrument] task.
+/// Monitors the metrics of a single future running within a larger,
+/// already-[instrumented][TaskMonitor::instrument] task.
 ///
 /// [`TaskMonitor`] aggregates metrics across all the futures it instruments;
-/// `RequestMonitor` instead captures the metrics of *one* future so they can be
-/// attached to that request's own record. Idle, poll, and first-poll metrics are
-/// measured locally from the request's future. Scheduling delay — which only the
+/// `FutureMonitor` instead captures the metrics of *one* future so they can be
+/// attached to that future's own record. Idle, poll, and first-poll metrics are
+/// measured locally from the future. Scheduling delay — which only the
 /// root future the runtime schedules can observe — is read from the surrounding
-/// task's [`TaskScheduling`] log over the request's lifetime, so for scheduling
+/// task's [`TaskScheduling`] log over the future's lifetime, so for scheduling
 /// metrics to be populated the surrounding task must itself be instrumented with
 /// [`TaskMonitor::instrument`].
 ///
-/// `RequestMonitor` instruments exactly one future: [`instrument`] consumes the
+/// `FutureMonitor` instruments exactly one future: [`instrument`] consumes the
 /// monitor, so it cannot be reused, and the returned future resolves to the
-/// wrapped output together with the captured [`RequestTaskMetrics`].
+/// wrapped output together with the captured [`FutureMetrics`].
 ///
 /// ##### Examples
 /// ```
-/// use tokio_metrics::{RequestMonitor, TaskMonitor};
+/// use tokio_metrics::{FutureMonitor, TaskMonitor};
 ///
 /// #[tokio::main]
 /// async fn main() {
 ///     // the larger task is instrumented once; `publish_scheduling_delay`
-///     // enables per-request scheduling-delay capture
+///     // enables per-future scheduling-delay capture
 ///     let task_monitor = TaskMonitor::builder().publish_scheduling_delay().build();
 ///     task_monitor.instrument(async {
 ///         // each unit of work within the task is measured on its own
-///         let (_output, metrics) = RequestMonitor::new()
+///         let (_output, metrics) = FutureMonitor::new()
 ///             .instrument(async {
 ///                 tokio::task::yield_now().await;
 ///             })
@@ -3283,38 +3283,38 @@ impl<F: Future> Future for InstrumentedRequest<F> {
 /// }
 /// ```
 ///
-/// [`instrument`]: RequestMonitor::instrument
+/// [`instrument`]: FutureMonitor::instrument
 // Deliberately not `Clone`: cloning would share the underlying span and let two
 // instrumented futures be measured as one, which is exactly the reuse `instrument`
 // (by consuming `self`) is meant to prevent.
 #[derive(Debug, Default)]
-pub struct RequestMonitor {
+pub struct FutureMonitor {
     monitor: TaskMonitor,
     span: Arc<SpanState>,
 }
 
-impl RequestMonitor {
-    /// Constructs a new `RequestMonitor` for a single request.
-    pub fn new() -> RequestMonitor {
-        RequestMonitor::default()
+impl FutureMonitor {
+    /// Constructs a new `FutureMonitor` for a single future.
+    pub fn new() -> FutureMonitor {
+        FutureMonitor::default()
     }
 
-    /// Constructs a new `RequestMonitor` whose local poll metrics use a custom
+    /// Constructs a new `FutureMonitor` whose local poll metrics use a custom
     /// slow-poll threshold (see [`TaskMonitor::with_slow_poll_threshold`]).
-    pub fn with_slow_poll_threshold(slow_poll_threshold: Duration) -> RequestMonitor {
-        RequestMonitor {
+    pub fn with_slow_poll_threshold(slow_poll_threshold: Duration) -> FutureMonitor {
+        FutureMonitor {
             monitor: TaskMonitor::with_slow_poll_threshold(slow_poll_threshold),
             span: Arc::new(SpanState::default()),
         }
     }
 
-    /// Instruments the request's future, consuming the monitor.
+    /// Instruments the future, consuming the monitor.
     ///
-    /// Taking `self` by value means a `RequestMonitor` can only instrument one
-    /// future. Await the returned [`InstrumentedRequest`] to get the future's
-    /// output alongside its [`RequestTaskMetrics`].
-    pub fn instrument<F>(self, task: F) -> InstrumentedRequest<F> {
-        InstrumentedRequest {
+    /// Taking `self` by value means a `FutureMonitor` can only instrument one
+    /// future. Await the returned [`MonitoredFuture`] to get the future's
+    /// output alongside its [`FutureMetrics`].
+    pub fn instrument<F>(self, task: F) -> MonitoredFuture<F> {
+        MonitoredFuture {
             inner: self.monitor.instrument(task),
             monitor: self.monitor,
             span: self.span,
@@ -3499,7 +3499,7 @@ mod inference_tests {
 }
 
 #[cfg(test)]
-mod request_monitor_tests {
+mod future_monitor_tests {
     use super::*;
 
     // Asserts on durations measured by the crate's clock, which is only the
@@ -3507,11 +3507,11 @@ mod request_monitor_tests {
     // `tokio::time::Instant`; without `rt` the crate uses the real `std` clock.
     #[cfg(feature = "rt")]
     #[tokio::test(flavor = "current_thread", start_paused = true)]
-    async fn captures_per_request_idle_active_polls() {
+    async fn captures_per_future_idle_active_polls() {
         let task_monitor = TaskMonitor::new();
         task_monitor
             .instrument(async {
-                let (_, m) = RequestMonitor::new()
+                let (_, m) = FutureMonitor::new()
                     .instrument(async {
                         tokio::task::yield_now().await; // an extra poll
                         tokio::time::sleep(Duration::from_secs(1)).await; // idle
@@ -3533,7 +3533,7 @@ mod request_monitor_tests {
     async fn scheduling_is_zero_without_instrumented_root() {
         // No surrounding `TaskMonitor::instrument`, so `try_current()` is `None`
         // and no scheduling delay is attributed — but local metrics still work.
-        let (_, m) = RequestMonitor::new()
+        let (_, m) = FutureMonitor::new()
             .instrument(async {
                 tokio::task::yield_now().await;
             })
@@ -3570,7 +3570,7 @@ mod request_monitor_tests {
     #[tokio::test]
     async fn try_current_is_none_without_opt_in() {
         // A default monitor does not publish the scheduling log, so the common
-        // case pays nothing and `RequestMonitor` scheduling stays zero.
+        // case pays nothing and `FutureMonitor` scheduling stays zero.
         TaskMonitor::new()
             .instrument(async {
                 assert!(TaskScheduling::try_current().is_none());
@@ -3583,7 +3583,7 @@ mod request_monitor_tests {
         // `instrument` consumes the monitor and resolves to the future's output
         // paired with its captured metrics — so a monitor can only ever measure
         // a single future.
-        let (output, m) = RequestMonitor::new()
+        let (output, m) = FutureMonitor::new()
             .instrument(async {
                 tokio::task::yield_now().await;
                 "done"
@@ -3596,11 +3596,11 @@ mod request_monitor_tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn total_duration_includes_final_poll_execution() {
-        // The request completes in a single poll that spends real time
+        // The future completes in a single poll that spends real time
         // executing. `total_duration` is stamped after the poll, so it must
         // include that execution time (a regression would record it before the
         // poll and report ~0).
-        let (_, m) = RequestMonitor::new()
+        let (_, m) = FutureMonitor::new()
             .instrument(async {
                 let start = std::time::Instant::now();
                 while start.elapsed() < Duration::from_millis(20) {}
