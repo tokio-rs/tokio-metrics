@@ -640,8 +640,9 @@ impl TaskMonitorBuilder {
     /// Off by default: tasks instrumented by a monitor without this enabled pay
     /// no extra per-poll cost. Enable it on the monitor wrapping the larger task
     /// when you want [`FutureMonitor`]'s scheduling metrics to be populated.
-    pub fn publish_scheduling_delay(self) -> Self {
-        Self(self.0.publish_scheduling_delay())
+    pub fn publish_scheduling_delay(&mut self) -> &mut Self {
+        self.0.record_scheduling_log = true;
+        self
     }
 
     /// Consume the builder, producing a [`TaskMonitor`].
@@ -3271,7 +3272,9 @@ impl<F: Future> Future for MonitoredFuture<F> {
 /// async fn main() {
 ///     // the larger task is instrumented once; `publish_scheduling_delay`
 ///     // enables per-future scheduling-delay capture
-///     let task_monitor = TaskMonitor::builder().publish_scheduling_delay().build();
+///     let mut builder = TaskMonitor::builder();
+///     builder.publish_scheduling_delay();
+///     let task_monitor = builder.build();
 ///     task_monitor.instrument(async {
 ///         // each unit of work within the task is measured on its own
 ///         let (_output, metrics) = FutureMonitor::new()
@@ -3550,7 +3553,9 @@ mod future_monitor_tests {
     async fn try_current_tracks_root_scheduling_when_opted_in() {
         assert!(TaskScheduling::try_current().is_none());
 
-        let monitor = TaskMonitor::builder().publish_scheduling_delay().build();
+        let mut builder = TaskMonitor::builder();
+        builder.publish_scheduling_delay();
+        let monitor = builder.build();
         monitor
             .instrument(async {
                 // The log exists from the first poll, even before any scheduling.
