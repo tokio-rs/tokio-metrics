@@ -3103,9 +3103,16 @@ pub struct FutureMetrics {
     pub first_poll_delay: Duration,
     /// The wall-clock time from the future's first poll to its completion.
     pub total_duration: Duration,
-    /// The number of times the underlying task was scheduled while the future was alive.
+    /// The number of times the underlying task was scheduled while this future
+    /// was active.
+    ///
+    /// This tracks the *root* task's scheduling, not this future's polls, so it
+    /// can exceed [`poll_count`](Self::poll_count) — for example when the future
+    /// is one branch of a `select!` and the task is scheduled to advance the
+    /// other branches.
     pub scheduled_count: u64,
-    /// The total scheduling delay the underlying task incurred while the future was alive.
+    /// The total scheduling delay the underlying task incurred while this future
+    /// was active.
     pub total_scheduled_duration: Duration,
     /// The number of those scheduling delays that crossed the long-delay threshold.
     pub long_delay_count: u64,
