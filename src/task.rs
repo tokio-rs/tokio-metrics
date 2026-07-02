@@ -622,13 +622,15 @@ impl TaskMonitorBuilder {
     }
 
     /// Specifies the threshold at which polls are considered 'slow'.
-    pub fn with_slow_poll_threshold(self, threshold: Duration) -> Self {
-        Self(self.0.with_slow_poll_threshold(threshold))
+    pub fn with_slow_poll_threshold(&mut self, threshold: Duration) -> &mut Self {
+        self.0.slow_poll_threshold = Some(threshold);
+        self
     }
 
     /// Specifies the threshold at which schedules are considered 'long'.
-    pub fn with_long_delay_threshold(self, threshold: Duration) -> Self {
-        Self(self.0.with_long_delay_threshold(threshold))
+    pub fn with_long_delay_threshold(&mut self, threshold: Duration) -> &mut Self {
+        self.0.long_delay_threshold = Some(threshold);
+        self
     }
 
     /// Records each instrumented task's scheduling delay so that a
