@@ -3083,7 +3083,7 @@ impl<M: Send + Sync> ArcWake for State<M> {
 #[non_exhaustive]
 #[cfg_attr(
     feature = "metrique-integration",
-    metrique::unit_of_work::metrics(subfield_owned)
+    metrique::unit_of_work::metrics(subfield)
 )]
 #[derive(Debug, Clone, Default)]
 pub struct FutureMetrics {
