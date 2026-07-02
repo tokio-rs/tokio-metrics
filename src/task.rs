@@ -3621,4 +3621,43 @@ mod future_monitor_tests {
             m.total_duration
         );
     }
+
+    #[tokio::test(flavor = "current_thread", start_paused = true)]
+    async fn nested_future_monitors_capture_independently() {
+        let mut builder = TaskMonitor::builder();
+        builder.publish_scheduling_delay();
+        let root = builder.build();
+
+        root.instrument(async {
+            // An outer monitored future that does one extra poll of its own, then
+            // runs an inner monitored future that sleeps.
+            let (inner, outer) = FutureMonitor::new()
+                .instrument(async {
+                    tokio::task::yield_now().await; // outer-only extra poll
+                    let (_, inner) = FutureMonitor::new()
+                        .instrument(async {
+                            tokio::time::sleep(Duration::from_secs(1)).await;
+                        })
+                        .await;
+                    inner
+                })
+                .await;
+
+            // Each monitor captures only its own future: the inner one sees just
+            // the sleep, the outer one additionally sees its yield poll.
+            assert_eq!(inner.poll_count, 2, "inner poll_count = {}", inner.poll_count);
+            assert_eq!(inner.idle_count, 1);
+            assert_eq!(inner.total_idle_duration, Duration::from_secs(1));
+
+            assert!(
+                outer.poll_count > inner.poll_count,
+                "outer {} should exceed inner {}",
+                outer.poll_count,
+                inner.poll_count
+            );
+            // The outer future is idle for the whole time the inner one sleeps.
+            assert_eq!(outer.total_idle_duration, Duration::from_secs(1));
+        })
+        .await;
+    }
 }
