@@ -416,7 +416,7 @@ metrics is intended to enable reporting of metrics in production to your
 preferred tools. Longer term, it is likely that `tokio-metrics` will merge with
 Tokio Console.
 
-## Relation to Dial9
+## Relation to `dial9`
 
 [Dial9] records Tokio, operating system, and application events for post-hoc
 debugging and root cause analysis. `tokio-metrics` reports metrics to your
