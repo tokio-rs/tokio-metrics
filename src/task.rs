@@ -3224,8 +3224,7 @@ pin_project! {
 
 impl<F> std::fmt::Debug for MonitoredFuture<F> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("MonitoredFuture")
-            .finish_non_exhaustive()
+        f.debug_struct("MonitoredFuture").finish_non_exhaustive()
     }
 }
 
@@ -3652,7 +3651,11 @@ mod future_monitor_tests {
 
             // Each monitor captures only its own future: the inner one sees just
             // the sleep, the outer one additionally sees its yield poll.
-            assert_eq!(inner.poll_count, 2, "inner poll_count = {}", inner.poll_count);
+            assert_eq!(
+                inner.poll_count, 2,
+                "inner poll_count = {}",
+                inner.poll_count
+            );
             assert_eq!(inner.idle_count, 1);
             assert_eq!(inner.total_idle_duration, Duration::from_secs(1));
 
