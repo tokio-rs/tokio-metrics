@@ -423,7 +423,7 @@ debugging and root cause analysis. `tokio-metrics` reports metrics to your
 preferred dashboarding and alerting tools. `tokio-metrics` can tell you
 something is wrong. Dial9 can help tell you what is wrong.
 
-[Dial9]: https://github.com/dial9-rs/dial9/
+[dial9]: https://github.com/dial9-rs/dial9/
 
 ## License
 
