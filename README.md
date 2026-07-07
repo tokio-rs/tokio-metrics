@@ -416,6 +416,15 @@ metrics is intended to enable reporting of metrics in production to your
 preferred tools. Longer term, it is likely that `tokio-metrics` will merge with
 Tokio Console.
 
+## Relation to `dial9`
+
+[Dial9] records Tokio, operating system, and application events for post-hoc
+debugging and root cause analysis. `tokio-metrics` reports metrics to your
+preferred dashboarding and alerting tools. `tokio-metrics` can tell you
+something is wrong. Dial9 can help tell you what is wrong.
+
+[dial9]: https://github.com/dial9-rs/dial9/
+
 ## License
 
 This project is licensed under the [MIT license].
