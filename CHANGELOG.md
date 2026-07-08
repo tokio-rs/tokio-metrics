@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1](https://github.com/tokio-rs/tokio-metrics/compare/v0.5.0...v0.5.1) - 2026-07-08
+
+### Fixed
+
+- make PollTimeHistogram available without tokio_unstable ([#131](https://github.com/tokio-rs/tokio-metrics/pull/131))
+
+### Other
+
+- describe relation to Dial9 ([#129](https://github.com/tokio-rs/tokio-metrics/pull/129))
+- replace version-pinned docs links in readme with latest ([#125](https://github.com/tokio-rs/tokio-metrics/pull/125))
+- Update tokio-metrics dependency version to 0.5 ([#124](https://github.com/tokio-rs/tokio-metrics/pull/124))
+
 ## [0.5.0](https://github.com/tokio-rs/tokio-metrics/compare/v0.4.9...v0.5.0) - 2026-04-09
 
 ### Breaking Changes
