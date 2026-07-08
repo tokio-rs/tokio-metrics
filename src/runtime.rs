@@ -4,9 +4,14 @@ use std::ops::Range;
 use std::time::{Duration, Instant};
 use tokio::runtime;
 
-#[cfg(tokio_unstable)]
+// `PollTimeHistogram` and `HistogramBucket` are plain data types (they only
+// hold `Duration`s and counts), so they are always available with the `rt`
+// feature. Only *populating* the histogram requires `tokio_unstable`. Keeping
+// the types ungated ensures `RuntimeMetrics::poll_time_histogram` resolves even
+// when `tokio_unstable` is not set (e.g. when a derive macro re-emits the
+// struct and drops the field's cfg gate). See
+// https://github.com/tokio-rs/tokio-metrics/issues/128.
 mod poll_time_histogram;
-#[cfg(tokio_unstable)]
 pub use poll_time_histogram::{HistogramBucket, PollTimeHistogram};
 
 #[cfg(feature = "metrics-rs-integration")]
@@ -491,8 +496,9 @@ define_runtime_metrics! {
         /// `Vec<u64>`.
         ///
         /// This metric must be explicitly enabled when creating the runtime with
-        /// [`enable_metrics_poll_time_histogram`][tokio::runtime::Builder::enable_metrics_poll_time_histogram].
-        /// Bucket sizes are fixed and configured at the runtime level. See
+        /// [`enable_metrics_poll_time_histogram`][tokio::runtime::Builder::enable_metrics_poll_time_histogram];
+        /// if it is not enabled, the histogram will contain no buckets. Bucket
+        /// sizes are fixed and configured at the runtime level. See
         /// configuration options on
         /// [`runtime::Builder`][tokio::runtime::Builder::enable_metrics_poll_time_histogram].
         ///

@@ -17,6 +17,8 @@ pub struct PollTimeHistogram {
 }
 
 impl PollTimeHistogram {
+    // Only used to populate the histogram, which requires `tokio_unstable`.
+    #[cfg_attr(not(tokio_unstable), allow(dead_code))]
     pub(crate) fn new(buckets: Vec<HistogramBucket>) -> Self {
         Self { buckets }
     }
@@ -26,6 +28,8 @@ impl PollTimeHistogram {
         &self.buckets
     }
 
+    // Only used to populate the histogram, which requires `tokio_unstable`.
+    #[cfg_attr(not(tokio_unstable), allow(dead_code))]
     pub(crate) fn buckets_mut(&mut self) -> &mut [HistogramBucket] {
         &mut self.buckets
     }
@@ -46,6 +50,8 @@ pub struct HistogramBucket {
 }
 
 impl HistogramBucket {
+    // Only used to populate the histogram, which requires `tokio_unstable`.
+    #[cfg_attr(not(tokio_unstable), allow(dead_code))]
     pub(crate) fn new(range_start: Duration, range_end: Duration, count: u64) -> Self {
         Self { range_start, range_end, count }
     }
@@ -66,6 +72,8 @@ impl HistogramBucket {
     }
 
     /// Adds to the count of this bucket.
+    // Only used to populate the histogram, which requires `tokio_unstable`.
+    #[cfg_attr(not(tokio_unstable), allow(dead_code))]
     pub(crate) fn add_count(&mut self, delta: u64) {
         self.count = self.count.saturating_add(delta);
     }
@@ -113,7 +121,10 @@ impl metrique::CloseValue for PollTimeHistogram {
     }
 }
 
-#[cfg(all(test, feature = "metrique-integration"))]
+// `poll_time_histogram_last_bucket_uses_range_start` constructs a
+// `RuntimeMetrics` and reads its `poll_time_histogram` field, both of which
+// require `tokio_unstable`.
+#[cfg(all(test, tokio_unstable, feature = "metrique-integration"))]
 mod tests {
     use super::*;
     use crate::runtime::RuntimeMetrics;
