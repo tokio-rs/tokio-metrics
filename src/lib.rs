@@ -194,7 +194,8 @@ cfg_rt! {
     };
 }
 
-#[cfg(all(feature = "rt", tokio_unstable))]
+#[cfg(feature = "rt")]
+#[cfg_attr(docsrs, doc(cfg(feature = "rt")))]
 pub use runtime::{HistogramBucket, PollTimeHistogram};
 
 #[cfg(all(feature = "rt", feature = "metrics-rs-integration"))]
