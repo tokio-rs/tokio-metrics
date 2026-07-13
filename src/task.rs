@@ -1,10 +1,11 @@
 use futures_util::task::{ArcWake, AtomicWaker};
 use pin_project_lite::pin_project;
+use std::cell::RefCell;
 use std::future::Future;
 use std::ops::Deref;
 use std::pin::Pin;
-use std::sync::atomic::{AtomicU64, Ordering::SeqCst};
-use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering::SeqCst};
+use std::sync::{Arc, OnceLock};
 use std::task::{Context, Poll};
 use tokio_stream::Stream;
 
@@ -601,6 +602,12 @@ impl AsRef<TaskMonitorCore> for TaskMonitor {
 #[derive(Debug)]
 pub struct TaskMonitorCore {
     metrics: RawMetrics,
+    /// Whether instrumented tasks should publish their scheduling delay as a
+    /// task-local for [`FutureMonitor`] to sample. Off by default so the common
+    /// case pays nothing; enabled via
+    /// [`TaskMonitorBuilder::publish_scheduling_delay`]. Kept out of
+    /// [`RawMetrics`] so that struct's (heavily contended) layout is unchanged.
+    record_scheduling_log: bool,
 }
 
 /// Provides an interface for constructing a [`TaskMonitor`] with specialized configuration
@@ -623,6 +630,18 @@ impl TaskMonitorBuilder {
     /// Specifies the threshold at which schedules are considered 'long'.
     pub fn with_long_delay_threshold(&mut self, threshold: Duration) -> &mut Self {
         self.0.long_delay_threshold = Some(threshold);
+        self
+    }
+
+    /// Records each instrumented task's scheduling delay so that a
+    /// [`FutureMonitor`] running within the task can attribute scheduling delay
+    /// to a single future via [`TaskScheduling`].
+    ///
+    /// Off by default: tasks instrumented by a monitor without this enabled pay
+    /// no extra per-poll cost. Enable it on the monitor wrapping the larger task
+    /// when you want [`FutureMonitor`]'s scheduling metrics to be populated.
+    pub fn publish_scheduling_delay(&mut self) -> &mut Self {
+        self.0.record_scheduling_log = true;
         self
     }
 
@@ -649,6 +668,7 @@ impl TaskMonitorBuilder {
 pub struct TaskMonitorCoreBuilder {
     slow_poll_threshold: Option<Duration>,
     long_delay_threshold: Option<Duration>,
+    record_scheduling_log: bool,
 }
 
 impl TaskMonitorCoreBuilder {
@@ -657,6 +677,7 @@ impl TaskMonitorCoreBuilder {
         Self {
             slow_poll_threshold: None,
             long_delay_threshold: None,
+            record_scheduling_log: false,
         }
     }
 
@@ -676,6 +697,19 @@ impl TaskMonitorCoreBuilder {
         }
     }
 
+    /// Records each instrumented task's scheduling delay so that a
+    /// [`FutureMonitor`] running within the task can attribute scheduling delay
+    /// to a single future via [`TaskScheduling`].
+    ///
+    /// Off by default; see
+    /// [`TaskMonitorBuilder::publish_scheduling_delay`] for details.
+    pub const fn publish_scheduling_delay(self) -> Self {
+        Self {
+            record_scheduling_log: true,
+            ..self
+        }
+    }
+
     /// Consume the builder, producing a [`TaskMonitorCore`].
     pub const fn build(self) -> TaskMonitorCore {
         let slow = match self.slow_poll_threshold {
@@ -686,7 +720,7 @@ impl TaskMonitorCoreBuilder {
             Some(v) => v,
             None => TaskMonitor::DEFAULT_LONG_DELAY_THRESHOLD,
         };
-        TaskMonitorCore::create(slow, long)
+        TaskMonitorCore::create(slow, long, self.record_scheduling_log)
     }
 }
 
@@ -1653,6 +1687,112 @@ struct State<M> {
 
     /// Waker to forward notifications to.
     waker: AtomicWaker,
+
+    /// Cumulative scheduling info for this task, published as a task-local while
+    /// the task is being polled so that nested futures (e.g. a per-future
+    /// [`FutureMonitor`]) can attribute scheduling delay to themselves. `None`
+    /// unless the monitor opted in via
+    /// [`TaskMonitorBuilder::publish_scheduling_delay`], so the common case
+    /// allocates nothing and pays no per-poll cost.
+    log: Option<Arc<SchedulingLog>>,
+}
+
+/// Cumulative scheduling-delay counters for a single instrumented task.
+///
+/// Scheduling delay (the time a task spends in the runtime's queues between
+/// being woken and being polled) is only observable by the root future that the
+/// runtime actually schedules. [`Instrumented`] records it here and publishes
+/// the log as a task-local for the duration of each poll, so that a future
+/// running *within* the task can read the delay accrued during its own lifetime
+/// via [`TaskScheduling::try_current`].
+#[derive(Debug, Default)]
+struct SchedulingLog {
+    scheduled_count: AtomicU64,
+    scheduled_duration_ns: AtomicU64,
+    long_delay_count: AtomicU64,
+}
+
+thread_local! {
+    /// The scheduling log of the innermost [`Instrumented`] task currently being
+    /// polled on this thread, if any.
+    ///
+    /// This is a hand-rolled task-local built on a `thread_local!`: it is only
+    /// set for the duration of a single synchronous poll (see
+    /// [`SchedulingLogGuard`]) and never held across an `.await`, so the usual
+    /// hazard of thread-locals in async code does not apply.
+    static CURRENT_SCHEDULING_LOG: RefCell<Option<Arc<SchedulingLog>>> =
+        const { RefCell::new(None) };
+}
+
+/// Sets the current task's [`SchedulingLog`] for the duration of a poll,
+/// restoring the previous value on drop. This mirrors what
+/// `tokio::task::LocalKey::sync_scope` does, but without requiring the optional
+/// `tokio` dependency, so it works with and without the `rt` feature.
+struct SchedulingLogGuard(Option<Arc<SchedulingLog>>);
+
+impl SchedulingLogGuard {
+    fn enter(log: Arc<SchedulingLog>) -> Self {
+        let prev = CURRENT_SCHEDULING_LOG.with(|cell| cell.borrow_mut().replace(log));
+        SchedulingLogGuard(prev)
+    }
+}
+
+impl Drop for SchedulingLogGuard {
+    fn drop(&mut self) {
+        let prev = self.0.take();
+        CURRENT_SCHEDULING_LOG.with(|cell| *cell.borrow_mut() = prev);
+    }
+}
+
+/// A snapshot of the cumulative scheduling delay observed by the root
+/// instrumented task that the current future is running on.
+///
+/// Obtain one with [`TaskScheduling::try_current`] from inside a task that has
+/// been instrumented with [`TaskMonitor::instrument`]. Scheduling delay can only
+/// be measured by the root future the runtime schedules, so a future running
+/// within a larger task samples this at two points and reports the difference —
+/// this is exactly what [`FutureMonitor`] does to attribute scheduling delay to
+/// a single future.
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct TaskScheduling {
+    /// The number of times the task was scheduled (woken, then waiting to be polled).
+    pub scheduled_count: u64,
+    /// The total time the task spent waiting to be polled after being woken.
+    pub total_scheduled_duration: Duration,
+    /// The number of scheduling delays that crossed the monitor's long-delay threshold.
+    pub long_delay_count: u64,
+}
+
+impl TaskScheduling {
+    /// Reads the cumulative scheduling delay of the task currently being polled.
+    ///
+    /// Returns `None` when called outside the poll of a future instrumented with
+    /// [`TaskMonitor::instrument`].
+    pub fn try_current() -> Option<TaskScheduling> {
+        CURRENT_SCHEDULING_LOG.with(|cell| {
+            cell.borrow().as_ref().map(|log| TaskScheduling {
+                scheduled_count: log.scheduled_count.load(SeqCst),
+                total_scheduled_duration: Duration::from_nanos(
+                    log.scheduled_duration_ns.load(SeqCst),
+                ),
+                long_delay_count: log.long_delay_count.load(SeqCst),
+            })
+        })
+    }
+
+    /// The change in each counter relative to an `earlier` snapshot, saturating at zero.
+    fn since(self, earlier: TaskScheduling) -> TaskScheduling {
+        TaskScheduling {
+            scheduled_count: self.scheduled_count.saturating_sub(earlier.scheduled_count),
+            total_scheduled_duration: self
+                .total_scheduled_duration
+                .saturating_sub(earlier.total_scheduled_duration),
+            long_delay_count: self
+                .long_delay_count
+                .saturating_sub(earlier.long_delay_count),
+        }
+    }
 }
 
 impl TaskMonitor {
@@ -1734,7 +1874,8 @@ impl TaskMonitor {
     /// }
     /// ```
     pub fn with_slow_poll_threshold(slow_poll_cut_off: Duration) -> TaskMonitor {
-        let base = TaskMonitorCore::create(slow_poll_cut_off, Self::DEFAULT_LONG_DELAY_THRESHOLD);
+        let base =
+            TaskMonitorCore::create(slow_poll_cut_off, Self::DEFAULT_LONG_DELAY_THRESHOLD, false);
         TaskMonitor {
             base: Arc::new(base),
         }
@@ -1980,7 +2121,11 @@ impl TaskMonitorCore {
     ///
     /// Refer to [`TaskMonitor::with_slow_poll_threshold`] for examples.
     pub const fn with_slow_poll_threshold(slow_poll_cut_off: Duration) -> TaskMonitorCore {
-        Self::create(slow_poll_cut_off, TaskMonitor::DEFAULT_LONG_DELAY_THRESHOLD)
+        Self::create(
+            slow_poll_cut_off,
+            TaskMonitor::DEFAULT_LONG_DELAY_THRESHOLD,
+            false,
+        )
     }
 
     /// Produces the duration greater-than-or-equal-to at which polls are categorized as slow.
@@ -2064,11 +2209,17 @@ impl TaskMonitorCore {
             .instrumented_count
             .fetch_add(1, SeqCst);
 
+        let log = monitor
+            .as_ref()
+            .record_scheduling_log
+            .then(|| Arc::new(SchedulingLog::default()));
+
         let state: State<M> = State {
             monitor,
             instrumented_at: Instant::now(),
             woke_at: AtomicU64::new(0),
             waker: AtomicWaker::new(),
+            log,
         };
 
         let instrumented: Instrumented<F, M> = Instrumented {
@@ -2133,8 +2284,13 @@ impl AsRef<TaskMonitorCore> for TaskMonitorCore {
 }
 
 impl TaskMonitorCore {
-    const fn create(slow_poll_cut_off: Duration, long_delay_cut_off: Duration) -> TaskMonitorCore {
+    const fn create(
+        slow_poll_cut_off: Duration,
+        long_delay_cut_off: Duration,
+        record_scheduling_log: bool,
+    ) -> TaskMonitorCore {
         TaskMonitorCore {
+            record_scheduling_log,
             metrics: RawMetrics {
                 slow_poll_threshold: slow_poll_cut_off,
                 first_poll_count: AtomicU64::new(0),
@@ -2833,15 +2989,36 @@ fn instrument_poll<T, M: AsRef<TaskMonitorCore> + Send + Sync + 'static, Out>(
         metrics
             .total_scheduled_duration_ns
             .fetch_add(scheduled_ns, SeqCst);
+
+        // mirror the same scheduling accounting into this task's own log so that
+        // futures running within the task can attribute scheduling delay to
+        // their own lifetime (see `FutureMonitor`). Only present when the
+        // monitor opted in, so the common case skips this entirely.
+        if let Some(log) = &state.log {
+            log.scheduled_count.fetch_add(1, SeqCst);
+            log.scheduled_duration_ns.fetch_add(scheduled_ns, SeqCst);
+            if scheduled >= metrics.long_delay_threshold {
+                log.long_delay_count.fetch_add(1, SeqCst);
+            }
+        }
     }
     // Register the waker
     state.waker.register(cx.waker());
     // Get the instrumented waker
     let waker_ref = futures_util::task::waker_ref(state);
     let mut cx = Context::from_waker(&waker_ref);
-    // Poll the task
+    // Poll the task, publishing this task's scheduling log as a task-local for
+    // the duration of the poll so nested futures can read it.
     let inner_poll_start = Instant::now();
-    let ret = poll_fn(this.task, &mut cx);
+    // Only publish the task-local when the monitor opted in. When it didn't
+    // (the common case) this is a single predictable branch and the poll path is
+    // byte-for-byte the original — no guard, thread-local, or `Arc` clone.
+    let ret = if let Some(log) = &state.log {
+        let _sched_guard = SchedulingLogGuard::enter(log.clone());
+        poll_fn(this.task, &mut cx)
+    } else {
+        poll_fn(this.task, &mut cx)
+    };
     let inner_poll_end = Instant::now();
     /* idle time starts now */
     *idled_at = inner_poll_end
@@ -2891,6 +3068,268 @@ impl<M: Send + Sync> ArcWake for State<M> {
     fn wake(self: Arc<State<M>>) {
         self.on_wake();
         self.waker.wake();
+    }
+}
+
+/// Key metrics of a single instrumented future running within a larger task, as
+/// captured by a [`FutureMonitor`].
+///
+/// Unlike [`TaskMetrics`], which aggregates across every future instrumented by
+/// a [`TaskMonitor`], these metrics describe just one future. Idle, poll, and
+/// first-poll metrics are measured locally from that future's own polls, so they
+/// remain accurate even when the surrounding task interleaves other work.
+/// Scheduling metrics are sampled from the root task's [`TaskScheduling`] log
+/// over the future's lifetime (see [`FutureMonitor`]).
+#[non_exhaustive]
+#[cfg_attr(
+    feature = "metrique-integration",
+    metrique::unit_of_work::metrics(subfield)
+)]
+#[derive(Debug, Clone, Default)]
+pub struct FutureMetrics {
+    /// The number of times the future was polled.
+    pub poll_count: u64,
+    /// The total time spent polling the future.
+    pub total_poll_duration: Duration,
+    /// The number of polls that exceeded the monitor's slow-poll threshold.
+    pub slow_poll_count: u64,
+    /// The number of times the future idled, waiting to be awoken.
+    pub idle_count: u64,
+    /// The total time the future spent idle, waiting on external events.
+    pub total_idle_duration: Duration,
+    /// The longest single idle the future experienced.
+    pub max_idle_duration: Duration,
+    /// The delay between the future being instrumented and its first poll.
+    pub first_poll_delay: Duration,
+    /// The wall-clock time from the future's first poll to its completion.
+    pub total_duration: Duration,
+    /// The number of times the underlying task was scheduled while this future
+    /// was active.
+    ///
+    /// This tracks the *root* task's scheduling, not this future's polls, so it
+    /// can exceed [`poll_count`](Self::poll_count) — for example when the future
+    /// is one branch of a `select!` and the task is scheduled to advance the
+    /// other branches.
+    pub scheduled_count: u64,
+    /// The total scheduling delay the underlying task incurred while this future
+    /// was active.
+    pub total_scheduled_duration: Duration,
+    /// The number of those scheduling delays that crossed the long-delay threshold.
+    pub long_delay_count: u64,
+}
+
+/// Per-future capture state shared between a [`FutureMonitor`] and the
+/// [`MonitoredFuture`] future it produces.
+#[derive(Debug, Default)]
+struct SpanState {
+    started: AtomicBool,
+    start_scheduled_count: AtomicU64,
+    start_scheduled_duration_ns: AtomicU64,
+    start_long_delay_count: AtomicU64,
+    end_scheduled_count: AtomicU64,
+    end_scheduled_duration_ns: AtomicU64,
+    end_long_delay_count: AtomicU64,
+    first_poll: OnceLock<Instant>,
+    total_duration_ns: AtomicU64,
+}
+
+fn duration_to_nanos(d: Duration) -> u64 {
+    d.as_nanos().try_into().unwrap_or(u64::MAX)
+}
+
+impl SpanState {
+    /// Records the root scheduling snapshot for a poll. Called at the top of
+    /// every poll of the [`MonitoredFuture`], while the root task's
+    /// scheduling log is in scope.
+    fn record_poll_start(&self, now: TaskScheduling) {
+        if !self.started.swap(true, SeqCst) {
+            self.start_scheduled_count
+                .store(now.scheduled_count, SeqCst);
+            self.start_scheduled_duration_ns
+                .store(duration_to_nanos(now.total_scheduled_duration), SeqCst);
+            self.start_long_delay_count
+                .store(now.long_delay_count, SeqCst);
+            let _ = self.first_poll.set(Instant::now());
+        }
+        self.end_scheduled_count.store(now.scheduled_count, SeqCst);
+        self.end_scheduled_duration_ns
+            .store(duration_to_nanos(now.total_scheduled_duration), SeqCst);
+        self.end_long_delay_count
+            .store(now.long_delay_count, SeqCst);
+    }
+
+    /// Records total elapsed time *after* a poll completes, so the execution
+    /// time of the poll just finished — including the final one — is counted.
+    fn record_poll_end(&self) {
+        if let Some(first_poll) = self.first_poll.get() {
+            self.total_duration_ns
+                .store(duration_to_nanos(first_poll.elapsed()), SeqCst);
+        }
+    }
+
+    fn scheduling_delta(&self) -> TaskScheduling {
+        let end = TaskScheduling {
+            scheduled_count: self.end_scheduled_count.load(SeqCst),
+            total_scheduled_duration: Duration::from_nanos(
+                self.end_scheduled_duration_ns.load(SeqCst),
+            ),
+            long_delay_count: self.end_long_delay_count.load(SeqCst),
+        };
+        let start = TaskScheduling {
+            scheduled_count: self.start_scheduled_count.load(SeqCst),
+            total_scheduled_duration: Duration::from_nanos(
+                self.start_scheduled_duration_ns.load(SeqCst),
+            ),
+            long_delay_count: self.start_long_delay_count.load(SeqCst),
+        };
+        end.since(start)
+    }
+
+    fn total_duration(&self) -> Duration {
+        Duration::from_nanos(self.total_duration_ns.load(SeqCst))
+    }
+}
+
+fn build_future_metrics(monitor: &TaskMonitor, span: &SpanState) -> FutureMetrics {
+    let local = monitor.cumulative();
+    let scheduling = span.scheduling_delta();
+    FutureMetrics {
+        poll_count: local.total_poll_count,
+        total_poll_duration: local.total_poll_duration,
+        slow_poll_count: local.total_slow_poll_count,
+        idle_count: local.total_idled_count,
+        total_idle_duration: local.total_idle_duration,
+        max_idle_duration: local.max_idle_duration,
+        first_poll_delay: local.total_first_poll_delay,
+        total_duration: span.total_duration(),
+        scheduled_count: scheduling.scheduled_count,
+        total_scheduled_duration: scheduling.total_scheduled_duration,
+        long_delay_count: scheduling.long_delay_count,
+    }
+}
+
+pin_project! {
+    /// The future returned by [`FutureMonitor::instrument`].
+    ///
+    /// Wraps the future, capturing its per-poll metrics locally and
+    /// sampling the surrounding task's scheduling delay at each poll. Resolves to
+    /// the wrapped future's output paired with the captured [`FutureMetrics`].
+    pub struct MonitoredFuture<F> {
+        #[pin]
+        inner: Instrumented<F, TaskMonitor>,
+        monitor: TaskMonitor,
+        span: Arc<SpanState>,
+    }
+}
+
+impl<F> std::fmt::Debug for MonitoredFuture<F> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MonitoredFuture").finish_non_exhaustive()
+    }
+}
+
+impl<F: Future> Future for MonitoredFuture<F> {
+    type Output = (F::Output, FutureMetrics);
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.project();
+        // Sample the root task's scheduling log *before* delegating to the inner
+        // `Instrumented`, while the root task's log is the one in scope (the
+        // inner `Instrumented` shadows it with the future's own log during its
+        // poll, which we deliberately ignore).
+        this.span
+            .record_poll_start(TaskScheduling::try_current().unwrap_or_default());
+        let ret = this.inner.poll(cx);
+        // Stamp total elapsed *after* the poll so the execution time of the poll
+        // just finished — including the final one that returns `Ready` — is
+        // captured in `total_duration`.
+        this.span.record_poll_end();
+        match ret {
+            Poll::Ready(output) => {
+                let metrics = build_future_metrics(this.monitor, this.span);
+                Poll::Ready((output, metrics))
+            }
+            Poll::Pending => Poll::Pending,
+        }
+    }
+}
+
+/// Monitors the metrics of a single future running within a larger,
+/// already-[instrumented][TaskMonitor::instrument] task.
+///
+/// [`TaskMonitor`] aggregates metrics across all the futures it instruments;
+/// `FutureMonitor` instead captures the metrics of *one* future so they can be
+/// attached to that future's own record. Idle, poll, and first-poll metrics are
+/// measured locally from the future. Scheduling delay — which only the
+/// root future the runtime schedules can observe — is read from the surrounding
+/// task's [`TaskScheduling`] log over the future's lifetime, so for scheduling
+/// metrics to be populated the surrounding task must itself be instrumented with
+/// [`TaskMonitor::instrument`].
+///
+/// `FutureMonitor` instruments exactly one future: [`instrument`] consumes the
+/// monitor, so it cannot be reused, and the returned future resolves to the
+/// wrapped output together with the captured [`FutureMetrics`].
+///
+/// ##### Examples
+/// ```
+/// use tokio_metrics::{FutureMonitor, TaskMonitor};
+///
+/// #[tokio::main]
+/// async fn main() {
+///     // the larger task is instrumented once; `publish_scheduling_delay`
+///     // enables per-future scheduling-delay capture
+///     let mut builder = TaskMonitor::builder();
+///     builder.publish_scheduling_delay();
+///     let task_monitor = builder.build();
+///     task_monitor.instrument(async {
+///         // each unit of work within the task is measured on its own
+///         let (_output, metrics) = FutureMonitor::new()
+///             .instrument(async {
+///                 tokio::task::yield_now().await;
+///             })
+///             .await;
+///
+///         assert!(metrics.poll_count >= 1);
+///     }).await;
+/// }
+/// ```
+///
+/// [`instrument`]: FutureMonitor::instrument
+// Deliberately not `Clone`: cloning would share the underlying span and let two
+// instrumented futures be measured as one, which is exactly the reuse `instrument`
+// (by consuming `self`) is meant to prevent.
+#[derive(Debug, Default)]
+pub struct FutureMonitor {
+    monitor: TaskMonitor,
+    span: Arc<SpanState>,
+}
+
+impl FutureMonitor {
+    /// Constructs a new `FutureMonitor` for a single future.
+    pub fn new() -> FutureMonitor {
+        FutureMonitor::default()
+    }
+
+    /// Constructs a new `FutureMonitor` whose local poll metrics use a custom
+    /// slow-poll threshold (see [`TaskMonitor::with_slow_poll_threshold`]).
+    pub fn with_slow_poll_threshold(slow_poll_threshold: Duration) -> FutureMonitor {
+        FutureMonitor {
+            monitor: TaskMonitor::with_slow_poll_threshold(slow_poll_threshold),
+            span: Arc::new(SpanState::default()),
+        }
+    }
+
+    /// Instruments the future, consuming the monitor.
+    ///
+    /// Taking `self` by value means a `FutureMonitor` can only instrument one
+    /// future. Await the returned [`MonitoredFuture`] to get the future's
+    /// output alongside its [`FutureMetrics`].
+    pub fn instrument<F>(self, task: F) -> MonitoredFuture<F> {
+        MonitoredFuture {
+            inner: self.monitor.instrument(task),
+            monitor: self.monitor,
+            span: self.span,
+        }
     }
 }
 
@@ -3067,5 +3506,168 @@ mod inference_tests {
         _function_boundary(monitor.instrument(async { 42 })).await;
         _return_position(&monitor).await;
         _intervals_inference(&monitor);
+    }
+}
+
+#[cfg(test)]
+mod future_monitor_tests {
+    use super::*;
+
+    // Asserts on durations measured by the crate's clock, which is only the
+    // runtime's virtual clock under `start_paused` when the `rt` feature selects
+    // `tokio::time::Instant`; without `rt` the crate uses the real `std` clock.
+    #[cfg(feature = "rt")]
+    #[tokio::test(flavor = "current_thread", start_paused = true)]
+    async fn captures_per_future_idle_active_polls() {
+        let task_monitor = TaskMonitor::new();
+        task_monitor
+            .instrument(async {
+                let (_, m) = FutureMonitor::new()
+                    .instrument(async {
+                        tokio::task::yield_now().await; // an extra poll
+                        tokio::time::sleep(Duration::from_secs(1)).await; // idle
+                    })
+                    .await;
+
+                assert!(m.poll_count >= 2, "poll_count = {}", m.poll_count);
+                assert!(m.idle_count >= 1, "idle_count = {}", m.idle_count);
+                assert!(
+                    m.total_idle_duration >= Duration::from_secs(1),
+                    "total_idle_duration = {:?}",
+                    m.total_idle_duration
+                );
+            })
+            .await;
+    }
+
+    #[tokio::test(flavor = "current_thread", start_paused = true)]
+    async fn scheduling_is_zero_without_instrumented_root() {
+        // No surrounding `TaskMonitor::instrument`, so `try_current()` is `None`
+        // and no scheduling delay is attributed — but local metrics still work.
+        let (_, m) = FutureMonitor::new()
+            .instrument(async {
+                tokio::task::yield_now().await;
+            })
+            .await;
+
+        assert_eq!(m.scheduled_count, 0);
+        assert_eq!(m.total_scheduled_duration, Duration::ZERO);
+        assert!(m.poll_count >= 1, "poll_count = {}", m.poll_count);
+    }
+
+    #[tokio::test]
+    async fn try_current_tracks_root_scheduling_when_opted_in() {
+        assert!(TaskScheduling::try_current().is_none());
+
+        let mut builder = TaskMonitor::builder();
+        builder.publish_scheduling_delay();
+        let monitor = builder.build();
+        monitor
+            .instrument(async {
+                // The log exists from the first poll, even before any scheduling.
+                let before = TaskScheduling::try_current().expect("inside instrumented task");
+                tokio::task::yield_now().await;
+                let after = TaskScheduling::try_current().expect("inside instrumented task");
+                assert!(
+                    after.scheduled_count > before.scheduled_count,
+                    "scheduled_count should increase after yielding: {} -> {}",
+                    before.scheduled_count,
+                    after.scheduled_count
+                );
+            })
+            .await;
+
+        assert!(TaskScheduling::try_current().is_none());
+    }
+
+    #[tokio::test]
+    async fn try_current_is_none_without_opt_in() {
+        // A default monitor does not publish the scheduling log, so the common
+        // case pays nothing and `FutureMonitor` scheduling stays zero.
+        TaskMonitor::new()
+            .instrument(async {
+                assert!(TaskScheduling::try_current().is_none());
+            })
+            .await;
+    }
+
+    #[tokio::test]
+    async fn instrument_yields_output_and_metrics() {
+        // `instrument` consumes the monitor and resolves to the future's output
+        // paired with its captured metrics — so a monitor can only ever measure
+        // a single future.
+        let (output, m) = FutureMonitor::new()
+            .instrument(async {
+                tokio::task::yield_now().await;
+                "done"
+            })
+            .await;
+
+        assert_eq!(output, "done");
+        assert!(m.poll_count >= 1, "poll_count = {}", m.poll_count);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn total_duration_includes_final_poll_execution() {
+        // The future completes in a single poll that spends real time
+        // executing. `total_duration` is stamped after the poll, so it must
+        // include that execution time (a regression would record it before the
+        // poll and report ~0).
+        let (_, m) = FutureMonitor::new()
+            .instrument(async {
+                let start = std::time::Instant::now();
+                while start.elapsed() < Duration::from_millis(20) {}
+            })
+            .await;
+
+        assert!(m.poll_count == 1, "poll_count = {}", m.poll_count);
+        assert!(
+            m.total_duration >= Duration::from_millis(15),
+            "total_duration = {:?}",
+            m.total_duration
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread", start_paused = true)]
+    async fn nested_future_monitors_capture_independently() {
+        let mut builder = TaskMonitor::builder();
+        builder.publish_scheduling_delay();
+        let root = builder.build();
+
+        root.instrument(async {
+            // An outer monitored future that does one extra poll of its own, then
+            // runs an inner monitored future that sleeps.
+            let (inner, outer) = FutureMonitor::new()
+                .instrument(async {
+                    tokio::task::yield_now().await; // outer-only extra poll
+                    let (_, inner) = FutureMonitor::new()
+                        .instrument(async {
+                            tokio::time::sleep(Duration::from_secs(1)).await;
+                        })
+                        .await;
+                    inner
+                })
+                .await;
+
+            // Each monitor captures only its own future: the inner one sees just
+            // the sleep, the outer one additionally sees its yield poll.
+            assert_eq!(
+                inner.poll_count, 2,
+                "inner poll_count = {}",
+                inner.poll_count
+            );
+            assert_eq!(inner.idle_count, 1);
+            assert_eq!(inner.total_idle_duration, Duration::from_secs(1));
+
+            assert!(
+                outer.poll_count > inner.poll_count,
+                "outer {} should exceed inner {}",
+                outer.poll_count,
+                inner.poll_count
+            );
+            // The outer future is idle for the whole time the inner one sleeps.
+            assert_eq!(outer.total_idle_duration, Duration::from_secs(1));
+        })
+        .await;
     }
 }
