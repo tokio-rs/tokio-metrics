@@ -29,7 +29,7 @@ jobs:
         uses: rust-lang/crates-io-auth-action@v1
         id: auth
       - name: Run release-plz
-        uses: release-plz/action@v0.5.102
+        uses: release-plz/action@v0.5.127
         with:
           command: release
         env:
