@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.2](https://github.com/tokio-rs/tokio-metrics/compare/v0.5.1...v0.5.2) - 2026-08-28
+
+### Added
+
+- add per-request task metrics via FutureMonitor ([#127](https://github.com/tokio-rs/tokio-metrics/pull/127))
+
+### Fixed
+
+- add explicit Value shape and unit to metrique bridge ([#134](https://github.com/tokio-rs/tokio-metrics/pull/134))
+
+### Other
+
+- update release-plz action to v0.5.127 ([#133](https://github.com/tokio-rs/tokio-metrics/pull/133))
+
 ## [0.5.1](https://github.com/tokio-rs/tokio-metrics/compare/v0.5.0...v0.5.1) - 2026-07-08
 
 ### Fixed
