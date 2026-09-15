@@ -25,6 +25,7 @@ default = ["rt"]
 metrics-rs-integration = ["dep:metrics"]
 metrique-integration = ["dep:metrique"]
 rt = ["tokio"]
+schedule-latency = ["rt", "tokio/schedule-latency"]
 
 [dependencies]
 tokio-stream = "0.1.11"

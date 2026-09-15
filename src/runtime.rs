@@ -4,15 +4,15 @@ use std::ops::Range;
 use std::time::{Duration, Instant};
 use tokio::runtime;
 
-// `PollTimeHistogram` and `HistogramBucket` are plain data types (they only
+// `DurationHistogram` and `HistogramBucket` are plain data types (they only
 // hold `Duration`s and counts), so they are always available with the `rt`
 // feature. Only *populating* the histogram requires `tokio_unstable`. Keeping
 // the types ungated ensures `RuntimeMetrics::poll_time_histogram` resolves even
 // when `tokio_unstable` is not set (e.g. when a derive macro re-emits the
 // struct and drops the field's cfg gate). See
 // https://github.com/tokio-rs/tokio-metrics/issues/128.
-mod poll_time_histogram;
-pub use poll_time_histogram::{HistogramBucket, PollTimeHistogram};
+mod histogram;
+pub use histogram::{DurationHistogram, HistogramBucket, PollTimeHistogram};
 
 #[cfg(feature = "metrics-rs-integration")]
 pub(crate) mod metrics_rs_integration;
@@ -492,7 +492,7 @@ define_runtime_metrics! {
         ///
         /// Each bucket contains the configured [`Duration`] range and the count
         /// of task polls that fell into that range during the interval. Use
-        /// [`PollTimeHistogram::as_counts`] to get just the raw counts as a
+        /// [`DurationHistogram::as_counts`] to get just the raw counts as a
         /// `Vec<u64>`.
         ///
         /// This metric must be explicitly enabled when creating the runtime with
@@ -527,7 +527,49 @@ define_runtime_metrics! {
         ///     }
         /// });
         /// ```
-        pub poll_time_histogram: PollTimeHistogram,
+        pub poll_time_histogram: DurationHistogram,
+
+        /// A histogram of task scheduling latency.
+        ///
+        /// Each bucket contains the configured [`Duration`] range and the count of task polls 
+        /// that fell into that range during the interval. Use [`DurationHistogram::as_counts`] 
+        /// to get just the raw counts as a `Vec<u64>`.
+        ///
+        /// This metric must be explicitly enabled when creating the runtime with
+        /// [`enable_metrics_schedule_latency_histogram`][tokio::runtime::Builder::enable_metrics_schedule_latency_histogram];
+        /// if it is not enabled, the histogram will contain no buckets. Bucket
+        /// sizes are fixed and configured at the runtime level. See configuration options on
+        /// [`runtime::Builder`][tokio::runtime::Builder::enable_metrics_schedule_latency_histogram].
+        ///
+        /// Requires the `schedule-latency` feature of this crate, which needs
+        /// tokio 1.53 or later.
+        ///
+        /// ##### Examples
+        /// ```
+        /// use tokio::runtime::HistogramConfiguration;
+        /// use std::time::Duration;
+        ///
+        /// let config = HistogramConfiguration::linear(Duration::from_micros(50), 12);
+        ///
+        /// let rt = tokio::runtime::Builder::new_multi_thread()
+        ///     .enable_metrics_schedule_latency_histogram()
+        ///     .metrics_schedule_latency_histogram_configuration(config)
+        ///     .build()
+        ///     .unwrap();
+        ///
+        /// rt.block_on(async {
+        ///     let handle = tokio::runtime::Handle::current();
+        ///     let monitor = tokio_metrics::RuntimeMonitor::new(&handle);
+        ///     let mut intervals = monitor.intervals();
+        ///     let mut next_interval = || intervals.next().unwrap();
+        ///
+        ///     let interval = next_interval();
+        ///     for bucket in interval.schedule_latency_histogram.buckets() {
+        ///         println!("{:?}..{:?} => {} polls", bucket.range_start(), bucket.range_end(), bucket.count());
+        ///     }
+        /// });
+        /// ```
+        pub schedule_latency_histogram: DurationHistogram,
 
         /// The number of times worker threads unparked but performed no work before parking again.
         ///
@@ -1261,6 +1303,7 @@ define_semi_stable! {
             total_overflow_count: u64,
             total_polls_count: u64,
             poll_time_histogram: Vec<u64>,
+            schedule_latency_histogram: Vec<u64>,
         }
     }
 }
@@ -1283,6 +1326,7 @@ define_semi_stable! {
             io_driver_ready_count: u64,
             // Cached bucket ranges, static config that doesn't change after runtime creation.
             bucket_ranges: Vec<Range<Duration>>,
+            schedule_latency_ranges: Vec<Range<Duration>>,
         }
     }
 }
@@ -1315,8 +1359,14 @@ impl RuntimeIntervals {
             metrics.min_polls_count = u64::MAX;
             metrics.min_local_queue_depth = usize::MAX;
             metrics.mean_poll_duration_worker_min = Duration::MAX;
-            metrics.poll_time_histogram = PollTimeHistogram::new(
+            metrics.poll_time_histogram = DurationHistogram::new(
                 self.bucket_ranges
+                    .iter()
+                    .map(|range| HistogramBucket::new(range.start, range.end, 0))
+                    .collect(),
+            );
+            metrics.schedule_latency_histogram = DurationHistogram::new(
+                self.schedule_latency_ranges
                     .iter()
                     .map(|range| HistogramBucket::new(range.start, range.end, 0))
                     .collect(),
@@ -1434,7 +1484,59 @@ impl RuntimeMonitor {
             bucket_ranges: (0..self.runtime.poll_time_histogram_num_buckets())
                 .map(|i| self.runtime.poll_time_histogram_bucket_range(i))
                 .collect(),
+            #[cfg(tokio_unstable)]
+            schedule_latency_ranges: schedule_latency_ranges(&self.runtime),
         }
+    }
+}
+
+/// Number of schedule-latency buckets the runtime is tracking.
+/// Zero when not using the `schedule-latency` feature.
+#[cfg(tokio_unstable)]
+fn schedule_latency_num_buckets(rt: &runtime::RuntimeMetrics) -> usize {
+    #[cfg(feature = "schedule-latency")]
+    {
+        rt.schedule_latency_histogram_num_buckets()
+    }
+    #[cfg(not(feature = "schedule-latency"))]
+    {
+        let _ = rt;
+        0
+    }
+}
+
+/// Bucket ranges for the schedule-latency histogram.
+#[cfg(tokio_unstable)]
+fn schedule_latency_ranges(rt: &runtime::RuntimeMetrics) -> Vec<Range<Duration>> {
+    #[cfg(feature = "schedule-latency")]
+    {
+        (0..schedule_latency_num_buckets(rt))
+            .map(|i| rt.schedule_latency_histogram_bucket_range(i))
+            .collect()
+    }
+    #[cfg(not(feature = "schedule-latency"))]
+    {
+        let _ = rt;
+        Vec::new()
+    }
+}
+
+/// Cumulative count for one schedule-latency bucket on one worker.
+/// Returns 0 when not using the `schedule-latency` feature.
+#[cfg(tokio_unstable)]
+fn schedule_latency_bucket_count(
+    rt: &runtime::RuntimeMetrics,
+    worker: usize,
+    bucket: usize,
+) -> u64 {
+    #[cfg(feature = "schedule-latency")]
+    {
+        rt.schedule_latency_histogram_bucket_count(worker, bucket)
+    }
+    #[cfg(not(feature = "schedule-latency"))]
+    {
+        let _ = (rt, worker, bucket);
+        0
     }
 }
 
@@ -1450,18 +1552,20 @@ impl Worker {
 
         #[cfg(tokio_unstable)]
         {
-            let poll_time_histogram = if rt.poll_time_histogram_enabled() {
-                vec![0; rt.poll_time_histogram_num_buckets()]
-            } else {
-                vec![]
-            };
             wrk.total_noop_count = rt.worker_noop_count(worker);
             wrk.total_steal_count = rt.worker_steal_count(worker);
             wrk.total_steal_operations = rt.worker_steal_operations(worker);
             wrk.total_local_schedule_count = rt.worker_local_schedule_count(worker);
             wrk.total_overflow_count = rt.worker_overflow_count(worker);
             wrk.total_polls_count = rt.worker_poll_count(worker);
-            wrk.poll_time_histogram = poll_time_histogram;
+            // seed the bucket counts from the runtime so the first interval covers only what happened 
+            // after the monitor was created
+            wrk.poll_time_histogram = (0..rt.poll_time_histogram_num_buckets())
+                .map(|bucket| rt.poll_time_histogram_bucket_count(worker, bucket))
+                .collect();
+            wrk.schedule_latency_histogram = (0..schedule_latency_num_buckets(rt))
+                .map(|bucket| schedule_latency_bucket_count(rt, worker, bucket))
+                .collect();
         };
         wrk
     }
@@ -1575,6 +1679,19 @@ impl Worker {
 
                     entry.add_count(delta);
                 }
+
+                for (bucket, entry) in metrics
+                    .schedule_latency_histogram
+                    .buckets_mut()
+                    .iter_mut()
+                    .enumerate()
+                {
+                    let new = schedule_latency_bucket_count(rt, self.worker, bucket);
+                    let delta = new.saturating_sub(self.schedule_latency_histogram[bucket]);
+                    self.schedule_latency_histogram[bucket] = new;
+
+                    entry.add_count(delta);
+                }
             }
 
             // Local scheduled tasks is an absolute value
@@ -1632,7 +1749,7 @@ mod metrique_integration_tests {
         let metrics = RuntimeMetrics {
             workers_count: 4,
             total_park_count: 100,
-            poll_time_histogram: PollTimeHistogram::new(vec![
+            poll_time_histogram: DurationHistogram::new(vec![
                 HistogramBucket::new(Duration::from_micros(0), Duration::from_micros(100), 10),
                 HistogramBucket::new(Duration::from_micros(100), Duration::from_micros(200), 0),
                 HistogramBucket::new(Duration::from_micros(200), Duration::from_micros(500), 3),
@@ -1775,5 +1892,66 @@ mod metrique_integration_tests {
                 other => panic!("expected Repeated, got {other:?}"),
             }
         });
+    }
+}
+
+#[cfg(all(test, tokio_unstable, feature = "rt"))]
+mod interval_baseline_tests {
+    use super::*;
+
+    /// Warm the runtime up, then start watching and take an interval covering
+    /// only a little work.
+    async fn warmup_then_interval() -> RuntimeMetrics {
+        async fn poll(n: usize) {
+            tokio::spawn(async move {
+                for _ in 0..n {
+                    tokio::task::yield_now().await;
+                }
+            })
+            .await
+            .unwrap();
+        }
+
+        poll(2_000).await;
+        let mut intervals =
+            RuntimeMonitor::new(&tokio::runtime::Handle::current()).intervals();
+        intervals.next().unwrap();
+        poll(10).await;
+        intervals.next().unwrap()
+    }
+
+    fn assert_fits_interval(hist: &DurationHistogram, metrics: &RuntimeMetrics) {
+        let counted: u64 = hist.buckets().iter().map(|b| b.count()).sum();
+        assert!(counted > 0, "histogram recorded nothing");
+        assert!(
+            counted <= metrics.total_polls_count,
+            "histogram counted {counted} for an interval of {} polls",
+            metrics.total_polls_count
+        );
+    }
+
+    #[test]
+    fn poll_time_histogram_excludes_polls_from_before_the_monitor() {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .enable_metrics_poll_time_histogram()
+            .build()
+            .unwrap();
+
+        let metrics = rt.block_on(warmup_then_interval());
+        assert_fits_interval(&metrics.poll_time_histogram, &metrics);
+    }
+
+    #[cfg(feature = "schedule-latency")]
+    #[test]
+    fn schedule_latency_histogram_excludes_schedules_from_before_the_monitor() {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .enable_metrics_schedule_latency_histogram()
+            .build()
+            .unwrap();
+
+        let metrics = rt.block_on(warmup_then_interval());
+        assert_fits_interval(&metrics.schedule_latency_histogram, &metrics);
     }
 }

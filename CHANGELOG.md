@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `PollTimeHistogram` is now `DurationHistogram`, it wasn't PollTime-specific and now both `poll_time_histogram` and `schedule_latency_histogram` use it. The old name is kept as a re-export.
+
+### Added
+
+- `RuntimeMetrics::schedule_latency_histogram`, behind the new `schedule-latency` feature ([#136](https://github.com/tokio-rs/tokio-metrics/issues/136)). Requires tokio 1.53 or later, `--cfg tokio_unstable`, and `Builder::enable_metrics_schedule_latency_histogram()` on the runtime.
+
+### Fixed
+
+- Durations now reach the metrics.rs and metrique bridges as fractional microseconds. `as_micros` truncates, so every sub-microsecond histogram bucket and mean poll duration was reported as zero.
+- Histogram bucket counts are now seeded from the runtime when a `RuntimeMonitor` is created. They started at zero, so the first interval that saw any polls also carried every poll since the runtime started, while every other metric in that interval covered only the interval.
+
 ## [0.5.2](https://github.com/tokio-rs/tokio-metrics/compare/v0.5.1...v0.5.2) - 2026-08-28
 
 ### Added

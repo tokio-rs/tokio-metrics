@@ -101,8 +101,12 @@ jobs:
         include:
           - rustflags: "--cfg tokio_unstable -Dwarnings"
             name: "tokio-unstable"
+            features: "--all-features"
           - rustflags: "-Dwarnings"
             name: "stable"
+            # `schedule-latency` in tokio requires `--cfg tokio_unstable`, so it cannot be part of
+            # the stable feature set.
+            features: "--features metrics-rs-integration,metrique-integration"
     env:
       RUSTFLAGS: ${{ matrix.rustflags }}
     steps:
@@ -117,7 +121,7 @@ jobs:
       uses: actions-rs/cargo@v1
       with:
         command: test
-        args: --all --all-features --all-targets
+        args: --all ${{ matrix.features }} --all-targets
 
   test-docs:
     needs: check

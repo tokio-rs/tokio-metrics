@@ -234,7 +234,9 @@ tokio::spawn(do_work());
 - **[`mean_poll_duration_worker_max`]**
   The average duration of a single invocation of poll on a task on the worker with the highest value.
 - **[`poll_time_histogram`]**
-  A histogram of task polls since the previous probe grouped by poll times.
+  A histogram of task polls since the previous probe grouped by poll times. Needs `enable_metrics_poll_time_histogram()` on the runtime builder.
+- **[`schedule_latency_histogram`]**
+  A histogram of task scheduling latency. Needs the `schedule-latency` crate feature, tokio 1.53 or later, and `enable_metrics_schedule_latency_histogram()` on the runtime builder.
 - **[`total_noop_count`]**
   The number of times worker threads unparked but performed no work before parking again.
 - **[`max_noop_count`]**
@@ -311,6 +313,7 @@ tokio::spawn(do_work());
 [`mean_poll_duration_worker_min`]: https://docs.rs/tokio-metrics/latest/tokio_metrics/struct.RuntimeMetrics.html#structfield.mean_poll_duration_worker_min
 [`mean_poll_duration_worker_max`]: https://docs.rs/tokio-metrics/latest/tokio_metrics/struct.RuntimeMetrics.html#structfield.mean_poll_duration_worker_max
 [`poll_time_histogram`]: https://docs.rs/tokio-metrics/latest/tokio_metrics/struct.RuntimeMetrics.html#structfield.poll_time_histogram
+[`schedule_latency_histogram`]: https://docs.rs/tokio-metrics/latest/tokio_metrics/struct.RuntimeMetrics.html#structfield.schedule_latency_histogram
 [`total_noop_count`]: https://docs.rs/tokio-metrics/latest/tokio_metrics/struct.RuntimeMetrics.html#structfield.total_noop_count
 [`max_noop_count`]: https://docs.rs/tokio-metrics/latest/tokio_metrics/struct.RuntimeMetrics.html#structfield.max_noop_count
 [`min_noop_count`]: https://docs.rs/tokio-metrics/latest/tokio_metrics/struct.RuntimeMetrics.html#structfield.min_noop_count

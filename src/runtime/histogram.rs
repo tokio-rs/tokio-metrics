@@ -1,22 +1,19 @@
 use std::time::Duration;
 
-/// A histogram of task poll durations, pairing each bucket's count with its
-/// time range from the runtime configuration.
+/// A histogram of durations: each bucket pairs a [`Duration`] range with the
+/// number of observations that fell into it during the sampling interval.
 ///
-/// This type is returned as part of [`RuntimeMetrics`][super::RuntimeMetrics]
-/// when the runtime has poll time histograms enabled via
-/// [`enable_metrics_poll_time_histogram`][tokio::runtime::Builder::enable_metrics_poll_time_histogram].
-///
-/// Each bucket contains the [`Duration`] range configured for that bucket and
-/// the count of task polls that fell into that range during the sampling
-/// interval.
+/// Bucket ranges come from the runtime configuration and do not change.
 #[derive(Debug, Clone, Default)]
 #[non_exhaustive]
-pub struct PollTimeHistogram {
+pub struct DurationHistogram {
     buckets: Vec<HistogramBucket>,
 }
 
-impl PollTimeHistogram {
+/// The name this type had when `poll_time_histogram` was the only histogram.
+pub use DurationHistogram as PollTimeHistogram;
+
+impl DurationHistogram {
     // Only used to populate the histogram, which requires `tokio_unstable`.
     #[cfg_attr(not(tokio_unstable), allow(dead_code))]
     pub(crate) fn new(buckets: Vec<HistogramBucket>) -> Self {
@@ -40,7 +37,7 @@ impl PollTimeHistogram {
     }
 }
 
-/// A single bucket in a [`PollTimeHistogram`].
+/// A single bucket in a [`DurationHistogram`].
 #[derive(Debug, Clone, Copy, Default)]
 #[non_exhaustive]
 pub struct HistogramBucket {
@@ -66,7 +63,8 @@ impl HistogramBucket {
         self.range_end
     }
 
-    /// Returns the poll count for this bucket during the interval.
+    /// Returns the number of observations that fell into this bucket during the
+    /// interval.
     pub fn count(&self) -> u64 {
         self.count
     }
@@ -80,7 +78,7 @@ impl HistogramBucket {
 }
 
 #[cfg(feature = "metrique-integration")]
-impl metrique::writer::Value for PollTimeHistogram {
+impl metrique::writer::Value for DurationHistogram {
     // Emitted as a distribution of bucket midpoints in microseconds, so the
     // closed shape is a float rather than the `Opaque` default.
     const SHAPE: metrique::writer::core::FieldShape<'static> =
@@ -99,12 +97,13 @@ impl metrique::writer::Value for PollTimeHistogram {
         writer.metric(
             self.buckets.iter().filter(|b| b.count > 0).map(|b| {
                 let value_us = if b.range_end == LAST_BUCKET_END {
-                    b.range_start.as_micros() as f64
+                    // scale to microseconds in floating point to keep the remainder
+                    b.range_start.as_secs_f64() * 1e6
                 } else {
                     #[allow(clippy::incompatible_msrv)] // metrique-integration requires 1.89+
                     f64::midpoint(
-                        b.range_start.as_micros() as f64,
-                        b.range_end.as_micros() as f64,
+                        b.range_start.as_secs_f64() * 1e6,
+                        b.range_end.as_secs_f64() * 1e6,
                     )
                 };
                 Observation::Repeated {
@@ -120,7 +119,7 @@ impl metrique::writer::Value for PollTimeHistogram {
 }
 
 #[cfg(feature = "metrique-integration")]
-impl metrique::CloseValue for PollTimeHistogram {
+impl metrique::CloseValue for DurationHistogram {
     type Closed = Self;
 
     fn close(self) -> Self {
@@ -140,7 +139,7 @@ mod tests {
 
     #[test]
     fn poll_time_histogram_close_value() {
-        let hist = PollTimeHistogram::new(vec![
+        let hist = DurationHistogram::new(vec![
             HistogramBucket::new(Duration::from_micros(0), Duration::from_micros(100), 5),
             HistogramBucket::new(Duration::from_micros(100), Duration::from_micros(200), 0),
             HistogramBucket::new(Duration::from_micros(200), Duration::from_micros(500), 3),
@@ -164,12 +163,12 @@ mod tests {
         use metrique::writer::core::{FieldShape, KnownShape};
 
         assert_eq!(
-            <PollTimeHistogram as Value>::SHAPE,
+            <DurationHistogram as Value>::SHAPE,
             FieldShape::Known(KnownShape::F64)
         );
 
         let metrics = RuntimeMetrics {
-            poll_time_histogram: PollTimeHistogram::new(vec![HistogramBucket::new(
+            poll_time_histogram: DurationHistogram::new(vec![HistogramBucket::new(
                 Duration::from_micros(0),
                 Duration::from_micros(100),
                 1,
@@ -181,7 +180,7 @@ mod tests {
         let entry = test_metric(metrics);
         assert_eq!(
             entry.metrics["poll_time_histogram"].unit,
-            <PollTimeHistogram as Value>::UNIT
+            <DurationHistogram as Value>::UNIT
         );
     }
 
@@ -189,7 +188,7 @@ mod tests {
     fn poll_time_histogram_last_bucket_uses_range_start() {
         let last_bucket_start = Duration::from_millis(500);
         let metrics = RuntimeMetrics {
-            poll_time_histogram: PollTimeHistogram::new(vec![
+            poll_time_histogram: DurationHistogram::new(vec![
                 HistogramBucket::new(Duration::from_micros(0), Duration::from_micros(100), 0),
                 HistogramBucket::new(last_bucket_start, Duration::from_nanos(u64::MAX), 2),
             ]),
@@ -205,6 +204,30 @@ mod tests {
                 assert_eq!(occurrences, 2);
                 let expected = last_bucket_start.as_micros() as f64 * 2.0;
                 assert!((total - expected).abs() < 0.01);
+            }
+            other => panic!("expected Repeated, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn poll_time_histogram_keeps_sub_microsecond_buckets() {
+        let metrics = RuntimeMetrics {
+            poll_time_histogram: DurationHistogram::new(vec![HistogramBucket::new(
+                Duration::from_nanos(512),
+                Duration::from_nanos(640),
+                4,
+            )]),
+            ..Default::default()
+        };
+
+        let entry = test_metric(metrics);
+        let hist = &entry.metrics["poll_time_histogram"];
+
+        match hist.distribution[0] {
+            metrique::writer::Observation::Repeated { total, occurrences } => {
+                assert_eq!(occurrences, 4);
+                // Midpoint of 0.512us and 0.640us, not zero.
+                assert!((total - 0.576 * 4.0).abs() < 0.001, "got {total}");
             }
             other => panic!("expected Repeated, got {other:?}"),
         }
