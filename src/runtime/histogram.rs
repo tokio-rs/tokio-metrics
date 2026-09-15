@@ -94,12 +94,13 @@ impl metrique::writer::Value for DurationHistogram {
         writer.metric(
             self.buckets.iter().filter(|b| b.count > 0).map(|b| {
                 let value_us = if b.range_end == LAST_BUCKET_END {
-                    b.range_start.as_micros() as f64
+                    // scale to microseconds in floating point to keep the remainder
+                    b.range_start.as_secs_f64() * 1e6
                 } else {
                     #[allow(clippy::incompatible_msrv)] // metrique-integration requires 1.89+
                     f64::midpoint(
-                        b.range_start.as_micros() as f64,
-                        b.range_end.as_micros() as f64,
+                        b.range_start.as_secs_f64() * 1e6,
+                        b.range_end.as_secs_f64() * 1e6,
                     )
                 };
                 Observation::Repeated {
@@ -200,6 +201,30 @@ mod tests {
                 assert_eq!(occurrences, 2);
                 let expected = last_bucket_start.as_micros() as f64 * 2.0;
                 assert!((total - expected).abs() < 0.01);
+            }
+            other => panic!("expected Repeated, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn poll_time_histogram_keeps_sub_microsecond_buckets() {
+        let metrics = RuntimeMetrics {
+            poll_time_histogram: DurationHistogram::new(vec![HistogramBucket::new(
+                Duration::from_nanos(512),
+                Duration::from_nanos(640),
+                4,
+            )]),
+            ..Default::default()
+        };
+
+        let entry = test_metric(metrics);
+        let hist = &entry.metrics["poll_time_histogram"];
+
+        match hist.distribution[0] {
+            metrique::writer::Observation::Repeated { total, occurrences } => {
+                assert_eq!(occurrences, 4);
+                // Midpoint of 0.512us and 0.640us, not zero.
+                assert!((total - 0.576 * 4.0).abs() < 0.001, "got {total}");
             }
             other => panic!("expected Repeated, got {other:?}"),
         }

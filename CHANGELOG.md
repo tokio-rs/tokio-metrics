@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `RuntimeMetrics::schedule_latency_histogram`, behind the new `schedule-latency` feature ([#136](https://github.com/tokio-rs/tokio-metrics/issues/136)). Requires tokio 1.53 or later, `--cfg tokio_unstable`, and `Builder::enable_metrics_schedule_latency_histogram()` on the runtime.
 
+### Fixed
+
+- Durations now reach the metrics.rs and metrique bridges as fractional microseconds. `as_micros` truncates, so every sub-microsecond histogram bucket and mean poll duration was reported as zero.
+
 ## [0.5.2](https://github.com/tokio-rs/tokio-metrics/compare/v0.5.1...v0.5.2) - 2026-08-28
 
 ### Added

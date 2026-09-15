@@ -262,7 +262,8 @@ impl<T> MyMetricOp<T> for (&metrics::Counter, u64) {
 
 impl<T> MyMetricOp<T> for (&metrics::Gauge, Duration) {
     fn op(self, _t: T) {
-        self.0.set(self.1.as_micros() as f64);
+        // scale to microseconds in floating point to keep the remainder
+        self.0.set(self.1.as_secs_f64() * 1e6);
     }
 }
 
@@ -292,7 +293,8 @@ impl<T> MyMetricOp<T> for (&metrics::Histogram, crate::runtime::DurationHistogra
                 // Use range.start as the representative value; the metrics-rs
                 // histogram handles its own bucketing from these raw values.
                 self.0.record_many(
-                    bucket.range_start().as_micros() as f64,
+                    // scale to microseconds in floating point to keep the remainder
+                    bucket.range_start().as_secs_f64() * 1e6,
                     bucket.count() as usize,
                 );
             }
