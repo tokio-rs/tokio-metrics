@@ -10,6 +10,9 @@ pub struct DurationHistogram {
     buckets: Vec<HistogramBucket>,
 }
 
+/// The name this type had when `poll_time_histogram` was the only histogram.
+pub use DurationHistogram as PollTimeHistogram;
+
 impl DurationHistogram {
     // Only used to populate the histogram, which requires `tokio_unstable`.
     #[cfg_attr(not(tokio_unstable), allow(dead_code))]

@@ -196,7 +196,7 @@ cfg_rt! {
 
 #[cfg(feature = "rt")]
 #[cfg_attr(docsrs, doc(cfg(feature = "rt")))]
-pub use runtime::{DurationHistogram, HistogramBucket};
+pub use runtime::{DurationHistogram, HistogramBucket, PollTimeHistogram};
 
 #[cfg(all(feature = "rt", feature = "metrics-rs-integration"))]
 #[cfg_attr(

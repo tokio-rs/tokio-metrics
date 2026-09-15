@@ -12,7 +12,7 @@ use tokio::runtime;
 // struct and drops the field's cfg gate). See
 // https://github.com/tokio-rs/tokio-metrics/issues/128.
 mod histogram;
-pub use histogram::{DurationHistogram, HistogramBucket};
+pub use histogram::{DurationHistogram, HistogramBucket, PollTimeHistogram};
 
 #[cfg(feature = "metrics-rs-integration")]
 pub(crate) mod metrics_rs_integration;

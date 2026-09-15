@@ -7,9 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Breaking
+### Changed
 
-- `PollTimeHistogram` is now `DurationHistogram`, it wasn't PollTime-specficic and now both `poll_time_histogram` and `schedule_latency_histogram` use it.
+- `PollTimeHistogram` is now `DurationHistogram`, it wasn't PollTime-specific and now both `poll_time_histogram` and `schedule_latency_histogram` use it. The old name is kept as a re-export.
 
 ### Added
 
