@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Breaking
+
+- `PollTimeHistogram` is now `DurationHistogram`, it wasn't PollTime-specficic and now both `poll_time_histogram` and `schedule_latency_histogram` use it.
+
+### Added
+
+- `RuntimeMetrics::schedule_latency_histogram`, behind the new `schedule-latency` feature ([#136](https://github.com/tokio-rs/tokio-metrics/issues/136)). Requires tokio 1.53 or later, `--cfg tokio_unstable`, and `Builder::enable_metrics_schedule_latency_histogram()` on the runtime.
+
 ## [0.5.2](https://github.com/tokio-rs/tokio-metrics/compare/v0.5.1...v0.5.2) - 2026-08-28
 
 ### Added

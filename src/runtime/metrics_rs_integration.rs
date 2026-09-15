@@ -278,7 +278,9 @@ metric_refs! {
             /// The average duration of a single invocation of poll on a task on the worker with the highest value
             mean_poll_duration_worker_max: Gauge<Microseconds> [],
             /// A histogram of task polls since the previous probe grouped by poll times
-            poll_time_histogram: PollTimeHistogram<Microseconds> [],
+            poll_time_histogram: DurationHistogram<Microseconds> [],
+            /// A histogram of the time tasks spent waiting to be polled after being scheduled, since the previous probe
+            schedule_latency_histogram: DurationHistogram<Microseconds> [],
             /// The number of times worker threads unparked but performed no work before parking again
             total_noop_count: Counter<Count> [],
             /// The maximum number of times any worker thread unparked but performed no work before parking again

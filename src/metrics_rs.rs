@@ -9,7 +9,7 @@ macro_rules! kind_to_type {
     (Gauge) => {
         metrics::Gauge
     };
-    (PollTimeHistogram) => {
+    (DurationHistogram) => {
         metrics::Histogram
     };
 }
@@ -40,7 +40,7 @@ macro_rules! describe_metric_ref {
             $doc.trim()
         )
     };
-    ($transform_fn:ident, $doc:expr, $name:ident: PollTimeHistogram<$unit:ident> []) => {
+    ($transform_fn:ident, $doc:expr, $name:ident: DurationHistogram<$unit:ident> []) => {
         metrics::describe_histogram!(
             crate::metrics_rs::metric_key!($transform_fn, $name)
                 .name()
@@ -60,7 +60,7 @@ macro_rules! capture_metric_ref {
         let (name, labels) = crate::metrics_rs::metric_key!($transform_fn, $name).into_parts();
         metrics::gauge!(name, labels)
     }};
-    ($transform_fn:ident, $name:ident: PollTimeHistogram []) => {{
+    ($transform_fn:ident, $name:ident: DurationHistogram []) => {{
         let (name, labels) = crate::metrics_rs::metric_key!($transform_fn, $name).into_parts();
         metrics::histogram!(name, labels)
     }};
@@ -285,7 +285,7 @@ impl<T> MyMetricOp<T> for (&metrics::Gauge, f64) {
 }
 
 #[cfg(all(feature = "rt", tokio_unstable))]
-impl<T> MyMetricOp<T> for (&metrics::Histogram, crate::runtime::PollTimeHistogram) {
+impl<T> MyMetricOp<T> for (&metrics::Histogram, crate::runtime::DurationHistogram) {
     fn op(self, _: T) {
         for bucket in self.1.buckets() {
             if bucket.count() > 0 {
