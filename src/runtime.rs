@@ -1552,19 +1552,20 @@ impl Worker {
 
         #[cfg(tokio_unstable)]
         {
-            let poll_time_histogram = if rt.poll_time_histogram_enabled() {
-                vec![0; rt.poll_time_histogram_num_buckets()]
-            } else {
-                vec![]
-            };
             wrk.total_noop_count = rt.worker_noop_count(worker);
             wrk.total_steal_count = rt.worker_steal_count(worker);
             wrk.total_steal_operations = rt.worker_steal_operations(worker);
             wrk.total_local_schedule_count = rt.worker_local_schedule_count(worker);
             wrk.total_overflow_count = rt.worker_overflow_count(worker);
             wrk.total_polls_count = rt.worker_poll_count(worker);
-            wrk.poll_time_histogram = poll_time_histogram;
-            wrk.schedule_latency_histogram = vec![0; schedule_latency_num_buckets(rt)];
+            // seed the bucket counts from the runtime so the first interval covers only what happened 
+            // after the monitor was created
+            wrk.poll_time_histogram = (0..rt.poll_time_histogram_num_buckets())
+                .map(|bucket| rt.poll_time_histogram_bucket_count(worker, bucket))
+                .collect();
+            wrk.schedule_latency_histogram = (0..schedule_latency_num_buckets(rt))
+                .map(|bucket| schedule_latency_bucket_count(rt, worker, bucket))
+                .collect();
         };
         wrk
     }
@@ -1891,5 +1892,66 @@ mod metrique_integration_tests {
                 other => panic!("expected Repeated, got {other:?}"),
             }
         });
+    }
+}
+
+#[cfg(all(test, tokio_unstable, feature = "rt"))]
+mod interval_baseline_tests {
+    use super::*;
+
+    /// Warm the runtime up, then start watching and take an interval covering
+    /// only a little work.
+    async fn warmup_then_interval() -> RuntimeMetrics {
+        async fn poll(n: usize) {
+            tokio::spawn(async move {
+                for _ in 0..n {
+                    tokio::task::yield_now().await;
+                }
+            })
+            .await
+            .unwrap();
+        }
+
+        poll(2_000).await;
+        let mut intervals =
+            RuntimeMonitor::new(&tokio::runtime::Handle::current()).intervals();
+        intervals.next().unwrap();
+        poll(10).await;
+        intervals.next().unwrap()
+    }
+
+    fn assert_fits_interval(hist: &DurationHistogram, metrics: &RuntimeMetrics) {
+        let counted: u64 = hist.buckets().iter().map(|b| b.count()).sum();
+        assert!(counted > 0, "histogram recorded nothing");
+        assert!(
+            counted <= metrics.total_polls_count,
+            "histogram counted {counted} for an interval of {} polls",
+            metrics.total_polls_count
+        );
+    }
+
+    #[test]
+    fn poll_time_histogram_excludes_polls_from_before_the_monitor() {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .enable_metrics_poll_time_histogram()
+            .build()
+            .unwrap();
+
+        let metrics = rt.block_on(warmup_then_interval());
+        assert_fits_interval(&metrics.poll_time_histogram, &metrics);
+    }
+
+    #[cfg(feature = "schedule-latency")]
+    #[test]
+    fn schedule_latency_histogram_excludes_schedules_from_before_the_monitor() {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .enable_metrics_schedule_latency_histogram()
+            .build()
+            .unwrap();
+
+        let metrics = rt.block_on(warmup_then_interval());
+        assert_fits_interval(&metrics.schedule_latency_histogram, &metrics);
     }
 }

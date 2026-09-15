@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Durations now reach the metrics.rs and metrique bridges as fractional microseconds. `as_micros` truncates, so every sub-microsecond histogram bucket and mean poll duration was reported as zero.
+- Histogram bucket counts are now seeded from the runtime when a `RuntimeMonitor` is created. They started at zero, so the first interval that saw any polls also carried every poll since the runtime started, while every other metric in that interval covered only the interval.
 
 ## [0.5.2](https://github.com/tokio-rs/tokio-metrics/compare/v0.5.1...v0.5.2) - 2026-08-28
 
