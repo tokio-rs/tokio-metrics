@@ -29,8 +29,11 @@ use crate::metrics_rs::{metric_refs, DEFAULT_METRIC_SAMPLING_INTERVAL};
 /// `curl --unix-socket prometheus.sock localhost`, as follows:
 ///
 /// ```
+/// # #[cfg(not(unix))]
+/// # fn main() {}
 /// use std::time::Duration;
 ///
+/// # #[cfg(unix)]
 /// #[tokio::main]
 /// async fn main() {
 ///     metrics_exporter_prometheus::PrometheusBuilder::new()
@@ -108,8 +111,11 @@ impl RuntimeMetricsReporterBuilder {
     /// For example, to attach a dimension named "application" with value "my_app", and to replace
     /// `tokio_` with `my_app_`
     /// ```
+    /// # #[cfg(not(unix))]
+    /// # fn main() {}
     /// # use metrics::Key;
     ///
+    /// # #[cfg(unix)]
     /// #[tokio::main]
     /// async fn main() {
     ///     metrics_exporter_prometheus::PrometheusBuilder::new()
