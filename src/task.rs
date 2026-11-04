@@ -2889,7 +2889,7 @@ impl<T: Future, M: AsRef<TaskMonitorCore> + Send + Sync + 'static> Future for In
     }
 }
 
-impl<T: Stream> Stream for Instrumented<T> {
+impl<T: Stream, M: AsRef<TaskMonitorCore> + Send + Sync + 'static> Stream for Instrumented<T, M> {
     type Item = T::Item;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
@@ -3669,5 +3669,37 @@ mod future_monitor_tests {
             assert_eq!(outer.total_idle_duration, Duration::from_secs(1));
         })
         .await;
+    }
+}
+
+#[cfg(test)]
+mod stream_tests {
+    use super::*;
+    use tokio_stream::StreamExt;
+
+    static MONITOR: TaskMonitorCore = TaskMonitorCore::new();
+
+    #[tokio::test]
+    async fn task_monitor_core_instruments_streams() {
+        let mut stream = std::pin::pin!(MONITOR.instrument(tokio_stream::iter([1, 2, 3])));
+        let mut items = Vec::new();
+        while let Some(item) = stream.next().await {
+            items.push(item);
+        }
+
+        assert_eq!(items, [1, 2, 3]);
+        // three items plus the final `None`
+        assert_eq!(MONITOR.cumulative().total_poll_count, 4);
+    }
+
+    #[tokio::test]
+    async fn instrument_with_instruments_streams() {
+        let monitor = Arc::new(TaskMonitorCore::new());
+        let stream =
+            TaskMonitorCore::instrument_with(tokio_stream::iter([1, 2, 3]), monitor.clone());
+        let items: Vec<_> = stream.collect().await;
+
+        assert_eq!(items, [1, 2, 3]);
+        assert_eq!(monitor.cumulative().total_poll_count, 4);
     }
 }
