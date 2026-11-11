@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.3](https://github.com/tokio-rs/tokio-metrics/compare/v0.5.2...v0.5.3) - 2026-11-11
+
 ### Changed
 
 - `PollTimeHistogram` is now `DurationHistogram`, it wasn't PollTime-specific and now both `poll_time_histogram` and `schedule_latency_histogram` use it. The old name is kept as a re-export.
