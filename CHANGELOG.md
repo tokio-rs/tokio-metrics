@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `Instrumented` now implements `Stream` for any monitor type, so streams instrumented with `TaskMonitorCore::instrument` or `TaskMonitorCore::instrument_with` can still be polled as streams. Previously only streams instrumented with `TaskMonitor::instrument` were.
 - Durations now reach the metrics.rs and metrique bridges as fractional microseconds. `as_micros` truncates, so every sub-microsecond histogram bucket and mean poll duration was reported as zero.
 - Histogram bucket counts are now seeded from the runtime when a `RuntimeMonitor` is created. They started at zero, so the first interval that saw any polls also carried every poll since the runtime started, while every other metric in that interval covered only the interval.
 
