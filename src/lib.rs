@@ -132,8 +132,11 @@ async fn do_work() {
 //! `curl --unix-socket prometheus.sock localhost`.
 //!
 //! ```
+//! # #[cfg(not(unix))]
+//! # fn main() {}
 //! use std::time::Duration;
 //!
+//! # #[cfg(unix)]
 //! #[tokio::main]
 //! async fn main() {
 //!     metrics_exporter_prometheus::PrometheusBuilder::new()
